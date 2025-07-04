@@ -1,0 +1,42 @@
+import mongoose from "mongoose";
+import bcrypt from 'bcryptjs';
+
+
+const UserSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  username: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  profilePicture: { type: String, default: "" },
+  bio: { type: String, default: "" },
+  followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  posts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
+  walletAddress: String,
+  blueTick: { type: Boolean, default: false }, // Free verification
+  goldenTick: { type: Boolean, default: false }, // Paid verification
+  subscriptionStatus: {
+    type: String,
+    enum: ["inactive", "active"],
+    default: "inactive",
+  },
+  subscriptionExpiry: { type: Date, default: null },
+  botEnabled: { type: Boolean, default: false }, // Bot ON/OFF
+  botPersonality: { type: String, default: "friendly" }, // Personality type
+  botResponses: [{ type: String }], // User’s past responses for training
+}, { timestamps: true });
+
+// Hash password before saving
+UserSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+// Compare passwords
+UserSchema.methods.comparePassword = async function (enteredPassword) {
+  return bcrypt.compare(enteredPassword, this.password);
+};
+
+const User = mongoose.model("User", UserSchema);
+export default User;
