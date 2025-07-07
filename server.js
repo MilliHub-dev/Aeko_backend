@@ -32,6 +32,8 @@ import debates from "./routes/debates.js";
 import space from "./routes/space.js";
 import { admin, adminRouter } from "./admin.js";
 import EnhancedChatSocket from "./sockets/enhancedChatSocket.js";
+import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
+import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
 
 
 
@@ -43,6 +45,9 @@ const server = http.createServer(app);
 
 // Initialize Enhanced Chat Socket System
 const enhancedChatSocket = new EnhancedChatSocket(server);
+
+// Initialize Enhanced LiveStream Socket System
+const enhancedLiveStreamSocket = new EnhancedLiveStreamSocket(server);
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = 'uploads';
@@ -69,6 +74,7 @@ app.use("/api/auth", auth);
 app.use("/api/bot", bot);
 app.use("/api/enhanced-bot", enhancedBotRoutes);
 app.use("/api/enhanced-chat", enhancedChatRoutes);
+app.use("/api/livestream", enhancedLiveStreamRoutes);
 app.use("/api/challenges", challenges);
 app.use("/api/chat", chat);
 app.use("/api/debates", debates);
@@ -168,6 +174,51 @@ app.get("/api/chat-info", (req, res) => {
   });
 });
 
+// Enhanced LiveStream System Info
+app.get("/api/livestream-info", (req, res) => {
+  const streamStats = enhancedLiveStreamSocket.getSystemStats();
+  
+  res.json({
+    success: true,
+    livestreamSystem: {
+      name: 'Enhanced LiveStream Platform',
+      version: '1.0.0',
+      features: {
+        webrtcStreaming: true,
+        realTimeChat: true,
+        emojiReactions: true,
+        donationsAndMonetization: true,
+        moderationTools: true,
+        streamRecording: true,
+        screenSharing: true,
+        coHosting: true,
+        guestInvites: true,
+        viewerAnalytics: true,
+        streamDiscovery: true,
+        categoryFiltering: true,
+        qualityControls: true,
+        streamScheduling: true
+      },
+      capabilities: {
+        maxStreamers: 'Unlimited',
+        maxViewersPerStream: '10,000+',
+        supportedProtocols: ['WebRTC', 'RTMP', 'HLS'],
+        supportedResolutions: ['360p', '480p', '720p', '1080p', '1440p', '4K'],
+        supportedFrameRates: [24, 30, 60],
+        supportedCategories: ['gaming', 'music', 'education', 'entertainment', 'sports', 'news', 'technology', 'lifestyle', 'cooking', 'art', 'other']
+      },
+      statistics: streamStats,
+      monetization: {
+        donationsEnabled: true,
+        subscriptionsEnabled: true,
+        ticketedStreamsEnabled: true,
+        supportedCurrencies: ['USD', 'EUR', 'GBP', 'JPY'],
+        paymentProcessors: ['Stripe', 'PayPal', 'Square']
+      }
+    }
+  });
+});
+
 // Health check with enhanced features
 app.get("/health", (req, res) => {
   res.json({
@@ -177,6 +228,7 @@ app.get("/health", (req, res) => {
       mongodb: 'Connected',
       socket: 'Active',
       chat: 'Enhanced Chat System Ready',
+      livestream: 'Enhanced LiveStream Platform Ready',
       ai: 'AI Bot Integrated'
     },
     features: [
@@ -187,7 +239,14 @@ app.get("/health", (req, res) => {
       'AI bot integration',
       'Typing indicators',
       'Read receipts',
-      'Message search'
+      'Message search',
+      'Live streaming',
+      'WebRTC broadcasting',
+      'Stream chat',
+      'Stream reactions',
+      'Stream monetization',
+      'Stream moderation',
+      'Stream analytics'
     ]
   });
 });
@@ -197,11 +256,16 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Aeko Backend Server starting...`);
   console.log(`📡 Server running on port ${PORT}`);
-  console.log(`🔗 Socket.IO ready for real-time chat`);
+  console.log(`🔗 Socket.IO ready for real-time communication`);
   console.log(`🤖 AI Bot integrated and ready`);
   console.log(`📁 File uploads supported (max 100MB)`);
   console.log(`😊 Emoji reactions enabled`);
   console.log(`🎵 Voice messages supported`);
   console.log(`💬 Enhanced Chat System Active`);
+  console.log(`🎥 Enhanced LiveStream Platform Active`);
+  console.log(`🌐 WebRTC streaming enabled`);
+  console.log(`📊 Stream analytics and monetization ready`);
+  console.log(`🛡️ Stream moderation tools enabled`);
+  console.log(`🎬 Screen sharing and co-hosting supported`);
   console.log('✨ All systems ready!');
 });
