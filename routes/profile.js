@@ -180,7 +180,7 @@ const router = express.Router();
  *         description: Golden Tick activated
  */
 
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 // Middleware for Authentication
 /* const authMiddleware = (req, res, next) => {
