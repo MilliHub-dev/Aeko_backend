@@ -129,6 +129,7 @@ const authenticate = async (req, res, next) => {
  *   get:
  *     summary: Get user's conversations
  *     tags: [Enhanced Chat]
+ *     description: Retrieve paginated list of user's conversations with unread message counts and last message preview
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -370,7 +371,8 @@ router.post('/send-message', authenticate, async (req, res) => {
  * /api/enhanced-chat/upload-voice:
  *   post:
  *     summary: Upload a voice message
- *     tags: [Enhanced Chat]
+ *     tags: [Enhanced Chat, Voice Messages]
+ *     description: Upload recorded voice message with waveform data and automatic duration detection
  *     security:
  *       - bearerAuth: []
  *     consumes:
@@ -447,7 +449,8 @@ router.post('/upload-voice', authenticate, upload.single('voice'), async (req, r
  * /api/enhanced-chat/upload-file:
  *   post:
  *     summary: Upload a file/image/video
- *     tags: [Enhanced Chat]
+ *     tags: [Enhanced Chat, File Upload]
+ *     description: Upload files up to 100MB with automatic type detection and thumbnail generation
  *     security:
  *       - bearerAuth: []
  *     consumes:
@@ -520,7 +523,8 @@ router.post('/upload-file', authenticate, upload.single('file'), async (req, res
  * /api/enhanced-chat/emoji-reactions/{messageId}:
  *   post:
  *     summary: Add emoji reaction to message
- *     tags: [Enhanced Chat]
+ *     tags: [Enhanced Chat, Emoji System]
+ *     description: Add emoji reaction to a specific message with real-time synchronization
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -628,7 +632,8 @@ router.delete('/emoji-reactions/:messageId', authenticate, async (req, res) => {
  * /api/enhanced-chat/bot-chat:
  *   post:
  *     summary: Chat with AI bot
- *     tags: [Enhanced Chat]
+ *     tags: [Enhanced Chat, AI Bot]
+ *     description: Send message to AI bot with customizable personality and get intelligent response
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -917,7 +922,8 @@ router.get('/search', authenticate, async (req, res) => {
  * /api/enhanced-chat/emoji-list:
  *   get:
  *     summary: Get popular emojis list
- *     tags: [Enhanced Chat]
+ *     tags: [Enhanced Chat, Emoji System]
+ *     description: Retrieve categorized list of popular emojis for chat interface
  *     responses:
  *       200:
  *         description: Emoji list retrieved successfully
