@@ -17,6 +17,8 @@ import Challenge from "./models/Challenge.js";
 import Space from "./models/Space.js";
 import Chat from "./models/Chat.js";
 import Message from "./models/Message.js";
+import AekoTransaction from "./models/AekoTransaction.js";
+import NFTMarketplace from "./models/NFTMarketplace.js";
 
 AdminJS.registerAdapter(AdminJSMongoose);
 
@@ -587,6 +589,146 @@ const admin = new AdminJS({
           icon: "Activity"
         },
         listProperties: ['user', 'content', 'createdAt'],
+      },
+    },
+
+    // ===== BLOCKCHAIN & CRYPTO =====
+    {
+      resource: AekoTransaction,
+      options: {
+        parent: {
+          name: "Blockchain & Crypto",
+          icon: "Coins"
+        },
+        properties: {
+          _id: { isVisible: { list: true, show: true, edit: false } },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
+          solanaSignature: { isVisible: { list: false, show: true, edit: false } },
+          metadata: { isVisible: { list: false, show: true, edit: false } }
+        },
+        actions: {
+          delete: { isVisible: true },
+          verifyTransaction: {
+            actionType: "record",
+            icon: "Check",
+            label: "Verify Transaction",
+            component: false,
+            handler: async (request, response, context) => {
+              const { record } = context;
+              // Here you could add blockchain verification logic
+              return {
+                record: record.toJSON(),
+                notice: {
+                  message: `Transaction ${record.params.transactionId} verified!`,
+                  type: 'success',
+                },
+              };
+            },
+          },
+          transactionStats: {
+            actionType: "resource",
+            icon: "BarChart",
+            label: "Transaction Analytics",
+            component: false,
+            handler: async (request, response, context) => {
+              const stats = await AekoTransaction.aggregate([
+                {
+                  $group: {
+                    _id: "$type",
+                    count: { $sum: 1 },
+                    totalAmount: { $sum: "$amount" },
+                    totalFees: { $sum: "$platformFee" }
+                  }
+                }
+              ]);
+              const message = stats.map(s => `${s._id}: ${s.count} txns (${s.totalAmount} AEKO, ${s.totalFees} fees)`).join(', ');
+              return {
+                notice: {
+                  message: `Transaction Stats: ${message}`,
+                  type: 'info',
+                },
+              };
+            },
+          }
+        },
+        listProperties: ['transactionId', 'type', 'amount', 'status', 'fromUser', 'toUser', 'createdAt'],
+        showProperties: ['transactionId', 'solanaSignature', 'type', 'amount', 'status', 'fromUser', 'toUser', 'platformFee', 'description', 'createdAt'],
+        editProperties: ['status', 'description'],
+      },
+    },
+
+    {
+      resource: NFTMarketplace,
+      options: {
+        parent: {
+          name: "Blockchain & Crypto",
+          icon: "Image"
+        },
+        properties: {
+          _id: { isVisible: { list: true, show: true, edit: false } },
+          tokenId: { isVisible: { list: true, show: true, edit: false } },
+          metadataUri: { isVisible: { list: false, show: true, edit: false } },
+          'analytics.totalViews': { isVisible: { list: true, show: true, edit: false } },
+          'analytics.favoriteCount': { isVisible: { list: true, show: true, edit: false } },
+          'donations.totalDonations': { isVisible: { list: false, show: true, edit: false } },
+          'auction.currentBid': { isVisible: { list: true, show: true, edit: false } }
+        },
+        actions: {
+          delete: { isVisible: true },
+          verifyNFT: {
+            actionType: "record",
+            icon: "Shield",
+            label: "Verify NFT",
+            component: false,
+            handler: async (request, response, context) => {
+              const { record } = context;
+              await record.update({ verified: true });
+              return {
+                record: record.toJSON(),
+                notice: {
+                  message: `NFT "${record.params.metadata.name}" verified!`,
+                  type: 'success',
+                },
+              };
+            },
+          },
+          featureNFT: {
+            actionType: "record",
+            icon: "Star",
+            label: "Feature NFT",
+            component: false,
+            handler: async (request, response, context) => {
+              const { record } = context;
+              await record.update({ featured: true });
+              return {
+                record: record.toJSON(),
+                notice: {
+                  message: `NFT "${record.params.metadata.name}" featured!`,
+                  type: 'success',
+                },
+              };
+            },
+          },
+          nftStats: {
+            actionType: "resource",
+            icon: "TrendingUp",
+            label: "NFT Analytics",
+            component: false,
+            handler: async (request, response, context) => {
+              const stats = await NFTMarketplace.getMarketplaceStats();
+              const data = stats[0] || {};
+              return {
+                notice: {
+                  message: `NFT Stats: ${data.totalNFTs || 0} NFTs, ${data.totalVolume || 0} AEKO volume, ${data.listedNFTs || 0} listed`,
+                  type: 'info',
+                },
+              };
+            },
+          }
+        },
+        listProperties: ['metadata.name', 'creator', 'currentOwner', 'price', 'status', 'verified', 'createdAt'],
+        showProperties: ['tokenId', 'metadata', 'creator', 'currentOwner', 'price', 'isListed', 'status', 'verified', 'analytics', 'createdAt'],
+        editProperties: ['price', 'isListed', 'verified', 'featured', 'category'],
       },
     },
   ],

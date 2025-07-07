@@ -12,7 +12,9 @@ const UserSchema = new mongoose.Schema({
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   posts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
-  walletAddress: String,
+  walletAddress: String, // Ethereum wallet (legacy)
+  solanaWalletAddress: String, // Solana wallet for Aeko coin
+  aekoBalance: { type: Number, default: 0 }, // Aeko coin balance
   blueTick: { type: Boolean, default: false }, // Free verification
   goldenTick: { type: Boolean, default: false }, // Paid verification
   subscriptionStatus: {
