@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced LiveStream Demo - Aeko Platform</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="./enhancedLiveStreamClient.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+            height: calc(100vh - 160px);
+        }
+
+        .stream-section {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Login Section */
+        .login-section {
+            padding: 30px;
+            text-align: center;
+        }
+
+        .login-section h3 {
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #00d2d3 0%, #54a0ff 100%);
+        }
+
+        /* Stream Controls */
+        .stream-controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-live {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .status-offline {
+            background: #6c757d;
+            color: white;
+        }
+
+        .status-scheduled {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        /* Video Container */
+        .video-container {
+            flex: 1;
+            background: #000;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-placeholder {
+            color: #666;
+            font-size: 18px;
+            text-align: center;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+        }
+
+        .video-info {
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            pointer-events: auto;
+        }
+
+        .stream-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .stream-meta {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .viewer-count {
+            background: rgba(255,0,0,0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            pointer-events: auto;
+        }
+
+        /* Chat Section */
+        .chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .chat-message {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .message-author {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 12px;
+            margin-bottom: 2px;
+        }
+
+        .message-content {
+            font-size: 14px;
+        }
+
+        .message-time {
+            font-size: 10px;
+            color: #999;
+            margin-top: 2px;
+        }
+
+        .chat-input {
+            padding: 15px;
+            border-top: 1px solid #e9ecef;
+            background: white;
+        }
+
+        .chat-input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-group input {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e1e5e9;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .chat-input-group button {
+            padding: 10px 15px;
+            border-radius: 20px;
+        }
+
+        /* Reactions */
+        .reactions-bar {
+            padding: 10px 15px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .reaction-btn {
+            background: none;
+            border: 2px solid #e1e5e9;
+            border-radius: 30px;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.3s;
+        }
+
+        .reaction-btn:hover {
+            border-color: #667eea;
+            transform: scale(1.1);
+        }
+
+        /* Stream Discovery */
+        .discovery-section {
+            padding: 15px;
+        }
+
+        .discovery-header {
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .stream-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .stream-item {
+            padding: 10px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .stream-item:hover {
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+
+        .stream-item-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .stream-item-meta {
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Moderation Panel */
+        .moderation-panel {
+            padding: 15px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .moderation-header {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #dc3545;
+        }
+
+        .mod-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .mod-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 15px;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            padding: 15px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .settings-header {
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+        }
+
+        .setting-label {
+            font-size: 14px;
+            color: #555;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        /* Analytics */
+        .analytics-panel {
+            padding: 15px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .analytics-header {
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #28a745;
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .analytics-item {
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .analytics-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .analytics-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr auto;
+            }
+            
+            .sidebar {
+                max-height: 400px;
+            }
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .pulsing {
+            animation: pulse 2s infinite;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 1000;
+        }
+
+        .status-connected {
+            background: #28a745;
+            color: white;
+        }
+
+        .status-disconnected {
+            background: #dc3545;
+            color: white;
+        }
+
+        .status-connecting {
+            background: #ffc107;
+            color: #212529;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">
+        Disconnected
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🎥 Enhanced LiveStream Demo</h1>
+            <p>Advanced streaming platform with WebRTC, chat, reactions, and monetization</p>
+        </div>
+
+        <div class="main-content">
+            <!-- Stream Section -->
+            <div class="stream-section">
+                <!-- Login Section (shown initially) -->
+                <div class="login-section" id="loginSection">
+                    <h3>Login to Start Streaming</h3>
+                    <div class="form-group">
+                        <label for="loginUsername">Username:</label>
+                        <input type="text" id="loginUsername" placeholder="Enter your username" value="streamer1">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password:</label>
+                        <input type="password" id="loginPassword" placeholder="Enter your password" value="password123">
+                    </div>
+                    <button class="btn" onclick="login()">Login & Connect</button>
+                    
+                    <div style="margin: 20px 0; border-top: 1px solid #e9ecef; padding-top: 20px;">
+                        <p style="color: #666; font-size: 14px; margin-bottom: 15px;">Demo Accounts:</p>
+                        <div style="display: flex; gap: 10px; justify-content: center;">
+                            <button class="btn" style="font-size: 12px; padding: 8px 12px;" onclick="quickLogin('streamer1', 'password123')">Streamer</button>
+                            <button class="btn" style="font-size: 12px; padding: 8px 12px;" onclick="quickLogin('viewer1', 'password123')">Viewer</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stream Controls (hidden initially) -->
+                <div class="stream-controls" id="streamControls" style="display: none;">
+                    <div class="control-row">
+                        <div class="status-indicator status-offline" id="streamStatus">
+                            <span>●</span> Offline
+                        </div>
+                        <div style="flex: 1;"></div>
+                        <button class="btn" id="createStreamBtn" onclick="showCreateStreamForm()">Create Stream</button>
+                        <button class="btn btn-success" id="startStreamBtn" onclick="startStream()" style="display: none;">Go Live</button>
+                        <button class="btn btn-danger" id="endStreamBtn" onclick="endStream()" style="display: none;">End Stream</button>
+                    </div>
+
+                    <!-- Create Stream Form -->
+                    <div id="createStreamForm" style="display: none; margin-top: 15px; padding: 15px; background: white; border-radius: 8px;">
+                        <h4 style="margin-bottom: 15px; color: #667eea;">Create New Stream</h4>
+                        <div class="form-group">
+                            <label for="streamTitle">Stream Title:</label>
+                            <input type="text" id="streamTitle" placeholder="What are you streaming?" value="My Awesome Live Stream">
+                        </div>
+                        <div class="form-group">
+                            <label for="streamDescription">Description:</label>
+                            <textarea id="streamDescription" rows="3" placeholder="Tell viewers what to expect...">Welcome to my live stream! Let's have some fun together.</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="streamCategory">Category:</label>
+                            <select id="streamCategory">
+                                <option value="entertainment">Entertainment</option>
+                                <option value="gaming">Gaming</option>
+                                <option value="music">Music</option>
+                                <option value="education">Education</option>
+                                <option value="technology">Technology</option>
+                                <option value="lifestyle">Lifestyle</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="control-row">
+                            <button class="btn btn-success" onclick="createStream()">Create Stream</button>
+                            <button class="btn" onclick="hideCreateStreamForm()">Cancel</button>
+                        </div>
+                    </div>
+
+                    <!-- Media Controls -->
+                    <div class="control-row" id="mediaControls" style="display: none;">
+                        <button class="btn" id="toggleVideoBtn" onclick="toggleVideo()">📹 Video</button>
+                        <button class="btn" id="toggleAudioBtn" onclick="toggleAudio()">🎤 Audio</button>
+                        <button class="btn" onclick="startScreenShare()">🖥️ Screen Share</button>
+                        <button class="btn" onclick="openStreamSettings()">⚙️ Settings</button>
+                    </div>
+                </div>
+
+                <!-- Video Container -->
+                <div class="video-container" id="videoContainer">
+                    <div class="video-placeholder" id="videoPlaceholder">
+                        📺 Connect and create a stream to start broadcasting
+                    </div>
+                    <video id="localVideo" style="display: none;" autoplay muted playsinline></video>
+                    
+                    <div class="video-overlay" id="videoOverlay" style="display: none;">
+                        <div class="video-info">
+                            <div class="stream-title" id="overlayTitle">Stream Title</div>
+                            <div class="stream-meta" id="overlayMeta">Category • Host</div>
+                        </div>
+                        <div class="viewer-count" id="viewerCount">
+                            👁️ 0 viewers
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Chat Section -->
+                <div class="chat-section" id="chatSection">
+                    <div class="chat-header">
+                        💬 Stream Chat
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
+                            Join a stream to start chatting!
+                        </div>
+                    </div>
+                    <div class="chat-input" id="chatInput" style="display: none;">
+                        <div class="chat-input-group">
+                            <input type="text" id="chatMessageInput" placeholder="Type a message..." maxlength="200">
+                            <button class="btn" onclick="sendChatMessage()">Send</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reactions Bar -->
+                <div class="reactions-bar" id="reactionsBar" style="display: none;">
+                    <button class="reaction-btn" onclick="sendReaction('❤️')">❤️</button>
+                    <button class="reaction-btn" onclick="sendReaction('👍')">👍</button>
+                    <button class="reaction-btn" onclick="sendReaction('😂')">😂</button>
+                    <button class="reaction-btn" onclick="sendReaction('😮')">😮</button>
+                    <button class="reaction-btn" onclick="sendReaction('🔥')">🔥</button>
+                    <button class="reaction-btn" onclick="sendReaction('💯')">💯</button>
+                </div>
+
+                <!-- Stream Discovery -->
+                <div class="discovery-section">
+                    <div class="discovery-header">🌟 Trending Streams</div>
+                    <div class="stream-list" id="trendingStreams">
+                        <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
+                            No live streams at the moment
+                        </div>
+                    </div>
+                    <button class="btn" onclick="refreshTrendingStreams()" style="width: 100%; margin-top: 10px;">
+                        🔄 Refresh
+                    </button>
+                </div>
+
+                <!-- Analytics Panel (for hosts) -->
+                <div class="analytics-panel" id="analyticsPanel" style="display: none;">
+                    <div class="analytics-header">📊 Stream Analytics</div>
+                    <div class="analytics-grid">
+                        <div class="analytics-item">
+                            <div class="analytics-value" id="totalViews">0</div>
+                            <div class="analytics-label">Total Views</div>
+                        </div>
+                        <div class="analytics-item">
+                            <div class="analytics-value" id="peakViewers">0</div>
+                            <div class="analytics-label">Peak Viewers</div>
+                        </div>
+                        <div class="analytics-item">
+                            <div class="analytics-value" id="chatMessages">0</div>
+                            <div class="analytics-label">Chat Messages</div>
+                        </div>
+                        <div class="analytics-item">
+                            <div class="analytics-value" id="streamDuration">0:00</div>
+                            <div class="analytics-label">Duration</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Moderation Panel (for hosts/mods) -->
+                <div class="moderation-panel" id="moderationPanel" style="display: none;">
+                    <div class="moderation-header">🛡️ Moderation</div>
+                    <div class="mod-actions">
+                        <button class="btn mod-btn">Clear Chat</button>
+                        <button class="btn mod-btn">Slow Mode</button>
+                        <button class="btn mod-btn">Followers Only</button>
+                        <button class="btn mod-btn btn-danger">Emergency Stop</button>
+                    </div>
+                </div>
+
+                <!-- Settings Panel -->
+                <div class="settings-panel" id="settingsPanel">
+                    <div class="settings-header">⚙️ Settings</div>
+                    <div class="setting-item">
+                        <span class="setting-label">Chat Enabled</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="chatEnabledSetting" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <span class="setting-label">Reactions Enabled</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="reactionsEnabledSetting" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <span class="setting-label">Donations Enabled</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="donationsEnabledSetting">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <span class="setting-label">Recording Enabled</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="recordingEnabledSetting">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let liveStreamClient = null;
+        let currentUser = null;
+        let isHost = false;
+        let currentStreamId = null;
+        let localStream = null;
+        let streamStartTime = null;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            updateConnectionStatus('disconnected');
+            
+            // Add enter key listener for chat
+            document.getElementById('chatMessageInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendChatMessage();
+                }
+            });
+
+            // Check WebRTC support
+            const support = checkWebRTCSupport();
+            if (!support.isSupported) {
+                alert('Your browser does not support all required features for livestreaming. Please use a modern browser like Chrome, Firefox, or Safari.');
+            }
+        });
+
+        // Authentication
+        async function login() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+
+            if (!username || !password) {
+                alert('Please enter both username and password');
+                return;
+            }
+
+            try {
+                updateConnectionStatus('connecting');
+                
+                // Simulate login API call
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Login failed');
+                }
+
+                const data = await response.json();
+                currentUser = data.user;
+                
+                // Initialize livestream client
+                liveStreamClient = new EnhancedLiveStreamClient({
+                    serverUrl: 'http://localhost:5000',
+                    token: data.token,
+                    userId: currentUser.id,
+                    username: currentUser.username
+                });
+
+                setupLiveStreamClient();
+                
+                // Hide login, show controls
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('streamControls').style.display = 'block';
+                document.getElementById('chatInput').style.display = 'block';
+                
+                updateVideoPlaceholder(`Welcome ${username}! Ready to stream?`);
+                
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('Login failed. Please try again.');
+                updateConnectionStatus('disconnected');
+            }
+        }
+
+        function quickLogin(username, password) {
+            document.getElementById('loginUsername').value = username;
+            document.getElementById('loginPassword').value = password;
+            login();
+        }
+
+        // LiveStream Client Setup
+        function setupLiveStreamClient() {
+            // Connection events
+            liveStreamClient.on('connected', () => {
+                updateConnectionStatus('connected');
+                refreshTrendingStreams();
+            });
+
+            liveStreamClient.on('disconnected', () => {
+                updateConnectionStatus('disconnected');
+            });
+
+            liveStreamClient.on('connection_error', (error) => {
+                console.error('Connection error:', error);
+                updateConnectionStatus('disconnected');
+            });
+
+            // Stream events
+            liveStreamClient.on('stream_created', (data) => {
+                console.log('Stream created:', data);
+                currentStreamId = data.streamId;
+                updateStreamStatus('scheduled');
+                document.getElementById('createStreamBtn').style.display = 'none';
+                document.getElementById('startStreamBtn').style.display = 'inline-block';
+                document.getElementById('mediaControls').style.display = 'flex';
+                isHost = true;
+                
+                // Show host panels
+                document.getElementById('analyticsPanel').style.display = 'block';
+                document.getElementById('moderationPanel').style.display = 'block';
+            });
+
+            liveStreamClient.on('stream_started', (data) => {
+                console.log('Stream started:', data);
+                updateStreamStatus('live');
+                document.getElementById('startStreamBtn').style.display = 'none';
+                document.getElementById('endStreamBtn').style.display = 'inline-block';
+                streamStartTime = new Date();
+                startStreamTimer();
+                
+                // Show video overlay
+                const overlay = document.getElementById('videoOverlay');
+                overlay.style.display = 'flex';
+                document.getElementById('overlayTitle').textContent = document.getElementById('streamTitle').value;
+                document.getElementById('overlayMeta').textContent = `${document.getElementById('streamCategory').value} • ${currentUser.username}`;
+            });
+
+            liveStreamClient.on('stream_ended', (data) => {
+                console.log('Stream ended:', data);
+                updateStreamStatus('offline');
+                document.getElementById('endStreamBtn').style.display = 'none';
+                document.getElementById('createStreamBtn').style.display = 'inline-block';
+                document.getElementById('mediaControls').style.display = 'none';
+                document.getElementById('videoOverlay').style.display = 'none';
+                cleanupStream();
+            });
+
+            liveStreamClient.on('stream_joined', (data) => {
+                console.log('Joined stream:', data);
+                currentStreamId = data.streamId;
+                updateStreamStatus('live');
+                document.getElementById('reactionsBar').style.display = 'flex';
+                
+                // Update overlay info
+                const overlay = document.getElementById('videoOverlay');
+                overlay.style.display = 'flex';
+                document.getElementById('overlayTitle').textContent = data.stream.title;
+                document.getElementById('overlayMeta').textContent = `${data.stream.category} • ${data.stream.hostName}`;
+            });
+
+            // Chat events
+            liveStreamClient.on('stream_chat_message', (data) => {
+                addChatMessage(data.sender.username, data.message, data.timestamp);
+            });
+
+            // Reaction events
+            liveStreamClient.on('stream_reaction', (data) => {
+                showReactionAnimation(data.emoji, data.username);
+            });
+
+            // Viewer events
+            liveStreamClient.on('viewer_count_update', (data) => {
+                updateViewerCount(data.currentViewers);
+            });
+
+            liveStreamClient.on('viewer_joined', (data) => {
+                if (isHost) {
+                    addChatMessage('System', `${data.username} joined the stream`, new Date(), 'system');
+                }
+            });
+
+            liveStreamClient.on('viewer_left', (data) => {
+                if (isHost) {
+                    addChatMessage('System', `${data.username} left the stream`, new Date(), 'system');
+                }
+            });
+
+            // Discovery events
+            liveStreamClient.on('trending_streams', (data) => {
+                updateTrendingStreams(data.streams);
+            });
+        }
+
+        // Stream Management
+        function showCreateStreamForm() {
+            document.getElementById('createStreamForm').style.display = 'block';
+            document.getElementById('createStreamBtn').style.display = 'none';
+        }
+
+        function hideCreateStreamForm() {
+            document.getElementById('createStreamForm').style.display = 'none';
+            document.getElementById('createStreamBtn').style.display = 'inline-block';
+        }
+
+        async function createStream() {
+            const title = document.getElementById('streamTitle').value.trim();
+            const description = document.getElementById('streamDescription').value.trim();
+            const category = document.getElementById('streamCategory').value;
+
+            if (!title) {
+                alert('Please enter a stream title');
+                return;
+            }
+
+            try {
+                const streamOptions = {
+                    title,
+                    description,
+                    category,
+                    streamType: 'public',
+                    features: {
+                        chatEnabled: document.getElementById('chatEnabledSetting').checked,
+                        reactionsEnabled: document.getElementById('reactionsEnabledSetting').checked,
+                        donationsEnabled: document.getElementById('donationsEnabledSetting').checked,
+                        recordingEnabled: document.getElementById('recordingEnabledSetting').checked
+                    }
+                };
+
+                await liveStreamClient.createStream(streamOptions);
+                hideCreateStreamForm();
+                
+            } catch (error) {
+                console.error('Create stream error:', error);
+                alert('Failed to create stream: ' + error.message);
+            }
+        }
+
+        async function startStream() {
+            if (!currentStreamId) {
+                alert('No stream created');
+                return;
+            }
+
+            try {
+                // Get camera access
+                const videoElement = document.getElementById('localVideo');
+                localStream = await liveStreamClient.startBroadcast(videoElement);
+                
+                // Show video
+                document.getElementById('videoPlaceholder').style.display = 'none';
+                videoElement.style.display = 'block';
+                
+                // Start the stream
+                await liveStreamClient.startStream(currentStreamId);
+                
+            } catch (error) {
+                console.error('Start stream error:', error);
+                alert('Failed to start stream: ' + error.message);
+            }
+        }
+
+        async function endStream() {
+            if (!currentStreamId) return;
+
+            try {
+                await liveStreamClient.endStream(currentStreamId);
+            } catch (error) {
+                console.error('End stream error:', error);
+                alert('Failed to end stream: ' + error.message);
+            }
+        }
+
+        function cleanupStream() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            const videoElement = document.getElementById('localVideo');
+            videoElement.style.display = 'none';
+            videoElement.srcObject = null;
+            
+            document.getElementById('videoPlaceholder').style.display = 'block';
+            updateVideoPlaceholder('Stream ended. Create a new stream to start broadcasting.');
+            
+            currentStreamId = null;
+            isHost = false;
+            streamStartTime = null;
+            
+            // Hide host panels
+            document.getElementById('analyticsPanel').style.display = 'none';
+            document.getElementById('moderationPanel').style.display = 'none';
+            document.getElementById('reactionsBar').style.display = 'none';
+        }
+
+        // Media Controls
+        async function toggleVideo() {
+            if (!localStream) return;
+            
+            const videoTrack = localStream.getVideoTracks()[0];
+            if (videoTrack) {
+                videoTrack.enabled = !videoTrack.enabled;
+                const btn = document.getElementById('toggleVideoBtn');
+                btn.textContent = videoTrack.enabled ? '📹 Video' : '📹 Video (Off)';
+            }
+        }
+
+        async function toggleAudio() {
+            if (!localStream) return;
+            
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                const btn = document.getElementById('toggleAudioBtn');
+                btn.textContent = audioTrack.enabled ? '🎤 Audio' : '🎤 Audio (Off)';
+            }
+        }
+
+        async function startScreenShare() {
+            try {
+                const screenStream = await liveStreamClient.startScreenShare();
+                // Handle screen share stream
+                console.log('Screen share started');
+            } catch (error) {
+                console.error('Screen share error:', error);
+                alert('Failed to start screen share: ' + error.message);
+            }
+        }
+
+        // Chat Functions
+        function sendChatMessage() {
+            const input = document.getElementById('chatMessageInput');
+            const message = input.value.trim();
+            
+            if (!message || !liveStreamClient || !currentStreamId) return;
+            
+            try {
+                liveStreamClient.sendChatMessage(message);
+                input.value = '';
+            } catch (error) {
+                console.error('Send chat message error:', error);
+            }
+        }
+
+        function addChatMessage(username, message, timestamp, type = 'user') {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageElement = document.createElement('div');
+            messageElement.className = 'chat-message fade-in';
+            
+            if (type === 'system') {
+                messageElement.style.background = '#e3f2fd';
+                messageElement.style.fontStyle = 'italic';
+            }
+            
+            const time = new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            messageElement.innerHTML = `
+                <div class="message-author">${username}</div>
+                <div class="message-content">${message}</div>
+                <div class="message-time">${time}</div>
+            `;
+            
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Remove old messages if too many
+            while (messagesContainer.children.length > 100) {
+                messagesContainer.removeChild(messagesContainer.firstChild);
+            }
+        }
+
+        // Reactions
+        function sendReaction(emoji) {
+            if (!liveStreamClient || !currentStreamId) return;
+            
+            try {
+                liveStreamClient.sendReaction(emoji);
+            } catch (error) {
+                console.error('Send reaction error:', error);
+            }
+        }
+
+        function showReactionAnimation(emoji, username) {
+            // Create floating reaction element
+            const reaction = document.createElement('div');
+            reaction.textContent = emoji;
+            reaction.style.cssText = `
+                position: absolute;
+                font-size: 24px;
+                pointer-events: none;
+                z-index: 1000;
+                animation: floatUp 3s ease-out forwards;
+                left: ${Math.random() * 80 + 10}%;
+                bottom: 20px;
+            `;
+            
+            // Add animation keyframes if not exists
+            if (!document.getElementById('reactionAnimation')) {
+                const style = document.createElement('style');
+                style.id = 'reactionAnimation';
+                style.textContent = `
+                    @keyframes floatUp {
+                        0% { transform: translateY(0); opacity: 1; }
+                        100% { transform: translateY(-100px); opacity: 0; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            document.getElementById('videoContainer').appendChild(reaction);
+            
+            // Remove after animation
+            setTimeout(() => {
+                if (reaction.parentNode) {
+                    reaction.parentNode.removeChild(reaction);
+                }
+            }, 3000);
+            
+            // Add to chat
+            addChatMessage(username, `reacted with ${emoji}`, new Date(), 'reaction');
+        }
+
+        // Discovery
+        function refreshTrendingStreams() {
+            if (!liveStreamClient) return;
+            
+            try {
+                liveStreamClient.getTrendingStreams(10);
+            } catch (error) {
+                console.error('Get trending streams error:', error);
+            }
+        }
+
+        function updateTrendingStreams(streams) {
+            const container = document.getElementById('trendingStreams');
+            
+            if (!streams || streams.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: #666; font-size: 14px; padding: 20px;">
+                        No live streams at the moment
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = streams.map(stream => `
+                <div class="stream-item" onclick="joinStream('${stream._id}')">
+                    <div class="stream-item-title">${stream.title}</div>
+                    <div class="stream-item-meta">
+                        ${stream.category} • ${stream.hostName} • ${stream.currentViewers || 0} viewers
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function joinStream(streamId) {
+            if (isHost) {
+                alert('You cannot join another stream while hosting');
+                return;
+            }
+            
+            try {
+                await liveStreamClient.joinStream(streamId);
+                updateVideoPlaceholder('Connecting to stream...');
+            } catch (error) {
+                console.error('Join stream error:', error);
+                alert('Failed to join stream: ' + error.message);
+            }
+        }
+
+        // UI Updates
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.className = `connection-status status-${status}`;
+            
+            switch(status) {
+                case 'connected':
+                    statusElement.textContent = '✅ Connected';
+                    break;
+                case 'connecting':
+                    statusElement.textContent = '🔄 Connecting...';
+                    break;
+                case 'disconnected':
+                    statusElement.textContent = '❌ Disconnected';
+                    break;
+            }
+        }
+
+        function updateStreamStatus(status) {
+            const statusElement = document.getElementById('streamStatus');
+            statusElement.className = `status-indicator status-${status}`;
+            
+            switch(status) {
+                case 'live':
+                    statusElement.innerHTML = '<span>●</span> Live';
+                    break;
+                case 'scheduled':
+                    statusElement.innerHTML = '<span>●</span> Scheduled';
+                    break;
+                case 'offline':
+                    statusElement.innerHTML = '<span>●</span> Offline';
+                    break;
+            }
+        }
+
+        function updateVideoPlaceholder(message) {
+            document.getElementById('videoPlaceholder').textContent = message;
+        }
+
+        function updateViewerCount(count) {
+            document.getElementById('viewerCount').textContent = `👁️ ${count} viewers`;
+            document.getElementById('totalViews').textContent = count;
+        }
+
+        function startStreamTimer() {
+            const updateTimer = () => {
+                if (!streamStartTime) return;
+                
+                const now = new Date();
+                const duration = Math.floor((now - streamStartTime) / 1000);
+                const formatted = formatDuration(duration);
+                document.getElementById('streamDuration').textContent = formatted;
+            };
+            
+            updateTimer();
+            setInterval(updateTimer, 1000);
+        }
+
+        // Utility functions
+        function formatDuration(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            
+            if (hours > 0) {
+                return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+            return `${minutes}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function checkWebRTCSupport() {
+            const support = {
+                getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+                RTCPeerConnection: !!window.RTCPeerConnection,
+                getDisplayMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia),
+                webSockets: !!window.WebSocket
+            };
+            
+            support.isSupported = Object.values(support).every(Boolean);
+            return support;
+        }
+
+        // Auto-refresh trending streams
+        setInterval(() => {
+            if (liveStreamClient && liveStreamClient.isConnected()) {
+                refreshTrendingStreams();
+            }
+        }, 30000); // Refresh every 30 seconds
+    </script>
+</body>
+</html>
