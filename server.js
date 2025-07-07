@@ -31,6 +31,8 @@ import chat from "./routes/chat.js";
 import debates from "./routes/debates.js";
 import space from "./routes/space.js";
 import { admin, adminRouter } from "./admin.js";
+import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
+import cookieParser from "cookie-parser";
 import EnhancedChatSocket from "./sockets/enhancedChatSocket.js";
 import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
 import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
@@ -57,7 +59,11 @@ if (!fs.existsSync(uploadsDir)) {
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(cors());
+app.use(cookieParser());
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:5000'],
+  credentials: true
+}));
 
 // Static file serving for uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
@@ -124,10 +130,62 @@ AdminJS.registerAdapter({ Database, Resource });
   },
 }; */
 
-// Setup AdminJS with Express
+// Admin Authentication Routes
+app.post('/admin/login', adminLogin);
+app.post('/admin/logout', adminLogout);
 
+// Admin API Routes (Protected)
+app.get('/api/admin/stats', adminAuth, async (req, res) => {
+  try {
+    const userStats = await User.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalUsers: { $sum: 1 },
+          verifiedUsers: { $sum: { $cond: [{ $or: ["$blueTick", "$goldenTick"] }, 1, 0] } },
+          activeSubscriptions: { $sum: { $cond: [{ $eq: ["$subscriptionStatus", "active"] }, 1, 0] } },
+          bannedUsers: { $sum: { $cond: ["$banned", 1, 0] } },
+          botEnabledUsers: { $sum: { $cond: ["$botEnabled", 1, 0] } }
+        }
+      }
+    ]);
+
+    const postStats = await Post.aggregate([
+      {
+        $group: {
+          _id: "$type",
+          count: { $sum: 1 },
+          totalLikes: { $sum: { $size: "$likes" } }
+        }
+      }
+    ]);
+
+    const adStats = await Ad.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+          totalBudget: { $sum: "$budget" }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        users: userStats[0] || {},
+        posts: postStats,
+        ads: adStats,
+        timestamp: new Date()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching admin statistics' });
+  }
+});
+
+// Setup AdminJS with Express (Protected)
 app.use(admin.options.rootPath, adminRouter);
-//app.use(admin.options.rootPath, adminRouter);
 
 // Routes
 app.get("/", (req, res) => {
