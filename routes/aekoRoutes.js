@@ -2,7 +2,7 @@ import express from "express";
 import User from "../models/User.js";
 import AekoTransaction from "../models/AekoTransaction.js";
 import LiveStream from "../models/LiveStream.js";
-import auth from "../middleware/auth.js";
+import authMiddleware from "../middleware/authMiddleware.js";
 import { 
   transferAekoTokens,
   getAekoBalance,

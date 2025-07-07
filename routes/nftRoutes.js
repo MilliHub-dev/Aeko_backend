@@ -3,7 +3,7 @@ import Post from "../models/Post.js";
 import User from "../models/User.js";
 import NFTMarketplace from "../models/NFTMarketplace.js";
 import AekoTransaction from "../models/AekoTransaction.js";
-import auth from "../middleware/auth.js";
+import authMiddleware from "../middleware/authMiddleware.js";
 import { 
   mintPostAsNFT,
   transferNFT,
