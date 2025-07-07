@@ -30,6 +30,9 @@ import challenges from "./routes/challenges.js";
 import chat from "./routes/chat.js";
 import debates from "./routes/debates.js";
 import space from "./routes/space.js";
+import postTransferRoutes from "./routes/postTransferRoutes.js";
+import aekoRoutes from "./routes/aekoRoutes.js";
+import nftRoutes from "./routes/nftRoutes.js";
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
 import cookieParser from "cookie-parser";
@@ -85,6 +88,12 @@ app.use("/api/challenges", challenges);
 app.use("/api/chat", chat);
 app.use("/api/debates", debates);
 app.use("/api/space", space);
+
+// Blockchain and NFT routes
+app.use("/api/posts", postTransferRoutes);
+app.use("/api/aeko", aekoRoutes);
+app.use("/api/nft", nftRoutes);
+
 swaggerDocs(app);
 
 
