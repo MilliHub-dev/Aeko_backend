@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Chat System Demo</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 1000px;
+            height: 80vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .chat-sidebar {
+            width: 300px;
+            background: #f8f9fa;
+            border-right: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            background: #667eea;
+            color: white;
+        }
+
+        .chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 18px;
+            max-width: 70%;
+            position: relative;
+        }
+
+        .message.sent {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.received {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .message.bot {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-left: 4px solid #ffd700;
+        }
+
+        .message-time {
+            font-size: 0.75em;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .voice-message {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .voice-play-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .voice-waveform {
+            flex: 1;
+            height: 30px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            position: relative;
+        }
+
+        .message-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .message-input {
+            flex: 1;
+            border: 1px solid #e9ecef;
+            border-radius: 25px;
+            padding: 12px 20px;
+            outline: none;
+            font-size: 16px;
+        }
+
+        .message-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .control-btn {
+            width: 45px;
+            height: 45px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.3s;
+        }
+
+        .emoji-btn {
+            background: #ffc107;
+            color: white;
+        }
+
+        .voice-btn {
+            background: #28a745;
+            color: white;
+        }
+
+        .voice-btn.recording {
+            background: #dc3545;
+            animation: pulse 1s infinite;
+        }
+
+        .send-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        .bot-btn {
+            background: #6f42c1;
+            color: white;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.1);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .emoji-picker {
+            position: absolute;
+            bottom: 80px;
+            left: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+        }
+
+        .emoji-picker.show {
+            display: block;
+        }
+
+        .emoji-category {
+            margin-bottom: 15px;
+        }
+
+        .emoji-category h4 {
+            margin-bottom: 8px;
+            color: #667eea;
+            font-size: 14px;
+        }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+            gap: 5px;
+        }
+
+        .emoji {
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 18px;
+            transition: background 0.2s;
+        }
+
+        .emoji:hover {
+            background: #f8f9fa;
+        }
+
+        .bot-controls {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .personality-select {
+            padding: 8px 12px;
+            border: 1px solid #e9ecef;
+            border-radius: 20px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+        }
+
+        .typing-indicator {
+            padding: 10px 16px;
+            background: #e9ecef;
+            border-radius: 15px;
+            margin-bottom: 10px;
+            font-style: italic;
+            color: #666;
+            display: none;
+        }
+
+        .typing-indicator.show {
+            display: block;
+        }
+
+        .message-reactions {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .reaction {
+            background: rgba(255,255,255,0.9);
+            color: #333;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .reaction:hover {
+            background: rgba(255,255,255,1);
+        }
+
+        .connection-status {
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .login-form {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 2000;
+        }
+
+        .login-input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .bot-personality-indicator {
+            font-size: 12px;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 8px;
+            border-radius: 10px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Form -->
+    <div id="loginForm" class="login-form">
+        <h2 style="margin-bottom: 20px; text-align: center; color: #667eea;">Enhanced Chat Login</h2>
+        <input type="text" id="usernameInput" class="login-input" placeholder="Username" value="testuser">
+        <input type="password" id="passwordInput" class="login-input" placeholder="Password" value="password123">
+        <input type="text" id="receiverInput" class="login-input" placeholder="Receiver User ID" value="670c8f9d4f7e8a3c5b6d2e8f">
+        <button id="loginBtn" class="login-btn">Connect to Chat</button>
+    </div>
+
+    <!-- Main Chat Interface -->
+    <div id="chatContainer" class="chat-container hidden">
+        <!-- Sidebar -->
+        <div class="chat-sidebar">
+            <div class="chat-header">
+                <h3>Enhanced Chat</h3>
+                <div class="connection-status" id="connectionStatus">Connecting...</div>
+            </div>
+            
+            <div style="padding: 20px;">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>Online</span>
+                </div>
+                
+                <h4 style="margin-bottom: 10px;">Features:</h4>
+                <ul style="font-size: 14px; line-height: 1.6;">
+                    <li>✅ Real-time messaging</li>
+                    <li>🎵 Voice messages</li>
+                    <li>😊 Emoji reactions</li>
+                    <li>🤖 AI Bot integration</li>
+                    <li>👀 Read receipts</li>
+                    <li>⌨️ Typing indicators</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="chat-main">
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="message received">
+                    <div>Welcome to Enhanced Chat! 🚀</div>
+                    <div class="message-time">Just now</div>
+                </div>
+            </div>
+
+            <!-- Typing Indicator -->
+            <div class="typing-indicator" id="typingIndicator">
+                User is typing...
+            </div>
+
+            <!-- Bot Controls -->
+            <div class="bot-controls">
+                <label>AI Personality:</label>
+                <select id="personalitySelect" class="personality-select">
+                    <option value="friendly">😊 Friendly</option>
+                    <option value="professional">💼 Professional</option>
+                    <option value="sarcastic">😏 Sarcastic</option>
+                    <option value="creative">🎨 Creative</option>
+                    <option value="analytical">📊 Analytical</option>
+                    <option value="mentor">👨‍🏫 Mentor</option>
+                    <option value="companion">🤝 Companion</option>
+                </select>
+                <button id="botChatBtn" class="control-btn bot-btn" title="Chat with AI Bot">🤖</button>
+            </div>
+
+            <!-- Message Input -->
+            <div class="message-input-container">
+                <button id="emojiBtn" class="control-btn emoji-btn" title="Emojis">😊</button>
+                <button id="voiceBtn" class="control-btn voice-btn" title="Voice Message">🎤</button>
+                <input type="text" id="messageInput" class="message-input" placeholder="Type a message...">
+                <button id="sendBtn" class="control-btn send-btn" title="Send Message">📤</button>
+            </div>
+
+            <!-- Emoji Picker -->
+            <div id="emojiPicker" class="emoji-picker">
+                <div class="emoji-category">
+                    <h4>Smileys</h4>
+                    <div class="emoji-grid" id="smileysGrid"></div>
+                </div>
+                <div class="emoji-category">
+                    <h4>Hearts</h4>
+                    <div class="emoji-grid" id="heartsGrid"></div>
+                </div>
+                <div class="emoji-category">
+                    <h4>Gestures</h4>
+                    <div class="emoji-grid" id="gesturesGrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class EnhancedChatDemo {
+            constructor() {
+                this.socket = null;
+                this.token = null;
+                this.isConnected = false;
+                this.currentReceiverId = null;
+                this.mediaRecorder = null;
+                this.isRecording = false;
+                this.recordedChunks = [];
+                
+                this.initializeElements();
+                this.setupEventListeners();
+                this.setupEmojiPicker();
+            }
+
+            initializeElements() {
+                // Login elements
+                this.loginForm = document.getElementById('loginForm');
+                this.usernameInput = document.getElementById('usernameInput');
+                this.passwordInput = document.getElementById('passwordInput');
+                this.receiverInput = document.getElementById('receiverInput');
+                this.loginBtn = document.getElementById('loginBtn');
+
+                // Chat elements
+                this.chatContainer = document.getElementById('chatContainer');
+                this.chatMessages = document.getElementById('chatMessages');
+                this.messageInput = document.getElementById('messageInput');
+                this.sendBtn = document.getElementById('sendBtn');
+                this.emojiBtn = document.getElementById('emojiBtn');
+                this.voiceBtn = document.getElementById('voiceBtn');
+                this.botChatBtn = document.getElementById('botChatBtn');
+                this.emojiPicker = document.getElementById('emojiPicker');
+                this.personalitySelect = document.getElementById('personalitySelect');
+                this.connectionStatus = document.getElementById('connectionStatus');
+                this.typingIndicator = document.getElementById('typingIndicator');
+            }
+
+            setupEventListeners() {
+                // Login
+                this.loginBtn.addEventListener('click', () => this.login());
+
+                // Message input
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.sendMessage();
+                    } else {
+                        this.startTyping();
+                    }
+                });
+
+                this.messageInput.addEventListener('input', () => {
+                    if (this.messageInput.value.length === 0) {
+                        this.stopTyping();
+                    }
+                });
+
+                // Send button
+                this.sendBtn.addEventListener('click', () => this.sendMessage());
+
+                // Emoji button
+                this.emojiBtn.addEventListener('click', () => this.toggleEmojiPicker());
+
+                // Voice button
+                this.voiceBtn.addEventListener('click', () => this.toggleVoiceRecording());
+
+                // Bot chat button
+                this.botChatBtn.addEventListener('click', () => this.chatWithBot());
+
+                // Click outside to close emoji picker
+                document.addEventListener('click', (e) => {
+                    if (!this.emojiPicker.contains(e.target) && e.target !== this.emojiBtn) {
+                        this.emojiPicker.classList.remove('show');
+                    }
+                });
+            }
+
+            setupEmojiPicker() {
+                const emojiCategories = {
+                    smileys: ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘'],
+                    hearts: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖'],
+                    gestures: ['👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '✋', '🤚', '👋']
+                };
+
+                Object.entries(emojiCategories).forEach(([category, emojis]) => {
+                    const grid = document.getElementById(`${category}Grid`);
+                    emojis.forEach(emoji => {
+                        const emojiElement = document.createElement('div');
+                        emojiElement.className = 'emoji';
+                        emojiElement.textContent = emoji;
+                        emojiElement.addEventListener('click', () => {
+                            this.insertEmoji(emoji);
+                        });
+                        grid.appendChild(emojiElement);
+                    });
+                });
+            }
+
+            async login() {
+                const username = this.usernameInput.value.trim();
+                const password = this.passwordInput.value.trim();
+                this.currentReceiverId = this.receiverInput.value.trim();
+
+                if (!username || !password || !this.currentReceiverId) {
+                    alert('Please fill in all fields');
+                    return;
+                }
+
+                try {
+                    // Simulate login - replace with actual API call
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.token = data.token;
+                        this.connectToChat();
+                    } else {
+                        // For demo purposes, create a fake token
+                        this.token = 'demo_token_' + Date.now();
+                        this.connectToChat();
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    // For demo purposes, proceed with fake token
+                    this.token = 'demo_token_' + Date.now();
+                    this.connectToChat();
+                }
+            }
+
+            connectToChat() {
+                this.socket = io('http://localhost:5000', {
+                    auth: { token: this.token },
+                    transports: ['websocket', 'polling']
+                });
+
+                this.setupSocketListeners();
+                
+                this.loginForm.classList.add('hidden');
+                this.chatContainer.classList.remove('hidden');
+            }
+
+            setupSocketListeners() {
+                this.socket.on('connect', () => {
+                    console.log('✅ Connected to Enhanced Chat Server');
+                    this.isConnected = true;
+                    this.connectionStatus.textContent = 'Connected';
+                    this.connectionStatus.style.color = '#28a745';
+                    
+                    // Join a demo chat
+                    this.socket.emit('join_chat', { chatId: 'demo_chat_123' });
+                });
+
+                this.socket.on('disconnect', () => {
+                    console.log('❌ Disconnected from server');
+                    this.isConnected = false;
+                    this.connectionStatus.textContent = 'Disconnected';
+                    this.connectionStatus.style.color = '#dc3545';
+                });
+
+                this.socket.on('connect_error', (error) => {
+                    console.error('Connection error:', error);
+                    this.connectionStatus.textContent = 'Connection Error';
+                    this.connectionStatus.style.color = '#dc3545';
+                });
+
+                // Message events
+                this.socket.on('new_message', (data) => {
+                    this.displayMessage(data.message, 'received');
+                });
+
+                this.socket.on('new_voice_message', (data) => {
+                    this.displayVoiceMessage(data.message, 'received');
+                });
+
+                this.socket.on('bot_response', (data) => {
+                    this.displayBotMessage(data.message, data.botInfo);
+                });
+
+                this.socket.on('bot_auto_reply', (data) => {
+                    this.displayBotMessage(data.message, data.botInfo);
+                });
+
+                // Typing events
+                this.socket.on('user_typing', (data) => {
+                    if (data.typing) {
+                        this.showTypingIndicator(data.username);
+                    } else {
+                        this.hideTypingIndicator();
+                    }
+                });
+
+                // Reaction events
+                this.socket.on('reaction_added', (data) => {
+                    this.addReactionToMessage(data.messageId, data.emoji, data.username);
+                });
+
+                // Voice recording events
+                this.socket.on('user_recording_voice', (data) => {
+                    if (data.recording) {
+                        this.showVoiceRecordingIndicator(data.username);
+                    } else {
+                        this.hideVoiceRecordingIndicator();
+                    }
+                });
+
+                // Confirmation events
+                this.socket.on('message_sent', (data) => {
+                    console.log('✅ Message sent confirmation');
+                });
+
+                this.socket.on('voice_message_sent', (data) => {
+                    console.log('✅ Voice message sent confirmation');
+                });
+            }
+
+            sendMessage() {
+                const content = this.messageInput.value.trim();
+                if (!content || !this.isConnected) return;
+
+                const messageData = {
+                    receiverId: this.currentReceiverId,
+                    chatId: 'demo_chat_123',
+                    content,
+                    messageType: 'text'
+                };
+
+                this.socket.emit('send_message', messageData);
+                this.displayMessage({ content, messageType: 'text', createdAt: new Date() }, 'sent');
+                this.messageInput.value = '';
+                this.stopTyping();
+            }
+
+            chatWithBot() {
+                const content = this.messageInput.value.trim();
+                if (!content) {
+                    content = "Hello! Can you help me?";
+                }
+
+                const personality = this.personalitySelect.value;
+                
+                this.socket.emit('chat_with_bot', {
+                    message: content,
+                    chatId: 'demo_chat_123',
+                    personality
+                });
+
+                if (this.messageInput.value.trim()) {
+                    this.displayMessage({ content, messageType: 'text', createdAt: new Date() }, 'sent');
+                    this.messageInput.value = '';
+                }
+            }
+
+            async toggleVoiceRecording() {
+                if (!this.isRecording) {
+                    await this.startVoiceRecording();
+                } else {
+                    this.stopVoiceRecording();
+                }
+            }
+
+            async startVoiceRecording() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            sampleRate: 44100
+                        }
+                    });
+
+                    this.mediaRecorder = new MediaRecorder(stream);
+                    this.recordedChunks = [];
+
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            this.recordedChunks.push(event.data);
+                        }
+                    };
+
+                    this.mediaRecorder.onstop = () => {
+                        this.processRecordedAudio();
+                    };
+
+                    this.mediaRecorder.start();
+                    this.isRecording = true;
+                    this.voiceBtn.classList.add('recording');
+                    this.voiceBtn.innerHTML = '🛑';
+
+                    // Notify server
+                    this.socket.emit('start_voice_recording', { chatId: 'demo_chat_123' });
+
+                    console.log('🎙️ Voice recording started');
+                } catch (error) {
+                    console.error('Error starting voice recording:', error);
+                    alert('Could not access microphone. Please check permissions.');
+                }
+            }
+
+            stopVoiceRecording() {
+                if (!this.isRecording || !this.mediaRecorder) return;
+
+                this.mediaRecorder.stop();
+                this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                this.isRecording = false;
+                this.voiceBtn.classList.remove('recording');
+                this.voiceBtn.innerHTML = '🎤';
+
+                // Notify server
+                this.socket.emit('stop_voice_recording', { chatId: 'demo_chat_123' });
+
+                console.log('🛑 Voice recording stopped');
+            }
+
+            async processRecordedAudio() {
+                if (this.recordedChunks.length === 0) return;
+
+                const audioBlob = new Blob(this.recordedChunks, { type: 'audio/webm' });
+                const duration = await this.getAudioDuration(audioBlob);
+
+                // Convert to base64
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64Audio = reader.result;
+                    
+                    this.socket.emit('send_voice_message', {
+                        receiverId: this.currentReceiverId,
+                        chatId: 'demo_chat_123',
+                        voiceData: base64Audio,
+                        duration,
+                        waveform: []
+                    });
+
+                    // Display voice message locally
+                    this.displayVoiceMessage({
+                        voiceMessage: { duration },
+                        createdAt: new Date()
+                    }, 'sent');
+                };
+
+                reader.readAsDataURL(audioBlob);
+            }
+
+            getAudioDuration(audioBlob) {
+                return new Promise((resolve) => {
+                    const audio = new Audio();
+                    audio.onloadedmetadata = () => {
+                        resolve(audio.duration);
+                    };
+                    audio.src = URL.createObjectURL(audioBlob);
+                });
+            }
+
+            insertEmoji(emoji) {
+                this.messageInput.value += emoji;
+                this.emojiPicker.classList.remove('show');
+                this.messageInput.focus();
+            }
+
+            toggleEmojiPicker() {
+                this.emojiPicker.classList.toggle('show');
+            }
+
+            displayMessage(message, type) {
+                const messageElement = document.createElement('div');
+                messageElement.className = `message ${type}`;
+                messageElement.innerHTML = `
+                    <div>${message.content || message.message}</div>
+                    <div class="message-time">${this.formatTime(message.createdAt)}</div>
+                    <div class="message-reactions" data-message-id="${message._id}"></div>
+                `;
+
+                // Add double-click to react
+                messageElement.addEventListener('dblclick', () => {
+                    this.addQuickReaction(message._id, '👍');
+                });
+
+                this.chatMessages.appendChild(messageElement);
+                this.scrollToBottom();
+            }
+
+            displayVoiceMessage(message, type) {
+                const duration = message.voiceMessage?.duration || 0;
+                const messageElement = document.createElement('div');
+                messageElement.className = `message ${type}`;
+                messageElement.innerHTML = `
+                    <div class="voice-message">
+                        <button class="voice-play-btn">▶️</button>
+                        <div class="voice-waveform"></div>
+                        <span>${this.formatDuration(duration)}</span>
+                    </div>
+                    <div class="message-time">${this.formatTime(message.createdAt)}</div>
+                `;
+
+                this.chatMessages.appendChild(messageElement);
+                this.scrollToBottom();
+            }
+
+            displayBotMessage(message, botInfo) {
+                const messageElement = document.createElement('div');
+                messageElement.className = 'message bot';
+                messageElement.innerHTML = `
+                    <div class="bot-personality-indicator">🤖 ${botInfo.personality} AI</div>
+                    <div>${message.content}</div>
+                    <div class="message-time">${this.formatTime(message.createdAt)}</div>
+                    <div class="message-reactions" data-message-id="${message._id}"></div>
+                `;
+
+                this.chatMessages.appendChild(messageElement);
+                this.scrollToBottom();
+            }
+
+            addQuickReaction(messageId, emoji) {
+                if (!messageId) return;
+                
+                this.socket.emit('add_reaction', { messageId, emoji });
+                this.addReactionToMessage(messageId, emoji, 'You');
+            }
+
+            addReactionToMessage(messageId, emoji, username) {
+                const reactionsContainer = document.querySelector(`[data-message-id="${messageId}"]`);
+                if (!reactionsContainer) return;
+
+                const reaction = document.createElement('span');
+                reaction.className = 'reaction';
+                reaction.innerHTML = `${emoji} ${username}`;
+                reactionsContainer.appendChild(reaction);
+            }
+
+            startTyping() {
+                if (this.typingTimeout) clearTimeout(this.typingTimeout);
+                
+                this.socket.emit('typing_start', {
+                    chatId: 'demo_chat_123',
+                    receiverId: this.currentReceiverId
+                });
+
+                this.typingTimeout = setTimeout(() => {
+                    this.stopTyping();
+                }, 3000);
+            }
+
+            stopTyping() {
+                if (this.typingTimeout) {
+                    clearTimeout(this.typingTimeout);
+                    this.typingTimeout = null;
+                }
+
+                this.socket.emit('typing_stop', {
+                    chatId: 'demo_chat_123',
+                    receiverId: this.currentReceiverId
+                });
+            }
+
+            showTypingIndicator(username) {
+                this.typingIndicator.textContent = `${username} is typing...`;
+                this.typingIndicator.classList.add('show');
+            }
+
+            hideTypingIndicator() {
+                this.typingIndicator.classList.remove('show');
+            }
+
+            showVoiceRecordingIndicator(username) {
+                this.typingIndicator.textContent = `🎙️ ${username} is recording a voice message...`;
+                this.typingIndicator.classList.add('show');
+            }
+
+            hideVoiceRecordingIndicator() {
+                this.typingIndicator.classList.remove('show');
+            }
+
+            formatTime(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+
+            formatDuration(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            scrollToBottom() {
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+        }
+
+        // Initialize the demo when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new EnhancedChatDemo();
+        });
+    </script>
+</body>
+</html>
