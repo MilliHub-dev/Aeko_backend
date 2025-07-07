@@ -2,6 +2,7 @@ import express from "express";
 import Chat from "../models/Chat.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import getBotResponse from "../ai/bot.js";
+import enhancedBot from "../ai/enhancedBot.js";
 import { botResponseMiddleware} from "../middleware/botMiddleware.js";
 
 
@@ -19,16 +20,31 @@ router.post("/send-message", authMiddleware, async (req, res) => {
   });
   await chatMessage.save();
 
-  // If recipient has Smart Bot enabled, auto-reply
-  const botReply = await getBotResponse(recipientId, message);
-  if (botReply) {
-    const botMessage = new Chat({
-      sender: recipientId,
-      recipient: req.userId,
-      message: botReply,
-      isBot: true, // Mark as bot message
-    });
-    await botMessage.save();
+  // If recipient has Smart Bot enabled, auto-reply using enhanced bot
+  try {
+    const botResponse = await enhancedBot.generateResponse(recipientId, message);
+    if (botResponse && !botResponse.error && botResponse.response) {
+      const botMessage = new Chat({
+        sender: recipientId,
+        recipient: req.userId,
+        message: botResponse.response,
+        isBot: true, // Mark as bot message
+      });
+      await botMessage.save();
+    }
+  } catch (error) {
+    console.error('Enhanced bot auto-reply error:', error);
+    // Fallback to original bot
+    const botReply = await getBotResponse(recipientId, message);
+    if (botReply) {
+      const botMessage = new Chat({
+        sender: recipientId,
+        recipient: req.userId,
+        message: botReply,
+        isBot: true,
+      });
+      await botMessage.save();
+    }
   }
 
   res.json({ success: true });

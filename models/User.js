@@ -23,7 +23,19 @@ const UserSchema = new mongoose.Schema({
   subscriptionExpiry: { type: Date, default: null },
   botEnabled: { type: Boolean, default: false }, // Bot ON/OFF
   botPersonality: { type: String, default: "friendly" }, // Personality type
-  botResponses: [{ type: String }], // User’s past responses for training
+  botResponses: [{ type: String }], // User's past responses for training
+  botPreferences: {
+    preferredSentiment: { type: String, enum: ["positive", "negative", "neutral"], default: "neutral" },
+    topics: [String],
+    communicationStyle: { type: String, default: "casual" },
+    responseLength: { type: String, enum: ["short", "medium", "long"], default: "medium" }
+  },
+  botAnalytics: {
+    totalInteractions: { type: Number, default: 0 },
+    lastInteraction: { type: Date },
+    averageResponseTime: { type: Number, default: 0 },
+    satisfactionRating: { type: Number, default: 5, min: 1, max: 10 }
+  }
 }, { timestamps: true });
 
 // Hash password before saving
