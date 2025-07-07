@@ -6,6 +6,11 @@ dotenv.config();
 
 const connectDB = async () => {
     try {
+        if (!process.env.MONGO_URI) {
+            console.warn("MONGO_URI not configured. Running without database connection.");
+            return;
+        }
+        
         await mongoose.connect(process.env.MONGO_URI, {
            // useNewUrlParser: true,
            // useUnifiedTopology: true,
@@ -13,7 +18,8 @@ const connectDB = async () => {
         console.log("MongoDB Connected...");
     } catch (error) {
         console.error("Database connection failed:", error.message);
-        process.exit(1);
+        console.warn("Continuing without database connection...");
+        // Don't exit the process, just log the error and continue
     }
 };
 

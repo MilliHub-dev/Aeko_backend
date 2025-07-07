@@ -1,5 +1,5 @@
 import  express from "express";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from"../models/User.js";
 const router = express.Router();
@@ -81,5 +81,5 @@ router.put("/profile-picture", upload.single("image"), async (req, res) => {
 
 
 
-export default User;
+export default router;
 

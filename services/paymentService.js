@@ -3,10 +3,18 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const flw = new Flutterwave(process.env.FLW_PUBLIC_KEY, process.env.FLW_SECRET_KEY);
+// Initialize Flutterwave only if keys are provided
+let flw = null;
+if (process.env.FLUTTERWAVE_PUBLIC_KEY && process.env.FLUTTERWAVE_SECRET_KEY) {
+    flw = new Flutterwave(process.env.FLUTTERWAVE_PUBLIC_KEY, process.env.FLUTTERWAVE_SECRET_KEY);
+}
 
 export async function initiatePayment(req, res) {
     try {
+        if (!flw) {
+            return res.status(500).json({ error: "Payment service not configured" });
+        }
+
         const { amount, email, phone, name } = req.body;
 
         const payload = {
@@ -32,6 +40,10 @@ export async function initiatePayment(req, res) {
 
 export async function verifyPayment(req, res) {
     try {
+        if (!flw) {
+            return res.status(500).json({ error: "Payment service not configured" });
+        }
+
         const { transaction_id } = req.query;
         const response = await flw.Transaction.verify({ id: transaction_id });
 

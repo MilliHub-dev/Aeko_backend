@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 const authMiddleware = (req, res, next) => {
   try {
