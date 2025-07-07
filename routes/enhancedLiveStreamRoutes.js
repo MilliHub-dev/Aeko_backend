@@ -937,3 +937,143 @@ router.use((error, req, res, next) => {
 });
 
 export default router;
+
+/**
+ * @swagger
+ * /api/livestream/create:
+ *   post:
+ *     summary: Create a new livestream
+ *     tags: [Livestream]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               streamType:
+ *                 type: string
+ *               features:
+ *                 type: object
+ *               quality:
+ *                 type: object
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               scheduledFor:
+ *                 type: string
+ *                 format: date-time
+ *               monetization:
+ *                 type: object
+ *     responses:
+ *       201:
+ *         description: Stream created successfully
+ *       400:
+ *         description: Stream title is required
+ */
+
+/**
+ * @swagger
+ * /api/livestream/{streamId}/start:
+ *   post:
+ *     summary: Start a livestream
+ *     tags: [Livestream]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: streamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Stream started successfully
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Stream not found
+ */
+
+/**
+ * @swagger
+ * /api/livestream/{streamId}/end:
+ *   post:
+ *     summary: End a livestream
+ *     tags: [Livestream]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: streamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Stream ended successfully
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Stream not found
+ */
+
+/**
+ * @swagger
+ * /api/livestream/{streamId}/thumbnail:
+ *   post:
+ *     summary: Upload a stream thumbnail
+ *     tags: [Livestream]
+ *     security:
+ *       - bearerAuth: []
+ *     consumes:
+ *       - multipart/form-data
+ *     parameters:
+ *       - in: path
+ *         name: streamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: formData
+ *         name: thumbnail
+ *         required: true
+ *         type: file
+ *     responses:
+ *       200:
+ *         description: Thumbnail uploaded successfully
+ *       400:
+ *         description: No thumbnail file provided
+ */
+
+/**
+ * @swagger
+ * /api/livestream/trending:
+ *   get:
+ *     summary: Get trending livestreams
+ *     tags: [Discovery]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Trending streams retrieved successfully
+ */
+
