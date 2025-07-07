@@ -21,6 +21,8 @@ const UserSchema = new mongoose.Schema({
     default: "inactive",
   },
   subscriptionExpiry: { type: Date, default: null },
+  banned: { type: Boolean, default: false }, // User ban status
+  isAdmin: { type: Boolean, default: false }, // Admin privileges
   botEnabled: { type: Boolean, default: false }, // Bot ON/OFF
   botPersonality: { type: String, default: "friendly" }, // Personality type
   botResponses: [{ type: String }], // User's past responses for training
