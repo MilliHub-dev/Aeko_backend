@@ -58,7 +58,7 @@ const router = express.Router();
  *       404:
  *         description: Post not found
  */
-router.post("/mint", auth, async (req, res) => {
+router.post("/mint", authMiddleware, async (req, res) => {
   try {
     const { postId, privateKey, metadataUri, price = 0, listForSale = false } = req.body;
     const userId = req.user.id;
@@ -320,7 +320,7 @@ router.get("/marketplace", async (req, res) => {
  *       404:
  *         description: NFT not found
  */
-router.post("/purchase", auth, async (req, res) => {
+router.post("/purchase", authMiddleware, async (req, res) => {
   try {
     const { nftId, buyerPrivateKey } = req.body;
     const buyerId = req.user.id;
@@ -511,7 +511,7 @@ router.post("/purchase", auth, async (req, res) => {
  *       404:
  *         description: NFT not found
  */
-router.post("/list", auth, async (req, res) => {
+router.post("/list", authMiddleware, async (req, res) => {
   try {
     const { nftId, price, listingType, auctionEndTime } = req.body;
     const userId = req.user.id;
@@ -633,7 +633,7 @@ router.post("/list", auth, async (req, res) => {
  *       404:
  *         description: NFT not found
  */
-router.post("/bid", auth, async (req, res) => {
+router.post("/bid", authMiddleware, async (req, res) => {
   try {
     const { nftId, bidAmount } = req.body;
     const bidderId = req.user.id;
@@ -747,7 +747,7 @@ router.post("/bid", auth, async (req, res) => {
  *       404:
  *         description: NFT not found
  */
-router.post("/donate", auth, async (req, res) => {
+router.post("/donate", authMiddleware, async (req, res) => {
   try {
     const { nftId, amount, privateKey, message = "" } = req.body;
     const donorId = req.user.id;
@@ -871,7 +871,7 @@ router.post("/donate", auth, async (req, res) => {
  *       200:
  *         description: User NFTs retrieved successfully
  */
-router.get("/my-nfts", auth, async (req, res) => {
+router.get("/my-nfts", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 

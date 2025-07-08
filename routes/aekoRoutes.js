@@ -31,7 +31,7 @@ const router = express.Router();
  *       404:
  *         description: User wallet not found
  */
-router.get("/balance", auth, async (req, res) => {
+router.get("/balance", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user.solanaWalletAddress) {
@@ -95,7 +95,7 @@ router.get("/balance", auth, async (req, res) => {
  *       400:
  *         description: Invalid wallet address
  */
-router.post("/connect-wallet", auth, async (req, res) => {
+router.post("/connect-wallet", authMiddleware, async (req, res) => {
   try {
     const { walletAddress } = req.body;
 
@@ -186,7 +186,7 @@ router.post("/connect-wallet", auth, async (req, res) => {
  *       404:
  *         description: Recipient not found
  */
-router.post("/transfer", auth, async (req, res) => {
+router.post("/transfer", authMiddleware, async (req, res) => {
   try {
     const { toUserId, amount, privateKey, description = "" } = req.body;
     const fromUserId = req.user.id;
@@ -329,7 +329,7 @@ router.post("/transfer", auth, async (req, res) => {
  *       400:
  *         description: Invalid request
  */
-router.post("/giveaway", auth, async (req, res) => {
+router.post("/giveaway", authMiddleware, async (req, res) => {
   try {
     const { recipients, amountPerRecipient, privateKey, description = "Aeko Giveaway" } = req.body;
     const fromUserId = req.user.id;
@@ -478,7 +478,7 @@ router.post("/giveaway", auth, async (req, res) => {
  *       404:
  *         description: Stream not found
  */
-router.post("/donate-to-stream", auth, async (req, res) => {
+router.post("/donate-to-stream", authMiddleware, async (req, res) => {
   try {
     const { streamId, amount, privateKey, message = "" } = req.body;
     const donorUserId = req.user.id;
@@ -633,7 +633,7 @@ router.post("/donate-to-stream", auth, async (req, res) => {
  *       200:
  *         description: Transaction history retrieved successfully
  */
-router.get("/transactions", auth, async (req, res) => {
+router.get("/transactions", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const { type, limit = 50 } = req.query;
