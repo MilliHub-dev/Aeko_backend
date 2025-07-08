@@ -42,7 +42,7 @@ const router = express.Router();
  *       404:
  *         description: Post or user not found
  */
-router.post("/transfer", auth, async (req, res) => {
+router.post("/transfer", authMiddleware, async (req, res) => {
   try {
     const { postId, toUserId, reason = "" } = req.body;
     const currentUserId = req.user.id;
@@ -207,7 +207,7 @@ router.get("/transfer-history/:postId", async (req, res) => {
  *       200:
  *         description: Received posts retrieved successfully
  */
-router.get("/my-received-posts", auth, async (req, res) => {
+router.get("/my-received-posts", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -249,7 +249,7 @@ router.get("/my-received-posts", auth, async (req, res) => {
  *       200:
  *         description: Transferred posts retrieved successfully
  */
-router.get("/my-transferred-posts", auth, async (req, res) => {
+router.get("/my-transferred-posts", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -357,7 +357,7 @@ router.post("/increment-view/:postId", async (req, res) => {
  *       200:
  *         description: NFT eligible posts retrieved successfully
  */
-router.get("/nft-eligible", auth, async (req, res) => {
+router.get("/nft-eligible", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 

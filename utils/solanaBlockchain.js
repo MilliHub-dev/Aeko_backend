@@ -15,10 +15,11 @@ import {
   getAccount,
   TOKEN_PROGRAM_ID
 } from '@solana/spl-token';
-import { 
+import pkg from '@metaplex-foundation/mpl-token-metadata';
+const { 
   createCreateMetadataAccountV3Instruction,
-  PROGRAM_ID as TOKEN_METADATA_PROGRAM_ID
-} from '@metaplex-foundation/mpl-token-metadata';
+  PROGRAM_ID: TOKEN_METADATA_PROGRAM_ID 
+} = pkg;
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
 
