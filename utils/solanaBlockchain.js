@@ -34,11 +34,35 @@ const RPC_ENDPOINT = process.env.SOLANA_RPC_URL ||
 
 const connection = new Connection(RPC_ENDPOINT, 'confirmed');
 
-// Platform wallet (Treasury)
+// Platform wallet (Treasury) with error handling
 const PLATFORM_PRIVATE_KEY = process.env.SOLANA_PRIVATE_KEY;
-const platformWallet = PLATFORM_PRIVATE_KEY ? 
-  Keypair.fromSecretKey(bs58.decode(PLATFORM_PRIVATE_KEY)) : 
-  null;
+let platformWallet = null;
+
+if (PLATFORM_PRIVATE_KEY) {
+  try {
+    // Validate base58 format
+    if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(PLATFORM_PRIVATE_KEY)) {
+      console.error('❌ Invalid SOLANA_PRIVATE_KEY format in .env file');
+      console.log('💡 Run: node generate-keypair.js to generate a valid keypair');
+    } else {
+      const decoded = bs58.decode(PLATFORM_PRIVATE_KEY);
+      if (decoded.length !== 64) {
+        console.error('❌ Invalid SOLANA_PRIVATE_KEY length. Expected 64 bytes.');
+        console.log('💡 Run: node generate-keypair.js to generate a valid keypair');
+      } else {
+        platformWallet = Keypair.fromSecretKey(decoded);
+        console.log('✅ Solana wallet loaded successfully');
+        console.log('📍 Wallet Address:', platformWallet.publicKey.toString());
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error loading Solana private key:', error.message);
+    console.log('💡 Run: node generate-keypair.js to generate a valid keypair');
+  }
+} else {
+  console.warn('⚠️  SOLANA_PRIVATE_KEY not found in .env file');
+  console.log('💡 Run: node generate-keypair.js to generate a valid keypair');
+}
 
 // Aeko Token Configuration
 let AEKO_TOKEN_MINT = null;
