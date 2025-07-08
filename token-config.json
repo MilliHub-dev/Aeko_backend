@@ -1,0 +1,14 @@
+{
+  "mintAddress": "53hqPA69KCo1Voeidh1riMeeffg16hdRw2PANPm2Crsn",
+  "platformWallet": "Y1aMxGaerMwQcr8cbKeREdyRRkYfdgVF4rrxgGVBJJw",
+  "platformTokenAccount": "2NyeWxztZ45fXMvJWUBCBQmjzPg8EyAsjXyuypCa5rRc",
+  "name": "Aeko Coin",
+  "symbol": "AEKO",
+  "decimals": 9,
+  "initialSupply": 1000000000,
+  "totalSupply": 1000000000,
+  "network": "devnet",
+  "deployedAt": "2025-07-08T16:17:59.032Z",
+  "metadataAddress": "skipped",
+  "metadataUri": "https://aeko.io/token-metadata"
+}
