@@ -11,7 +11,21 @@ const swaggerConfig = {
 
 Welcome to the comprehensive API documentation for Aeko, the **Web3 Social Media Platform** featuring blockchain integration, NFT marketplace, and advanced real-time communication.
 
+**Aeko** is a next-generation blockchain-based social media platform that merges the best features of short-form video sharing, microblogging, and photo-based networking, enhanced by AI capabilities and powered by Web3. It aims to provide a decentralized, immersive, and rewarding experience for content creators and consumers alike.
+Aeko combines the power of Solana blockchain for fast, secure transactions with a rich set of social features, including an enhanced chat system, AI bot personalities, and a unique NFT marketplace.
+
 ## 🚀 Core Features
+
+### 🌐 Social Features
+- **User management** and authentication
+- **Social media features** (posts, comments, likes, shares)
+- **Post ownership** and transfer system
+- **Engagement tracking** with view counting
+- **Advertisement system** with crypto payments
+- **Challenge and debate systems**
+- **Space/community features** with token gating
+- **Subscription-based content** and monetization
+- **Profile management** with status updates
 
 ### 🔗 Blockchain Integration
 - **Aeko Coin (AEKO)** - Native Solana SPL token
@@ -57,14 +71,6 @@ Welcome to the comprehensive API documentation for Aeko, the **Web3 Social Media
 6. **Mentor** 🧙 - Educational and supportive
 7. **Companion** 🤝 - Empathetic and understanding
 
-### 🌐 Social Features
-- **User management** and authentication
-- **Social media features** (posts, comments, likes, shares)
-- **Post ownership** and transfer system
-- **Engagement tracking** with view counting
-- **Advertisement system** with crypto payments
-- **Challenge and debate systems**
-- **Space/community features** with token gating
 
 ## 🔐 Authentication
 
