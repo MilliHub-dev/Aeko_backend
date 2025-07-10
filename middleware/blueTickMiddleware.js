@@ -100,7 +100,6 @@ export const checkAndUpdateBlueTick = async (user) => {
             user.profileCompletion.hasProfilePicture,
             user.profileCompletion.hasBio,
             user.profileCompletion.hasFollowers,
-            user.profileCompletion.hasWalletConnected,
             user.profileCompletion.hasVerifiedEmail
         ];
         
@@ -170,10 +169,11 @@ export const getProfileCompletionSteps = (user) => {
     if (!user.profileCompletion.hasWalletConnected) {
         steps.push({
             step: 'connect_wallet',
-            title: 'Connect Solana Wallet',
+            title: 'Connect Solana Wallet (Optional)',
             description: 'Link your wallet to use Aeko Coin and NFT features',
             completed: false,
-            action: 'Connect your Phantom, Solflare, or other Solana wallet'
+            action: 'Connect your Phantom, Solflare, or other Solana wallet',
+            optional: true // Not required for blue tick
         });
     }
     
@@ -192,8 +192,8 @@ export const getProfileCompletionSteps = (user) => {
         { key: 'hasVerifiedEmail', step: 'verify_email' },
         { key: 'hasProfilePicture', step: 'add_picture' },
         { key: 'hasBio', step: 'write_bio' },
-        { key: 'hasWalletConnected', step: 'connect_wallet' },
-        { key: 'hasFollowers', step: 'get_followers' }
+        { key: 'hasFollowers', step: 'get_followers' },
+        { key: 'hasWalletConnected', step: 'connect_wallet', optional: true }
     ];
     
     completedSteps.forEach(({ key, step }) => {

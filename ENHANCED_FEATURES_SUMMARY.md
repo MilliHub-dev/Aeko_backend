@@ -47,7 +47,9 @@
 2. ✅ **Profile picture added** - Image upload
 3. ✅ **Bio completed** - Minimum 10 characters
 4. ✅ **First follower gained** - Social engagement
-5. ✅ **Solana wallet connected** - Web3 integration
+
+**Optional (Not Required for Blue Tick):**
+- 🔗 **Solana wallet connected** - For Web3 features
 
 **Key Files:**
 - `models/User.js` - Profile completion tracking and blue tick logic
@@ -142,7 +144,7 @@ profileCompletion: {
   hasProfilePicture: Boolean,
   hasBio: Boolean,
   hasFollowers: Boolean,
-  hasWalletConnected: Boolean,
+  hasWalletConnected: Boolean, // Optional - not required for blue tick
   hasVerifiedEmail: Boolean,
   completedAt: Date,
   completionPercentage: Number

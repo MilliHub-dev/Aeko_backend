@@ -212,6 +212,7 @@ import nodemailer from 'nodemailer';
  *                       type: boolean
  *                     hasWalletConnected:
  *                       type: boolean
+ *                       description: "Optional - not required for blue tick"
  *                     hasVerifiedEmail:
  *                       type: boolean
  *                     blueTick:
@@ -601,8 +602,9 @@ router.get("/profile-completion", authMiddleware, async (req, res) => {
         if (!user.profileCompletion.hasFollowers) {
             nextSteps.push("Get your first follower");
         }
+        // Note: Wallet connection is optional for blue tick
         if (!user.profileCompletion.hasWalletConnected) {
-            nextSteps.push("Connect your Solana wallet");
+            nextSteps.push("Connect your Solana wallet (optional - for Web3 features)");
         }
         if (!user.profileCompletion.hasVerifiedEmail) {
             nextSteps.push("Verify your email address");
@@ -618,8 +620,10 @@ router.get("/profile-completion", authMiddleware, async (req, res) => {
                     profilePicture: user.profileCompletion.hasProfilePicture,
                     bio: user.profileCompletion.hasBio,
                     followers: user.profileCompletion.hasFollowers,
-                    wallet: user.profileCompletion.hasWalletConnected,
                     email: user.profileCompletion.hasVerifiedEmail
+                },
+                optional: {
+                    wallet: user.profileCompletion.hasWalletConnected
                 }
             }
         });

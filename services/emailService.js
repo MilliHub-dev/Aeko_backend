@@ -62,15 +62,19 @@ class EmailService {
                 <strong>⚠️ Important:</strong> You have 3 attempts to enter the correct code. If you fail, you'll need to request a new one.
               </div>
               
-              <h3>🎯 What's Next?</h3>
-              <p>Once verified, complete your profile to earn a <strong style="color: #1da1f2;">Blue Tick ✓</strong>:</p>
-              <ul>
-                <li>✅ Verify your email (you're doing this now!)</li>
-                <li>📸 Add a profile picture</li>
-                <li>📝 Write a bio (minimum 10 characters)</li>
-                <li>👥 Get at least 1 follower</li>
-                <li>🔗 Connect your Solana wallet</li>
-              </ul>
+                             <h3>🎯 What's Next?</h3>
+               <p>Once verified, complete your profile to earn a <strong style="color: #1da1f2;">Blue Tick ✓</strong>:</p>
+               <ul>
+                 <li>✅ Verify your email (you're doing this now!)</li>
+                 <li>📸 Add a profile picture</li>
+                 <li>📝 Write a bio (minimum 10 characters)</li>
+                 <li>👥 Get at least 1 follower</li>
+               </ul>
+               
+               <h3>🔗 Optional Features:</h3>
+               <ul>
+                 <li>🔗 Connect your Solana wallet for Web3 features</li>
+               </ul>
               
               <h3>🚀 Aeko Features You'll Love:</h3>
               <ul>
@@ -145,14 +149,13 @@ class EmailService {
                 <p>Your profile is now verified!</p>
               </div>
               
-              <p>You've successfully completed all the requirements for a Blue Tick verification:</p>
-              <ul>
-                <li>✅ Email verified</li>
-                <li>✅ Profile picture added</li>
-                <li>✅ Bio completed</li>
-                <li>✅ Got your first follower</li>
-                <li>✅ Wallet connected</li>
-              </ul>
+                             <p>You've successfully completed all the requirements for a Blue Tick verification:</p>
+               <ul>
+                 <li>✅ Email verified</li>
+                 <li>✅ Profile picture added</li>
+                 <li>✅ Bio completed</li>
+                 <li>✅ Got your first follower</li>
+               </ul>
               
               <h3>🚀 Blue Tick Benefits:</h3>
               <ul>
@@ -218,16 +221,16 @@ class EmailService {
               <h2>Get Started with Aeko 🚀</h2>
               <p>You're now part of the next-generation social media platform! Here's how to make the most of your experience:</p>
               
-              <div class="feature-box">
-                <h3>🎯 Complete Your Profile (Earn Blue Tick)</h3>
-                <p>Complete these steps to earn your verified status:</p>
-                <ul>
-                  <li>📸 Add a profile picture</li>
-                  <li>📝 Write an engaging bio</li>
-                  <li>👥 Get your first follower</li>
-                  <li>🔗 Connect your Solana wallet</li>
-                </ul>
-              </div>
+                             <div class="feature-box">
+                 <h3>🎯 Complete Your Profile (Earn Blue Tick)</h3>
+                 <p>Complete these steps to earn your verified status:</p>
+                 <ul>
+                   <li>📸 Add a profile picture</li>
+                   <li>📝 Write an engaging bio</li>
+                   <li>👥 Get your first follower</li>
+                 </ul>
+                 <p><strong>Optional:</strong> Connect your Solana wallet for Web3 features</p>
+               </div>
               
               <div class="feature-box">
                 <h3>🪙 Explore Aeko Coin</h3>

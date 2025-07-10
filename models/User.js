@@ -76,19 +76,18 @@ UserSchema.pre('save', function (next) {
   this.profileCompletion.hasWalletConnected = !!this.solanaWalletAddress;
   this.profileCompletion.hasVerifiedEmail = this.emailVerification.isVerified;
   
-  // Calculate completion percentage
+  // Calculate completion percentage (wallet connection not required for blue tick)
   const requirements = [
     this.profileCompletion.hasProfilePicture,
     this.profileCompletion.hasBio,
     this.profileCompletion.hasFollowers,
-    this.profileCompletion.hasWalletConnected,
     this.profileCompletion.hasVerifiedEmail
   ];
   
   const completedCount = requirements.filter(req => req).length;
   this.profileCompletion.completionPercentage = Math.round((completedCount / requirements.length) * 100);
   
-  // Award blue tick if all requirements are met
+  // Award blue tick if all requirements are met (wallet not required)
   if (completedCount === requirements.length && !this.blueTick) {
     this.blueTick = true;
     this.profileCompletion.completedAt = new Date();

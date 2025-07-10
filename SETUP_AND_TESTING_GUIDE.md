@@ -115,14 +115,14 @@ curl -X POST http://localhost:5000/api/auth/verify-email \
     "email": "your_test_email@gmail.com",
     "blueTick": false,
     "emailVerification": { "isVerified": true },
-    "profileCompletion": {
-      "completionPercentage": 20,
-      "hasVerifiedEmail": true,
-      "hasProfilePicture": false,
-      "hasBio": false,
-      "hasFollowers": false,
-      "hasWalletConnected": false
-    }
+         "profileCompletion": {
+       "completionPercentage": 25,
+       "hasVerifiedEmail": true,
+       "hasProfilePicture": false,
+       "hasBio": false,
+       "hasFollowers": false,
+       "hasWalletConnected": false
+     }
   }
 }
 ```
@@ -142,53 +142,54 @@ curl -X GET http://localhost:5000/api/auth/profile-completion \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-**Expected Response:**
-```json
-{
-  "success": true,
-  "profileCompletion": {
-    "completionPercentage": 20,
-    "hasProfilePicture": false,
-    "hasBio": false,
-    "hasFollowers": false,
-    "hasWalletConnected": false,
-    "hasVerifiedEmail": true,
-    "blueTick": false,
-    "nextSteps": [
-      "Add a profile picture",
-      "Write a bio (minimum 10 characters)",
-      "Get your first follower",
-      "Connect your Solana wallet"
-    ],
-    "requirements": {
-      "profilePicture": false,
-      "bio": false,
-      "followers": false,
-      "wallet": false,
-      "email": true
-    }
-  }
-}
+ **Expected Response:**
+ ```json
+ {
+   "success": true,
+   "profileCompletion": {
+     "completionPercentage": 25,
+     "hasProfilePicture": false,
+     "hasBio": false,
+     "hasFollowers": false,
+     "hasWalletConnected": false,
+     "hasVerifiedEmail": true,
+     "blueTick": false,
+     "nextSteps": [
+       "Add a profile picture",
+       "Write a bio (minimum 10 characters)",
+       "Get your first follower",
+       "Connect your Solana wallet (optional - for Web3 features)"
+     ],
+     "requirements": {
+       "profilePicture": false,
+       "bio": false,
+       "followers": false,
+       "email": true
+     },
+     "optional": {
+       "wallet": false
+     }
+   }
+ }
 ```
 
-#### Complete Profile Steps (Simulate)
-To test blue tick awarding, you can manually update the user in MongoDB:
-
-```javascript
-// In MongoDB, update your user:
-db.users.updateOne(
-  { _id: ObjectId("YOUR_USER_ID") },
-  {
-    $set: {
-      profilePicture: "http://example.com/pic.jpg",
-      bio: "This is my test bio with more than 10 characters",
-      solanaWalletAddress: "FAKE_WALLET_ADDRESS_FOR_TESTING"
-    },
-    $push: {
-      followers: ObjectId("ANOTHER_USER_ID") // Or create a dummy ID
-    }
-  }
-)
+ #### Complete Profile Steps (Simulate)
+ To test blue tick awarding, you can manually update the user in MongoDB:
+ 
+ ```javascript
+ // In MongoDB, update your user (wallet connection is optional):
+ db.users.updateOne(
+   { _id: ObjectId("YOUR_USER_ID") },
+   {
+     $set: {
+       profilePicture: "http://example.com/pic.jpg",
+       bio: "This is my test bio with more than 10 characters"
+     },
+     $push: {
+       followers: ObjectId("ANOTHER_USER_ID") // Or create a dummy ID
+     }
+   }
+ )
 ```
 
 After updating, check the profile completion again - the user should now have a blue tick!
@@ -352,12 +353,12 @@ You should see:
 4. **Verify EMAIL_USER and EMAIL_PASS** are correct
 
 ### Blue Tick Not Awarded
-1. **Check all requirements** are met:
-   - Email verified ✅
-   - Profile picture added ✅
-   - Bio with 10+ characters ✅
-   - At least 1 follower ✅
-   - Wallet connected ✅
+ 1. **Check all requirements** are met:
+    - Email verified ✅
+    - Profile picture added ✅
+    - Bio with 10+ characters ✅
+    - At least 1 follower ✅
+    - (Wallet connection is optional for blue tick)
 2. **Check console logs** for middleware errors
 3. **Manually trigger** profile save in MongoDB
 
