@@ -39,6 +39,24 @@ const UserSchema = new mongoose.Schema({
     lastInteraction: { type: Date },
     averageResponseTime: { type: Number, default: 0 },
     satisfactionRating: { type: Number, default: 5, min: 1, max: 10 }
+  },
+  // Email Verification System
+  emailVerification: {
+    isVerified: { type: Boolean, default: false },
+    verificationCode: { type: String, default: null },
+    codeExpiresAt: { type: Date, default: null },
+    codeAttempts: { type: Number, default: 0 },
+    lastCodeSent: { type: Date, default: null }
+  },
+  // Profile Completion for Blue Tick
+  profileCompletion: {
+    hasProfilePicture: { type: Boolean, default: false },
+    hasBio: { type: Boolean, default: false },
+    hasFollowers: { type: Boolean, default: false }, // At least 1 follower
+    hasWalletConnected: { type: Boolean, default: false },
+    hasVerifiedEmail: { type: Boolean, default: false },
+    completedAt: { type: Date, default: null },
+    completionPercentage: { type: Number, default: 0 }
   }
 }, { timestamps: true });
 
@@ -49,9 +67,81 @@ UserSchema.pre('save', async function (next) {
   next();
 });
 
+// Update profile completion before saving
+UserSchema.pre('save', function (next) {
+  // Update profile completion status
+  this.profileCompletion.hasProfilePicture = !!this.profilePicture;
+  this.profileCompletion.hasBio = !!this.bio && this.bio.length > 10;
+  this.profileCompletion.hasFollowers = this.followers.length > 0;
+  this.profileCompletion.hasWalletConnected = !!this.solanaWalletAddress;
+  this.profileCompletion.hasVerifiedEmail = this.emailVerification.isVerified;
+  
+  // Calculate completion percentage
+  const requirements = [
+    this.profileCompletion.hasProfilePicture,
+    this.profileCompletion.hasBio,
+    this.profileCompletion.hasFollowers,
+    this.profileCompletion.hasWalletConnected,
+    this.profileCompletion.hasVerifiedEmail
+  ];
+  
+  const completedCount = requirements.filter(req => req).length;
+  this.profileCompletion.completionPercentage = Math.round((completedCount / requirements.length) * 100);
+  
+  // Award blue tick if all requirements are met
+  if (completedCount === requirements.length && !this.blueTick) {
+    this.blueTick = true;
+    this.profileCompletion.completedAt = new Date();
+  }
+  
+  next();
+});
+
 // Compare passwords
 UserSchema.methods.comparePassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
+};
+
+// Generate 4-digit verification code
+UserSchema.methods.generateVerificationCode = function() {
+  const code = Math.floor(1000 + Math.random() * 9000).toString();
+  this.emailVerification.verificationCode = code;
+  this.emailVerification.codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  this.emailVerification.lastCodeSent = new Date();
+  return code;
+};
+
+// Verify email code
+UserSchema.methods.verifyEmailCode = function(inputCode) {
+  if (!this.emailVerification.verificationCode) {
+    return { success: false, message: 'No verification code found' };
+  }
+  
+  if (this.emailVerification.codeExpiresAt < new Date()) {
+    return { success: false, message: 'Verification code has expired' };
+  }
+  
+  if (this.emailVerification.codeAttempts >= 3) {
+    return { success: false, message: 'Too many failed attempts. Please request a new code' };
+  }
+  
+  if (this.emailVerification.verificationCode === inputCode) {
+    this.emailVerification.isVerified = true;
+    this.emailVerification.verificationCode = null;
+    this.emailVerification.codeExpiresAt = null;
+    this.emailVerification.codeAttempts = 0;
+    return { success: true, message: 'Email verified successfully' };
+  } else {
+    this.emailVerification.codeAttempts += 1;
+    return { success: false, message: 'Invalid verification code' };
+  }
+};
+
+// Check if user can request new code (rate limiting)
+UserSchema.methods.canRequestNewCode = function() {
+  if (!this.emailVerification.lastCodeSent) return true;
+  const timeSinceLastCode = Date.now() - this.emailVerification.lastCodeSent.getTime();
+  return timeSinceLastCode > 60000; // 1 minute cooldown
 };
 
 const User = mongoose.model("User", UserSchema);
