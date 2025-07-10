@@ -143,7 +143,15 @@ The enhanced chat system uses **Socket.IO** for real-time features:
     tags: [
         {
             name: "Authentication",
-            description: "User authentication and authorization"
+            description: "User authentication, email verification, and authorization"
+        },
+        {
+            name: "Email Verification",
+            description: "4-digit email verification system for secure account registration"
+        },
+        {
+            name: "Profile Completion",
+            description: "Blue tick verification system based on profile completion"
         },
         {
             name: "Users",
@@ -198,8 +206,16 @@ The enhanced chat system uses **Socket.IO** for real-time features:
             description: "Community spaces and groups"
         },
         {
-            name: "Ads",
-            description: "Advertisement management"
+            name: "Advertisements",
+            description: "Enhanced advertisement management with targeting, analytics, and budget control"
+        },
+        {
+            name: "Ad Analytics",
+            description: "Comprehensive advertisement performance tracking and reporting"
+        },
+        {
+            name: "Ad Targeting",
+            description: "Advanced audience targeting and demographic filtering"
         },
         {
             name: "Payments",
