@@ -1314,6 +1314,7 @@ socket.emit('send-message', { chatId, content });
                     }
                 }
             }
+
         }
     }
 };
