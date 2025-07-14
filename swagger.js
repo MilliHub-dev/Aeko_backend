@@ -1267,6 +1267,54 @@ The enhanced chat system uses **Socket.IO** for real-time features:
                     }
                 }
             }
+        },
+        "/websocket": {
+            get: {
+                tags: ["WebRTC Calls", "Enhanced Chat", "System"],
+                summary: "WebSocket (Socket.IO) API Documentation",
+                description: `
+Connect to the WebSocket server for real-time features (chat, video/voice calls, notifications, etc.).
+
+**WebSocket URL:**
+- ws://localhost:5000 (Socket.IO)
+
+**Authentication:**
+- Pass JWT token as a query parameter or in the connection payload:
+  - Example: io('ws://localhost:5000', { query: { token: '<JWT>' } })
+
+**Key Events:**
+- **Chat:**
+  - send-message: { chatId, content }
+  - receive-message: { chatId, sender, content, timestamp }
+- **Video/Voice Calls:**
+  - call-offer: { target, offer }
+  - call-answer: { target, answer }
+  - ice-candidate: { target, candidate }
+- **Presence:**
+  - user-online: { userId }
+  - user-offline: { userId }
+
+**Example Connection (JS):**
+```js
+const socket = io('ws://localhost:5000', { query: { token: '<JWT>' } });
+socket.on('receive-message', (msg) => { ... });
+socket.emit('send-message', { chatId, content });
+```
+
+**See /api-docs for full event and payload details.**
+                `,
+                responses: {
+                    200: {
+                        description: "WebSocket documentation page (Markdown)",
+                        content: {
+                            "text/markdown": {
+                                schema: { type: "string" }
+                            }
+                        }
+                    }
+                }
+            }
+
         }
     }
 };
