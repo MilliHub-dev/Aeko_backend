@@ -39,7 +39,10 @@ import cookieParser from "cookie-parser";
 import EnhancedChatSocket from "./sockets/enhancedChatSocket.js";
 import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
 import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
-
+import photoEditRoutes from './routes/photoEdit.js';
+import videoEditRoutes from './routes/videoEdit.js';
+import { Server } from 'socket.io';
+import setupVideoCallSocket from './sockets/videoCallSocket.js';
 
 
 dotenv.config();
@@ -88,6 +91,8 @@ app.use("/api/challenges", challenges);
 app.use("/api/chat", chat);
 app.use("/api/debates", debates);
 app.use("/api/space", space);
+app.use('/api/photo', photoEditRoutes);
+app.use('/api/video', videoEditRoutes);
 
 // Blockchain and NFT routes
 app.use("/api/posts", postTransferRoutes);
@@ -320,6 +325,8 @@ app.get("/health", (req, res) => {
 
 // Start Server
 const PORT = process.env.PORT || 5000;
+const io = new Server(server, { cors: { origin: '*' } });
+setupVideoCallSocket(io);
 server.listen(PORT, () => {
   console.log(`🚀 Aeko Backend Server starting...`);
   console.log(`📡 Server running on port ${PORT}`);

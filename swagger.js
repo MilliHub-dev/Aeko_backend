@@ -264,6 +264,10 @@ The enhanced chat system uses **Socket.IO** for real-time features:
         {
             name: "Blockchain",
             description: "Blockchain integration and Web3 features"
+        },
+        {
+            name: "WebRTC Calls",
+            description: "WebRTC video and voice call signaling events and payloads. Use socket.io to emit and listen for these events."
         }
     ],
     components: {
@@ -1000,6 +1004,53 @@ The enhanced chat system uses **Socket.IO** for real-time features:
                         }
                     }
                 }
+            },
+            PhotoEditRequest: {
+                type: "object",
+                properties: {
+                    filter: {
+                        type: "string",
+                        enum: ["greyscale", "blur", "rotate"],
+                        description: "Type of filter to apply to the photo"
+                    }
+                },
+                required: ["filter"]
+            },
+            PhotoEditResponse: {
+                type: "object",
+                properties: {
+                    success: { type: "boolean" },
+                    url: { type: "string", description: "URL to the edited photo" },
+                    error: { type: "string", nullable: true }
+                }
+            },
+            VideoEditRequest: {
+                type: "object",
+                properties: {
+                    effect: {
+                        type: "string",
+                        enum: ["grayscale", "negate", "blur"],
+                        description: "Type of effect to apply to the video"
+                    }
+                },
+                required: ["effect"]
+            },
+            VideoEditResponse: {
+                type: "object",
+                properties: {
+                    success: { type: "boolean" },
+                    url: { type: "string", description: "URL to the edited video" },
+                    error: { type: "string", nullable: true }
+                }
+            },
+            WebRTCSignal: {
+                type: "object",
+                properties: {
+                    target: { type: "string", description: "Socket ID of the target user" },
+                    offer: { type: "object", description: "WebRTC offer SDP", nullable: true },
+                    answer: { type: "object", description: "WebRTC answer SDP", nullable: true },
+                    candidate: { type: "object", description: "ICE candidate", nullable: true }
+                }
             }
         }
     },
@@ -1080,6 +1131,137 @@ The enhanced chat system uses **Socket.IO** for real-time features:
                                         }
                                     ]
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/photo/edit": {
+            post: {
+                tags: ["File Upload", "Photo Effects"],
+                summary: "Apply a filter to a photo",
+                description: "Upload a photo and apply a filter (greyscale, blur, rotate). Returns the URL to the edited photo.",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "multipart/form-data": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    photo: {
+                                        type: "string",
+                                        format: "binary",
+                                        description: "Photo file to upload"
+                                    },
+                                    filter: {
+                                        type: "string",
+                                        enum: ["greyscale", "blur", "rotate"],
+                                        description: "Type of filter to apply"
+                                    }
+                                },
+                                required: ["photo", "filter"]
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Edited photo URL",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/PhotoEditResponse" }
+                            }
+                        }
+                    },
+                    500: {
+                        description: "Error editing photo",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/PhotoEditResponse" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/video/edit": {
+            post: {
+                tags: ["File Upload", "Video Effects"],
+                summary: "Apply an effect to a video",
+                description: "Upload a video and apply an effect (grayscale, negate, blur). Returns the URL to the edited video.",
+                requestBody: {
+                    required: true,
+                    content: {
+                        "multipart/form-data": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    video: {
+                                        type: "string",
+                                        format: "binary",
+                                        description: "Video file to upload"
+                                    },
+                                    effect: {
+                                        type: "string",
+                                        enum: ["grayscale", "negate", "blur"],
+                                        description: "Type of effect to apply"
+                                    }
+                                },
+                                required: ["video", "effect"]
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Edited video URL",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/VideoEditResponse" }
+                            }
+                        }
+                    },
+                    500: {
+                        description: "Error editing video",
+                        content: {
+                            "application/json": {
+                                schema: { $ref: "#/components/schemas/VideoEditResponse" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/socket.io/webrtc-signaling": {
+            post: {
+                tags: ["WebRTC Calls"],
+                summary: "WebRTC signaling event (socket.io)",
+                description: `
+                    Use socket.io to emit and listen for the following events for video/voice calls:
+                    - call-offer: Send a WebRTC offer to another user
+                    - call-answer: Send a WebRTC answer in response to an offer
+                    - ice-candidate: Exchange ICE candidates for peer connection
+                    \n\n
+                    Example socket.io payloads:
+                    - call-offer: { target: '<socketId>', offer: { ...SDP } }
+                    - call-answer: { target: '<socketId>', answer: { ...SDP } }
+                    - ice-candidate: { target: '<socketId>', candidate: { ...ICE } }
+                `,
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: { $ref: "#/components/schemas/WebRTCSignal" }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: "Signal relayed successfully (socket.io emits to target)",
+                        content: {
+                            "application/json": {
+                                schema: { type: "object", properties: { success: { type: "boolean" } } }
                             }
                         }
                     }
