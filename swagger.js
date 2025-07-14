@@ -1295,11 +1295,12 @@ Connect to the WebSocket server for real-time features (chat, video/voice calls,
   - user-offline: { userId }
 
 **Example Connection (JS):**
-```js
+\`\`\`js
 const socket = io('ws://localhost:5000', { query: { token: '<JWT>' } });
 socket.on('receive-message', (msg) => { ... });
 socket.emit('send-message', { chatId, content });
-```
+\`\`\`
+
 
 **See /api-docs for full event and payload details.**
                 `,
