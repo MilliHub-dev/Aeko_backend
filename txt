@@ -3,17 +3,52 @@ API Key: f5ecb8197361f204dc77
 API Secret: 855fdb1249d94075b8d8e60ca1f48cd38ffbdc396f71a60354e448e17ccacb04
 JWT: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiI2NGNjMzJhZC02NzE0LTRkMTUtYWQ5NC1lZTU2MjUyOTZlMTUiLCJlbWFpbCI6ImVrZW1pbmllZmZpb25nMTE1QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaW5fcG9saWN5Ijp7InJlZ2lvbnMiOlt7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6IkZSQTEifSx7ImRlc2lyZWRSZXBsaWNhdGlvbkNvdW50IjoxLCJpZCI6Ik5ZQzEifV0sInZlcnNpb24iOjF9LCJtZmFfZW5hYmxlZCI6ZmFsc2UsInN0YXR1cyI6IkFDVElWRSJ9LCJhdXRoZW50aWNhdGlvblR5cGUiOiJzY29wZWRLZXkiLCJzY29wZWRLZXlLZXkiOiJmNWVjYjgxOTczNjFmMjA0ZGM3NyIsInNjb3BlZEtleVNlY3JldCI6Ijg1NWZkYjEyNDlkOTQwNzViOGQ4ZTYwY2ExZjQ4Y2QzOGZmYmRjMzk2ZjcxYTYwMzU0ZTQ0OGUxN2NjYWNiMDQiLCJleHAiOjE3NzQzNjUxODB9.jwSDhWHll1otoVy0MHZU8TcP8gkAoFx2PxmvzqItlnk
 
+How to Create Admin User - Complete Guide
+I've created multiple methods for you to create admin users:
 
+Method 1: Run Admin Creation Script (Easiest)
+bash
+node create-admin.js
+This will create an admin user with:
 
-Frontend Integration (React Example) for livestream
+Email: admin@aeko.com
+Username: admin
+Password: admin123
+Privileges: Full admin + golden tick
+Method 2: API Endpoint for First Admin (No Auth Required)
+json
+POST /api/admin/setup/first-admin
+{
+  "name": "Admin User",
+  "username": "admin",
+  "email": "admin@aeko.com", 
+  "password": "admin123"
+}
+This endpoint only works when no admin exists yet.
 
-We use WebRTC API to capture and stream video.
-Install Dependencies
+Method 3: Make Existing User Admin
+json
+POST /api/admin/admins/create
+{
+  "email": "existing-user@example.com",
+  "permissions": ["read", "moderate", "manage"]
+}
+Method 4: Direct Database Update
+If you have an existing user like milli.millihub@gmail.com:
 
-npm install socket.io-client simple-peer
-
-(async () => {
-  
-
-  // Your existing code below...
-})();
+json
+POST /api/admin/admins/create
+{
+  "email": "milli.millihub@gmail.com"
+}
+🚀 How to Login as Admin
+Option 1: Admin Panel (AdminJS)
+Go to: http://localhost:5000/admin
+Login with your admin credentials
+Option 2: Admin API
+json
+POST /api/admin/login
+{
+  "email": "admin@aeko.com",
+  "password": "admin123"
+}

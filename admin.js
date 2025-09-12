@@ -40,9 +40,7 @@ const admin = new AdminJS({
           followers: { isVisible: { list: false, show: true, edit: false } },
           following: { isVisible: { list: false, show: true, edit: false } },
           posts: { isVisible: { list: false, show: true, edit: false } },
-          botResponses: { isVisible: { list: false, show: true, edit: true } },
-          'botAnalytics.totalInteractions': { isVisible: { list: true, show: true, edit: false } },
-          'botAnalytics.satisfactionRating': { isVisible: { list: true, show: true, edit: false } }
+          botResponses: { isVisible: { list: false, show: true, edit: true } }
         },
         actions: {
           new: {
@@ -171,7 +169,7 @@ const admin = new AdminJS({
           }
         },
         listProperties: ['username', 'email', 'name', 'blueTick', 'goldenTick', 'subscriptionStatus', 'botEnabled', 'createdAt'],
-        showProperties: ['username', 'email', 'name', 'bio', 'profilePicture', 'blueTick', 'goldenTick', 'subscriptionStatus', 'subscriptionExpiry', 'botEnabled', 'botPersonality', 'botAnalytics', 'createdAt', 'updatedAt'],
+        showProperties: ['username', 'email', 'name', 'bio', 'profilePicture', 'blueTick', 'goldenTick', 'subscriptionStatus', 'subscriptionExpiry', 'botEnabled', 'botPersonality', 'createdAt', 'updatedAt'],
         editProperties: ['name', 'username', 'email', 'bio', 'profilePicture', 'blueTick', 'goldenTick', 'subscriptionStatus', 'subscriptionExpiry', 'botEnabled', 'botPersonality'],
       },
     },
@@ -288,8 +286,6 @@ const admin = new AdminJS({
           roomId: { isVisible: { list: false, show: true, edit: false } },
           uniqueViewers: { isVisible: { list: false, show: true, edit: false } },
           reactions: { isVisible: { list: false, show: true, edit: false } },
-          'monetization.donations': { isVisible: { list: false, show: true, edit: false } },
-          'analytics.averageWatchTime': { isVisible: { list: true, show: true, edit: false } },
           currentViewers: { isVisible: { list: true, show: true, edit: false } },
           peakViewers: { isVisible: { list: true, show: true, edit: false } },
           totalViews: { isVisible: { list: true, show: true, edit: false } }
@@ -363,8 +359,8 @@ const admin = new AdminJS({
           }
         },
         listProperties: ['title', 'host', 'status', 'category', 'currentViewers', 'totalViews', 'createdAt'],
-        showProperties: ['title', 'description', 'host', 'status', 'category', 'currentViewers', 'peakViewers', 'totalViews', 'analytics', 'monetization', 'createdAt'],
-        editProperties: ['title', 'description', 'status', 'category', 'features', 'monetization.ticketPrice'],
+        showProperties: ['title', 'description', 'host', 'status', 'category', 'currentViewers', 'peakViewers', 'totalViews', 'createdAt'],
+        editProperties: ['title', 'description', 'status', 'category'],
       },
     },
 
@@ -378,13 +374,10 @@ const admin = new AdminJS({
         },
         properties: {
           _id: { isVisible: { list: true, show: true, edit: false } },
-          'analytics.totalInteractions': { isVisible: { list: true, show: true, edit: false } },
-          'analytics.averageSentiment': { isVisible: { list: true, show: true, edit: false } },
-          'analytics.lastActive': { isVisible: { list: true, show: true, edit: false } }
         },
-        listProperties: ['userId', 'botEnabled', 'botPersonality', 'aiProvider', 'analytics.totalInteractions', 'analytics.lastActive'],
-        showProperties: ['userId', 'botEnabled', 'botPersonality', 'aiProvider', 'model', 'features', 'analytics', 'restrictions'],
-        editProperties: ['botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'features', 'customInstructions', 'restrictions'],
+        listProperties: ['userId', 'botEnabled', 'botPersonality', 'aiProvider'],
+        showProperties: ['userId', 'botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'customInstructions'],
+        editProperties: ['botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'customInstructions'],
       },
     },
 
@@ -395,7 +388,7 @@ const admin = new AdminJS({
           name: "AI & Bot Management",
           icon: "MessageSquare"
         },
-        listProperties: ['userId', 'totalMessages', 'lastMessage', 'updatedAt'],
+        listProperties: ['userId', 'userMessage', 'botResponse', 'updatedAt'],
         actions: {
           delete: { isVisible: true },
           clearHistory: {
@@ -476,7 +469,7 @@ const admin = new AdminJS({
                   $group: {
                     _id: "$status",
                     count: { $sum: 1 },
-                    totalBudget: { $sum: "$budget" }
+                    totalBudget: { $sum: "$budget.total" }
                   }
                 }
               ]);
@@ -490,7 +483,7 @@ const admin = new AdminJS({
             },
           }
         },
-        listProperties: ['title', 'mediaType', 'budget', 'status', 'advertiserId', 'createdAt'],
+        listProperties: ['title', 'mediaType', 'budget.total', 'status', 'advertiserId', 'createdAt'],
       },
     },
 
@@ -537,7 +530,7 @@ const admin = new AdminJS({
           attachments: { isVisible: { list: false, show: true, edit: false } },
           metadata: { isVisible: { list: false, show: true, edit: false } }
         },
-        listProperties: ['sender', 'receiver', 'type', 'status', 'createdAt'],
+        listProperties: ['sender', 'receiver', 'messageType', 'createdAt'],
         actions: {
           delete: { isVisible: true },
           flagMessage: {
@@ -588,7 +581,7 @@ const admin = new AdminJS({
           name: "User Activity",
           icon: "Activity"
         },
-        listProperties: ['user', 'content', 'createdAt'],
+        listProperties: ['userId', 'content', 'createdAt'],
       },
     },
 
@@ -670,7 +663,6 @@ const admin = new AdminJS({
           metadataUri: { isVisible: { list: false, show: true, edit: false } },
           'analytics.totalViews': { isVisible: { list: true, show: true, edit: false } },
           'analytics.favoriteCount': { isVisible: { list: true, show: true, edit: false } },
-          'donations.totalDonations': { isVisible: { list: false, show: true, edit: false } },
           'auction.currentBid': { isVisible: { list: true, show: true, edit: false } }
         },
         actions: {
@@ -727,7 +719,7 @@ const admin = new AdminJS({
           }
         },
         listProperties: ['metadata.name', 'creator', 'currentOwner', 'price', 'status', 'verified', 'createdAt'],
-        showProperties: ['tokenId', 'metadata', 'creator', 'currentOwner', 'price', 'isListed', 'status', 'verified', 'analytics', 'createdAt'],
+        showProperties: ['tokenId', 'creator', 'currentOwner', 'price', 'isListed', 'verified', 'createdAt'],
         editProperties: ['price', 'isListed', 'verified', 'featured', 'category'],
       },
     },
@@ -777,6 +769,10 @@ const admin = new AdminJS({
   
   rootPath: "/admin",
   
+  // Login redirect configuration
+  loginPath: '/admin/login',
+  logoutPath: '/admin/logout',
+  
   // ===== LOCALE SETTINGS =====
   locale: {
     language: 'en',
@@ -810,5 +806,55 @@ const admin = new AdminJS({
   }
 });
 
-const adminRouter = AdminJSExpress.buildRouter(admin);
+// Custom authentication function with error handling
+const authenticate = async (email, password) => {
+  try {
+    console.log('AdminJS Authentication attempt for:', email);
+    
+    if (!email || !password) {
+      console.log('Missing email or password');
+      return false;
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      console.log('User not found:', email);
+      return false;
+    }
+
+    if (!user.isAdmin) {
+      console.log('User is not admin:', email);
+      return false;
+    }
+
+    const bcrypt = await import('bcrypt');
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    
+    if (!isValidPassword) {
+      console.log('Invalid password for user:', email);
+      return false;
+    }
+
+    console.log('AdminJS Authentication successful for:', email);
+    return { email: user.email, id: user._id, isAdmin: user.isAdmin };
+  } catch (error) {
+    console.error('AdminJS Authentication error:', error);
+    return false;
+  }
+};
+
+const adminRouter = AdminJSExpress.buildAuthenticatedRouter(admin, {
+  authenticate,
+  cookieName: 'adminjs',
+  cookiePassword: process.env.JWT_SECRET || 'some-secret-password-used-to-secure-cookie',
+}, null, {
+  resave: false,
+  saveUninitialized: true,
+  secret: process.env.JWT_SECRET || 'some-secret-password-used-to-secure-cookie',
+}, {
+  loginPath: '/admin/login',
+  logoutPath: '/admin/logout',
+  rootPath: '/admin',
+});
+
 export { admin, adminRouter };

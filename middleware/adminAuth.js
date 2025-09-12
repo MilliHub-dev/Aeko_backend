@@ -69,18 +69,8 @@ export const adminLogin = async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
-    res.json({
-      success: true,
-      message: 'Admin login successful',
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        isAdmin: user.isAdmin,
-        goldenTick: user.goldenTick
-      }
-    });
+    // Redirect to admin dashboard after successful login
+    res.redirect('/admin/resources/User');
   } catch (error) {
     res.status(500).json({ message: 'Server error during admin login' });
   }

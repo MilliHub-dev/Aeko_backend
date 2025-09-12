@@ -6,41 +6,41 @@ import http from "http";
 import path from "path";
 import fs from "fs";
 import connectDB from "./config/db.js";
-import userRoutes from "./routes/userRoutes.js"; // ✅ Correct import
-import postRoutes from "./routes/postRoutes.js"; // ✅ Correct import
-import commentRoutes from "./routes/commentRoutes.js"; // ✅ Correct import
+import authRoutes from "./routes/auth.js";
+import userRoutes from "./routes/userRoutes.js";
+import postRoutes from "./routes/postRoutes.js";
+import statusRoutes from "./routes/status.js";
+import debateRoutes from "./routes/debates.js";
+import challengeRoutes from "./routes/challenges.js";
+import spaceRoutes from "./routes/space.js";
+import commentRoutes from "./routes/commentRoutes.js";
+import chatRoutes from "./routes/chat.js";
+import adRoutes from "./routes/adRoutes.js";
+import botRoutes from "./routes/bot.js";
+import aekoRoutes from "./routes/aekoRoutes.js";
+import nftRoutes from "./routes/nftRoutes.js";
+import videoEditRoutes from "./routes/videoEdit.js";
+import photoEditRoutes from "./routes/photoEdit.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import adminAuthRoutes from "./routes/adminAuth.js";
 import swaggerDocs from "./swagger.js";
 import AdminJS from "adminjs";
 import AdminJSExpress from "@adminjs/express";
 import { Database, Resource } from "@adminjs/mongoose";
 import User from "./models/User.js";
 import Post from "./models/Post.js";
-import adRoutes from './routes/adRoutes.js';
-import profileRoutes from './routes/profile.js';
-import paymentRoutes from './routes/paymentRoutes.js';
-import statusRoutes from './routes/status.js';
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
-import auth from "./routes/auth.js";
-//import chatsocket from "./chatsocket.js";
-//import livestreamsocket from "./livestreamsocket.js";
-import bot from "./routes/bot.js";
+import profileRoutes from './routes/profile.js';
+import postTransferRoutes from "./routes/postTransferRoutes.js";
 import enhancedBotRoutes from "./routes/enhancedBotRoutes.js";
 import enhancedChatRoutes from "./routes/enhancedChatRoutes.js";
-import challenges from "./routes/challenges.js";
-import chat from "./routes/chat.js";
-import debates from "./routes/debates.js";
-import space from "./routes/space.js";
-import postTransferRoutes from "./routes/postTransferRoutes.js";
-import aekoRoutes from "./routes/aekoRoutes.js";
-import nftRoutes from "./routes/nftRoutes.js";
+import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
 import cookieParser from "cookie-parser";
 import EnhancedChatSocket from "./sockets/enhancedChatSocket.js";
 import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
-import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
-import photoEditRoutes from './routes/photoEdit.js';
-import videoEditRoutes from './routes/videoEdit.js';
 import { Server } from 'socket.io';
 import setupVideoCallSocket from './sockets/videoCallSocket.js';
 
@@ -63,8 +63,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// CORS and cookie parser (keep these before AdminJS)
 app.use(cookieParser());
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:5000'],
@@ -74,30 +73,35 @@ app.use(cors({
 // Static file serving for uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
+// API Routes
+app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/posts", postRoutes);
 app.use("/api/comments", commentRoutes);
+app.use("/api/status", statusRoutes);
+app.use("/api/debates", debateRoutes);
+app.use("/api/challenges", challengeRoutes);
+app.use("/api/space", spaceRoutes);
+app.use("/api/chat", chatRoutes);
 app.use('/api/ads', adRoutes);
-app.use('/api/profile', profileRoutes);
+app.use("/api/bot", botRoutes);
+app.use("/api/aeko", aekoRoutes);
+app.use("/api/nft", nftRoutes);
+app.use('/api/video', videoEditRoutes);
+app.use('/api/photo', photoEditRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/status', statusRoutes);
+app.use('/api/profile', profileRoutes);
 app.use('/api/subscription', subscriptionRoutes);
-app.use("/api/auth", auth);
-app.use("/api/bot", bot);
 app.use("/api/enhanced-bot", enhancedBotRoutes);
 app.use("/api/enhanced-chat", enhancedChatRoutes);
 app.use("/api/livestream", enhancedLiveStreamRoutes);
-app.use("/api/challenges", challenges);
-app.use("/api/chat", chat);
-app.use("/api/debates", debates);
-app.use("/api/space", space);
-app.use('/api/photo', photoEditRoutes);
-app.use('/api/video', videoEditRoutes);
+
+// Admin Routes (remove conflicting routes since AdminJS handles authentication)
+// app.use('/api/admin', adminRoutes);
+// app.use('/api/admin', adminAuthRoutes);
 
 // Blockchain and NFT routes
 app.use("/api/posts", postTransferRoutes);
-app.use("/api/aeko", aekoRoutes);
-app.use("/api/nft", nftRoutes);
 
 swaggerDocs(app);
 
@@ -144,9 +148,9 @@ AdminJS.registerAdapter({ Database, Resource });
   },
 }; */
 
-// Admin Authentication Routes
-app.post('/admin/login', adminLogin);
-app.post('/admin/logout', adminLogout);
+// Remove conflicting admin auth routes - AdminJS handles this
+// app.post('/admin/login', adminLogin);
+// app.post('/admin/logout', adminLogout);
 
 // Admin API Routes (Protected)
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
@@ -200,6 +204,10 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
 
 // Setup AdminJS with Express (Protected)
 app.use(admin.options.rootPath, adminRouter);
+
+// Body parser middleware AFTER AdminJS setup
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Routes
 app.get("/", (req, res) => {

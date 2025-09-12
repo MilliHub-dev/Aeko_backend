@@ -11,6 +11,8 @@ const statusSchema = new mongoose.Schema({
     }
   ],
   expiresAt: { type: Date, default: () => new Date(Date.now() + 24 * 60 * 60 * 1000), index: { expires: '24h' } } // Auto-delete after 24 hours
+}, {
+  timestamps: true // This adds createdAt and updatedAt fields
 });
 
 export default mongoose.model('Status', statusSchema);
