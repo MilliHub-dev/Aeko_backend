@@ -342,13 +342,12 @@ router.post("/signup", async (req, res) => {
             });
         }
 
-        // Create new user
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Create new user (password will be hashed by pre-save hook)
         const newUser = new User({ 
             name, 
             username, 
             email, 
-            password: hashedPassword 
+            password 
         });
 
         // Generate and send verification code
@@ -362,11 +361,19 @@ router.post("/signup", async (req, res) => {
             console.error('Failed to send verification email:', emailResult.message);
         }
 
+        // For development: log the verification code to console if email fails
+        if (!emailResult.success) {
+            console.log(`🔐 DEVELOPMENT MODE - Verification code for ${email}: ${verificationCode}`);
+        }
+
         res.status(201).json({ 
             success: true,
-            message: "Registration successful! Check your email for verification code",
+            message: emailResult.success 
+                ? "Registration successful! Check your email for verification code"
+                : `Registration successful! Email service unavailable. Your verification code is: ${verificationCode}`,
             userId: newUser._id,
-            emailSent: emailResult.success
+            emailSent: emailResult.success,
+            verificationCode: !emailResult.success ? verificationCode : undefined // Only include in response if email failed
         });
 
     } catch (error) {
@@ -486,10 +493,18 @@ router.post("/resend-verification", async (req, res) => {
         // Send new verification email
         const emailResult = await emailService.sendVerificationCode(user.email, verificationCode, user.name);
 
+        // For development: log the verification code to console if email fails
+        if (!emailResult.success) {
+            console.log(`🔐 DEVELOPMENT MODE - New verification code for ${user.email}: ${verificationCode}`);
+        }
+
         res.json({ 
             success: true,
-            message: "New verification code sent to your email",
-            emailSent: emailResult.success
+            message: emailResult.success 
+                ? "New verification code sent to your email"
+                : `Email service unavailable. Your new verification code is: ${verificationCode}`,
+            emailSent: emailResult.success,
+            verificationCode: !emailResult.success ? verificationCode : undefined
         });
 
     } catch (error) {
@@ -516,6 +531,7 @@ router.post("/login", async (req, res) => {
 
         const user = await User.findOne({ email });
         if (!user) {
+            console.log(`Login attempt failed: User not found for email ${email}`);
             return res.status(401).json({ 
                 success: false, 
                 message: "Invalid credentials" 
@@ -524,11 +540,14 @@ router.post("/login", async (req, res) => {
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
+            console.log(`Login attempt failed: Invalid password for email ${email}`);
             return res.status(401).json({ 
                 success: false, 
                 message: "Invalid credentials" 
             });
         }
+
+        console.log(`Login attempt: User ${email} found, password valid, checking verification status...`);
 
         // Check if email is verified
         if (!user.emailVerification.isVerified) {
@@ -741,6 +760,37 @@ router.post('/reset-password/:token', async (req, res) => {
     } catch (error) {
         res.status(500).json({ 
             success: false,
+            error: error.message 
+        });
+    }
+});
+
+// Temporary route to fix double-hashed passwords (remove after fixing)
+router.post("/fix-password", async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ 
+                success: false, 
+                message: "User not found" 
+            });
+        }
+        
+        // Update password (will be hashed by pre-save hook)
+        user.password = password;
+        await user.save();
+        
+        res.json({ 
+            success: true, 
+            message: "Password fixed successfully" 
+        });
+        
+    } catch (error) {
+        res.status(500).json({ 
+            success: false, 
+            message: "Error fixing password", 
             error: error.message 
         });
     }

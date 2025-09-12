@@ -5,17 +5,45 @@ dotenv.config();
 
 class EmailService {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      service: 'Gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
+    // Check if email credentials are configured
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.warn('Email credentials not configured. Email functionality will be disabled.');
+      this.transporter = null;
+      return;
+    }
+
+    try {
+      this.transporter = nodemailer.createTransport({
+        service: 'Gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false, // Use TLS
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+    } catch (error) {
+      console.error('Failed to create email transporter:', error);
+      this.transporter = null;
+    }
+  }
+
+  // Check if email service is available
+  isAvailable() {
+    return this.transporter !== null;
   }
 
   // Send 4-digit verification code
   async sendVerificationCode(email, code, username) {
+    // Check if email service is available
+    if (!this.isAvailable()) {
+      console.warn('Email service not available. Verification code not sent.');
+      return { success: false, message: 'Email service not configured' };
+    }
     const mailOptions = {
       from: `"Aeko" <${process.env.EMAIL_USER}>`,
       to: email,

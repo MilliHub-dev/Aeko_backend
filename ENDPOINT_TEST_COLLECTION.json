@@ -1,0 +1,262 @@
+{
+  "info": {
+    "name": "Aeko Backend API Tests",
+    "description": "Complete test collection for all Aeko backend endpoints",
+    "version": "1.0.0"
+  },
+  "variables": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "tests": {
+    "authentication": [
+      {
+        "name": "User Registration",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/signup",
+        "body": {
+          "name": "Test User",
+          "username": "testuser123",
+          "email": "test@example.com",
+          "password": "password123"
+        },
+        "expectedStatus": 201,
+        "description": "Register a new user account"
+      },
+      {
+        "name": "Email Verification",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/verify-email",
+        "body": {
+          "userId": "{{userId}}",
+          "verificationCode": "1234"
+        },
+        "expectedStatus": 200,
+        "description": "Verify email with 4-digit code"
+      },
+      {
+        "name": "User Login",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/login",
+        "body": {
+          "email": "test@example.com",
+          "password": "password123"
+        },
+        "expectedStatus": 200,
+        "description": "Login with email and password"
+      },
+      {
+        "name": "Profile Completion Status",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/auth/profile-completion",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "expectedStatus": 200,
+        "description": "Get profile completion percentage"
+      }
+    ],
+    "posts": [
+      {
+        "name": "Create Text Post",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/posts/create",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "body": {
+          "text": "This is my first test post!",
+          "type": "text"
+        },
+        "expectedStatus": 201,
+        "description": "Create a text-only post"
+      },
+      {
+        "name": "Get Feed",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/posts/feed",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "expectedStatus": 200,
+        "description": "Get the main post feed"
+      },
+      {
+        "name": "Like Post",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/posts/like/POST_ID",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "body": {
+          "user": "{{userId}}"
+        },
+        "expectedStatus": 200,
+        "description": "Like or unlike a post"
+      }
+    ],
+    "blockchain": [
+      {
+        "name": "Connect Solana Wallet",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/aeko/connect-wallet",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "body": {
+          "walletAddress": "11111111111111111111111111111112"
+        },
+        "expectedStatus": 200,
+        "description": "Connect Solana wallet to account"
+      },
+      {
+        "name": "Get Aeko Balance",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/aeko/balance",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "expectedStatus": 200,
+        "description": "Get user's Aeko token balance"
+      },
+      {
+        "name": "Get Transaction History",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/aeko/transactions",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "expectedStatus": 200,
+        "description": "Get user's transaction history"
+      }
+    ],
+    "chat": [
+      {
+        "name": "Get Chat Rooms",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/enhanced-chat/rooms",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "expectedStatus": 200,
+        "description": "Get user's chat rooms"
+      },
+      {
+        "name": "Send Message",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/enhanced-chat/send",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "body": {
+          "receiverId": "RECEIVER_USER_ID",
+          "message": "Hello from API test!",
+          "messageType": "text"
+        },
+        "expectedStatus": 201,
+        "description": "Send a text message"
+      }
+    ],
+    "livestream": [
+      {
+        "name": "Create LiveStream",
+        "method": "POST",
+        "url": "{{baseUrl}}/api/livestream/create",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "body": {
+          "title": "Test Stream",
+          "description": "Testing livestream functionality",
+          "category": "entertainment"
+        },
+        "expectedStatus": 201,
+        "description": "Create a new livestream"
+      },
+      {
+        "name": "Discover Streams",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/livestream/discover",
+        "expectedStatus": 200,
+        "description": "Discover available livestreams"
+      }
+    ],
+    "nft": [
+      {
+        "name": "Get My NFTs",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/nft/my-nfts",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "expectedStatus": 200,
+        "description": "Get user's NFT collection"
+      }
+    ],
+    "ads": [
+      {
+        "name": "Get Targeted Ads",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/ads/targeted",
+        "headers": {
+          "Authorization": "Bearer {{authToken}}"
+        },
+        "expectedStatus": 200,
+        "description": "Get ads targeted to user"
+      }
+    ],
+    "system": [
+      {
+        "name": "Health Check",
+        "method": "GET",
+        "url": "{{baseUrl}}/health",
+        "expectedStatus": 200,
+        "description": "Check system health"
+      },
+      {
+        "name": "Chat System Info",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/chat-info",
+        "expectedStatus": 200,
+        "description": "Get chat system information"
+      },
+      {
+        "name": "LiveStream System Info",
+        "method": "GET",
+        "url": "{{baseUrl}}/api/livestream-info",
+        "expectedStatus": 200,
+        "description": "Get livestream system information"
+      }
+    ]
+  },
+  "testSequence": [
+    "system.health-check",
+    "authentication.user-registration",
+    "authentication.email-verification",
+    "authentication.user-login",
+    "authentication.profile-completion-status",
+    "posts.create-text-post",
+    "posts.get-feed",
+    "blockchain.connect-solana-wallet",
+    "blockchain.get-aeko-balance",
+    "chat.get-chat-rooms",
+    "livestream.discover-streams",
+    "nft.get-my-nfts",
+    "ads.get-targeted-ads",
+    "system.chat-system-info",
+    "system.livestream-system-info"
+  ]
+}
