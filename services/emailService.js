@@ -115,11 +115,11 @@ class EmailService {
             </div>
             
             <div class="footer">
-              <p>Need help? Contact us at <a href="mailto:support@aeko.com">support@aeko.com</a></p>
+              <p>Need help? Contact us at <a href="mailto:support@aeko.social">support@aeko.social</a></p>
               <p>This code was requested from IP address and expires in 10 minutes.</p>
               <p>If you didn't request this code, please ignore this email.</p>
               <p style="font-size: 12px; margin-top: 20px;">
-                © 2024 Aeko. All rights reserved.<br>
+                © 2025 Aeko. All rights reserved.<br>
                 Aeko - The Future of Social Media is Here 🌟
               </p>
             </div>
@@ -199,7 +199,7 @@ class EmailService {
             
             <div class="footer">
               <p>Keep creating amazing content! 🎨</p>
-              <p>© 2024 Aeko. All rights reserved.</p>
+              <p>© 2025 Aeko. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -290,9 +290,9 @@ class EmailService {
             </div>
             
             <div class="footer">
-              <p>Questions? Contact us at <a href="mailto:support@aeko.com">support@aeko.com</a></p>
+              <p>Questions? Contact us at <a href="mailto:support@aeko.social">support@aeko.social</a></p>
               <p>Follow us: <a href="#">Twitter</a> | <a href="#">Discord</a> | <a href="#">Telegram</a></p>
-              <p>© 2024 Aeko. All rights reserved.</p>
+              <p>© 2025 Aeko. All rights reserved.</p>
             </div>
           </div>
         </body>
