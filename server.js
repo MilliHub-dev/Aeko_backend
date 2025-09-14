@@ -73,6 +73,10 @@ app.use(cors({
 // Static file serving for uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
+// Body parser middleware (MUST be before API routes)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -204,10 +208,6 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
 
 // Setup AdminJS with Express (Protected)
 app.use(admin.options.rootPath, adminRouter);
-
-// Body parser middleware AFTER AdminJS setup
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Routes
 app.get("/", (req, res) => {
