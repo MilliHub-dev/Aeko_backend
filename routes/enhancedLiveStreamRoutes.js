@@ -7,43 +7,10 @@ import LiveStream from "../models/LiveStream.js";
 import User from "../models/User.js";
 import EnhancedMessage from "../models/EnhancedMessage.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import { uploadImage } from '../middleware/upload.js';
 
 const router = express.Router();
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = 'uploads/livestream/';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidV4()}-${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    // Allow images and videos
-    const allowedMimes = [
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'video/mp4', 'video/webm', 'video/quicktime'
-    ];
-    
-    if (allowedMimes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only images and videos are allowed.'));
-    }
-  }
-});
 
 // === STREAM MANAGEMENT ENDPOINTS ===
 
@@ -313,7 +280,7 @@ router.put('/:streamId', authMiddleware, async (req, res) => {
  * @desc    Upload stream thumbnail
  * @access  Private
  */
-router.post('/:streamId/thumbnail', authMiddleware, upload.single('thumbnail'), async (req, res) => {
+router.post('/:streamId/thumbnail', authMiddleware, uploadImage.single('thumbnail'), async (req, res) => {
   try {
     const { streamId } = req.params;
 
@@ -347,7 +314,7 @@ router.post('/:streamId/thumbnail', authMiddleware, upload.single('thumbnail'), 
       }
     }
 
-    liveStream.thumbnail = `/uploads/livestream/${req.file.filename}`;
+    liveStream.thumbnail = req.file.path; // Cloudinary URL
     await liveStream.save();
 
     res.json({

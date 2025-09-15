@@ -5,7 +5,8 @@ const NFTMarketplaceSchema = new mongoose.Schema({
   tokenId: { 
     type: String, 
     unique: true, 
-    required: true 
+    required: true,
+    index: true
   },
   contractAddress: { 
     type: String, 
@@ -168,8 +169,7 @@ const NFTMarketplaceSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes for performance
-NFTMarketplaceSchema.index({ tokenId: 1 });
+// Indexes for performance (tokenId already indexed via field definition)
 NFTMarketplaceSchema.index({ creator: 1 });
 NFTMarketplaceSchema.index({ currentOwner: 1 });
 NFTMarketplaceSchema.index({ originalPost: 1 });

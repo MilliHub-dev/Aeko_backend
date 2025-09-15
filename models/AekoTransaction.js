@@ -5,12 +5,14 @@ const AekoTransactionSchema = new mongoose.Schema({
   transactionId: { 
     type: String, 
     unique: true, 
-    required: true 
+    required: true,
+    index: true
   },
   solanaSignature: { 
     type: String, 
     unique: true, 
-    required: true 
+    required: true,
+    index: true
   },
   
   // Transaction parties
@@ -110,9 +112,7 @@ const AekoTransactionSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// Indexes for performance
-AekoTransactionSchema.index({ transactionId: 1 });
-AekoTransactionSchema.index({ solanaSignature: 1 });
+// Indexes for performance (transactionId and solanaSignature already indexed via field definition)
 AekoTransactionSchema.index({ fromUser: 1, createdAt: -1 });
 AekoTransactionSchema.index({ toUser: 1, createdAt: -1 });
 AekoTransactionSchema.index({ type: 1, status: 1 });

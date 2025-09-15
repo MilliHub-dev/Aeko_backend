@@ -189,7 +189,7 @@ router.post("/create_mixed", authMiddleware, upload.array("media"), async (req, 
           : file.mimetype.startsWith("video/")
           ? "video"
           : "audio",
-        url: `/uploads/${file.filename}`, // Assuming files are stored in 'uploads' folder
+        url: file.path, // Cloudinary URL
       }));
   
       const post = new Post({

@@ -7,55 +7,10 @@ import User from "../models/User.js";
 import Chat from "../models/Chat.js";
 import EnhancedMessage from "../models/EnhancedMessage.js";
 import enhancedBot from "../ai/enhancedBot.js";
+import { generalUpload } from '../middleware/upload.js';
 
 const router = express.Router();
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    let uploadPath = 'uploads/';
-    
-    if (file.fieldname === 'voice') {
-      uploadPath += 'voice/';
-    } else if (file.fieldname === 'image') {
-      uploadPath += 'images/';
-    } else if (file.fieldname === 'video') {
-      uploadPath += 'videos/';
-    } else if (file.fieldname === 'file') {
-      uploadPath += 'files/';
-    } else {
-      uploadPath += 'misc/';
-    }
-    
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    // Allow various file types
-    const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi|webm|mp3|wav|ogg|m4a|aac|pdf|doc|docx|txt|zip|rar/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Invalid file type'));
-    }
-  }
-});
 
 // Authentication middleware
 const authenticate = async (req, res, next) => {
@@ -398,7 +353,7 @@ router.post('/send-message', authenticate, async (req, res) => {
  *       200:
  *         description: Voice message uploaded successfully
  */
-router.post('/upload-voice', authenticate, upload.single('voice'), async (req, res) => {
+router.post('/upload-voice', authenticate, generalUpload.single('voice'), async (req, res) => {
   try {
     const { receiverId, chatId, duration, waveform } = req.body;
 
@@ -459,7 +414,7 @@ router.post('/upload-voice', authenticate, upload.single('voice'), async (req, r
  *       200:
  *         description: File uploaded successfully
  */
-router.post('/upload-file', authenticate, upload.single('file'), async (req, res) => {
+router.post('/upload-file', authenticate, generalUpload.single('file'), async (req, res) => {
   try {
     const { receiverId, chatId, caption } = req.body;
 

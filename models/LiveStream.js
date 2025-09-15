@@ -130,12 +130,10 @@ const LiveStreamSchema = new mongoose.Schema(
     
     // Scheduling
     scheduledFor: { 
-      type: Date,
-      index: true 
+      type: Date
     },
     startedAt: { 
-      type: Date,
-      index: true 
+      type: Date
     },
     endedAt: { 
       type: Date 
@@ -456,7 +454,12 @@ LiveStreamSchema.index({ streamType: 1, status: 1 });
 LiveStreamSchema.index({ "tags": 1 });
 LiveStreamSchema.index({ currentViewers: -1 });
 LiveStreamSchema.index({ totalViews: -1 });
+LiveStreamSchema.index({ "analytics.topCountries.country": 1 });
+LiveStreamSchema.index({ "analytics.deviceStats.mobile": 1 });
+LiveStreamSchema.index({ "analytics.deviceStats.desktop": 1 });
+LiveStreamSchema.index({ "analytics.deviceStats.tablet": 1 });
 
+// ... (rest of the code remains the same)
 // Virtual for stream duration in human readable format
 LiveStreamSchema.virtual('durationFormatted').get(function() {
   if (!this.duration) return '0:00';
