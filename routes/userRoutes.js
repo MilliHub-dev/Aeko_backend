@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import User from"../models/User.js";
 const router = express.Router();
 import Web3  from "web3"; // Correct way to import in Web3 v4
+import authMiddleware from "../middleware/authMiddleware.js";
 
 const web3 = new Web3(new Web3.providers.HttpProvider("https://sepolia.infura.io/")); // Use Polygon zkEVM
 
@@ -68,11 +69,43 @@ router.get("/:id", async (req, res) => {
 });
 
 import upload from "../middleware/upload.js";
-import swagger from "../swagger.js";
 
-router.put("/profile-picture", upload.single("image"), async (req, res) => {
+/**
+ * @swagger
+ * /api/users/profile-picture:
+ *   put:
+ *     summary: Upload or update profile picture
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Profile picture updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.put("/profile-picture", authMiddleware, upload.single("image"), async (req, res) => {
     try {
-        const user = await User.findByIdAndUpdate(req.user.id, { profilePicture: req.file.path }, { new: true });
+        const user = await User.findByIdAndUpdate(req.userId, { profilePicture: req.file.path }, { new: true });
         res.json(user);
     } catch (error) {
         res.status(500).json({ error: error.message });

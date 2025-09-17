@@ -37,11 +37,6 @@ const router = express.Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - username
- *               - email
- *               - profilePic
- *               - bio
  *             properties:
  *               username:
  *                 type: string
@@ -51,9 +46,23 @@ const router = express.Router();
  *                 type: string
  *               bio:
  *                 type: string
+ *           example:
+ *             username: "newUsername"
+ *             email: "newemail@example.com"
+ *             profilePic: "https://res.cloudinary.com/demo/image/upload/v1/aeko/images/pic.jpg"
+ *             bio: "Updated bio text"
  *     responses:
  *       200:
  *         description: User profile updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
  *       400:
  *         description: Bad request
  *       401:
