@@ -5,10 +5,12 @@ const router = express.Router();
 
 /**
  *  @swagger
- * /api/payments/initiate:
+ * /api/payments/pay:
  *   post:
  *     summary: Initiate a payment
  *     description: Initiates a payment and returns a payment link
+ *     tags:
+ *       - Payments
  *     requestBody:
  *       required: true
  *       content:
@@ -43,6 +45,8 @@ const router = express.Router();
  *   get:
  *     summary: Verify a payment
  *     description: Verifies the payment status using the payment ID
+ *     tags:
+ *       - Payments
  *     parameters:
  *       - in: query
  *         name: paymentId

@@ -141,133 +141,49 @@ The enhanced chat system uses **Socket.IO** for real-time features:
         }
     ],
     tags: [
+        { name: "Authentication", description: "User authentication and authorization" },
+        { name: "Users", description: "User management operations" },
+        { name: "Profile", description: "User profile management" },
+        { name: "Posts", description: "Social posts and feeds" },
+        { name: "Comments", description: "Comments on posts" },
+        { name: "Status", description: "User status and presence" },
+        { name: "Debates", description: "Debate and discussion system" },
+        { name: "Challenges", description: "Challenge and competition system" },
+        { name: "Spaces", description: "Community spaces and groups" },
+        { name: "Chat", description: "Enhanced real-time chat and messaging" },
+        { name: "Livestream", description: "Enhanced livestream endpoints" },
+        { name: "Advertisements", description: "Advertisement management" },
+        { name: "Payments", description: "Payment processing and billing" },
+        { name: "Subscriptions", description: "Subscription management" },
+        { name: "Admin", description: "Admin endpoints and analytics" },
+        { name: "Aeko Coin", description: "Native Solana SPL token operations" },
+        { name: "NFT Marketplace", description: "NFT minting and marketplace" },
+        { name: "Blockchain", description: "Blockchain integration and Web3" }
+    ],
+    'x-tagGroups': [
         {
-            name: "Authentication",
-            description: "User authentication, email verification, and authorization"
+            name: 'Core',
+            tags: ['Authentication', 'Users', 'Profile', 'Status']
         },
         {
-            name: "Email Verification",
-            description: "4-digit email verification system for secure account registration"
+            name: 'Social',
+            tags: ['Posts', 'Comments', 'Debates', 'Challenges', 'Spaces']
         },
         {
-            name: "Profile Completion",
-            description: "Blue tick verification system based on profile completion"
+            name: 'Media',
+            tags: ['Advertisements', 'Payments', 'Subscriptions']
         },
         {
-            name: "Users",
-            description: "User management operations"
+            name: 'Realtime',
+            tags: ['Chat', 'Livestream']
         },
         {
-            name: "Posts",
-            description: "Social media posts and content"
+            name: 'Web3',
+            tags: ['Aeko Coin', 'NFT Marketplace', 'Blockchain']
         },
         {
-            name: "Comments",
-            description: "Comment system for posts"
-        },
-        {
-            name: "Enhanced Chat",
-            description: "Advanced real-time messaging system with voice, emojis, and AI bot",
-            externalDocs: {
-                description: "Enhanced Chat Documentation",
-                url: "https://docs.aeko.com/enhanced-chat"
-            }
-        },
-        {
-            name: "AI Bot",
-            description: "AI-powered chatbot with multiple personalities"
-        },
-        {
-            name: "Voice Messages",
-            description: "Audio message recording and sharing"
-        },
-        {
-            name: "Emoji System",
-            description: "Emoji reactions and advanced emoji support"
-        },
-        {
-            name: "File Upload",
-            description: "File sharing and media upload system"
-        },
-        {
-            name: "Bot System",
-            description: "Legacy bot system (use Enhanced Chat for new implementations)"
-        },
-        {
-            name: "Challenges",
-            description: "Challenge and competition system"
-        },
-        {
-            name: "Debates",
-            description: "Debate and discussion system"
-        },
-        {
-            name: "Spaces",
-            description: "Community spaces and groups"
-        },
-        {
-            name: "Advertisements",
-            description: "Enhanced advertisement management with targeting, analytics, and budget control"
-        },
-        {
-            name: "Ad Analytics",
-            description: "Comprehensive advertisement performance tracking and reporting"
-        },
-        {
-            name: "Ad Targeting",
-            description: "Advanced audience targeting and demographic filtering"
-        },
-        {
-            name: "Payments",
-            description: "Payment processing and billing"
-        },
-        {
-            name: "Subscriptions",
-            description: "Subscription management"
-        },
-        {
-            name: "Profile",
-            description: "User profile management"
-        },
-        {
-            name: "Status",
-            description: "User status and presence"
-        },
-        {
-            name: "System",
-            description: "System health and monitoring"
-        },
-        {
-            name: "Post Transfer",
-            description: "Transfer post ownership between users",
-            externalDocs: {
-                description: "Post Transfer Documentation",
-                url: "https://docs.aeko.com/post-transfer"
-            }
-        },
-        {
-            name: "Aeko Coin",
-            description: "Native Solana SPL token operations",
-            externalDocs: {
-                description: "Aeko Coin Documentation",
-                url: "https://docs.aeko.com/aeko-coin"
-            }
-        },
-        {
-            name: "NFT Marketplace",
-            description: "NFT minting, trading, and marketplace operations",
-            externalDocs: {
-                description: "NFT Marketplace Documentation",
-                url: "https://docs.aeko.com/nft-marketplace"
-            }
-        },
-        {
-            name: "Blockchain",
-            description: "Blockchain integration and Web3 features"
-        },
-        {
-            name: "WebRTC Calls",
-            description: "WebRTC video and voice call signaling events and payloads. Use socket.io to emit and listen for these events."
+            name: 'Admin & System',
+            tags: ['Admin']
         }
     ],
     components: {

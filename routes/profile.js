@@ -151,17 +151,16 @@ const router = express.Router();
  */
 
 /**
- * @swagger
  * /api/user/verify:
  *   post:
  *     summary: Verify user and get a Blue Tick
- *     tags: [Verification]
+ *     tags:
+ *       - Profile
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
  *             properties:
  *               userId:
  *                 type: string
@@ -172,7 +171,8 @@ const router = express.Router();
  * /api/user/subscribe:
  *   post:
  *     summary: Subscribe to Golden Tick
- *     tags: [Verification]
+ *     tags:
+ *       - Subscriptions
  *     requestBody:
  *       required: true
  *       content:

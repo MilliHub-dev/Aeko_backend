@@ -10,6 +10,32 @@ const web3 = new Web3(new Web3.providers.HttpProvider("https://sepolia.infura.io
 
 
 
+/**
+ * @swagger
+ * /api/users/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [username, email, password]
+ *             properties:
+ *               username: { type: string }
+ *               email: { type: string, format: email }
+ *               password: { type: string, minLength: 6 }
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *       400:
+ *         description: Bad request
+ *       500:
+ *         description: Server error
+ */
 // Register
 router.post("/register", async (req, res) => {
     try {
@@ -25,6 +51,31 @@ router.post("/register", async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/users/login:
+ *   post:
+ *     summary: Login with email and password
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               password: { type: string }
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *       401:
+ *         description: Invalid credentials
+ *       500:
+ *         description: Server error
+ */
 // Login
 router.post("/login", async (req, res) => {
     try {
@@ -42,6 +93,32 @@ router.post("/login", async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/users/wallet-login:
+ *   post:
+ *     summary: Login by verifying a wallet signature
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [address, message, signature]
+ *             properties:
+ *               address: { type: string }
+ *               message: { type: string }
+ *               signature: { type: string }
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *       401:
+ *         description: Invalid signature
+ *       500:
+ *         description: Server error
+ */
 // User login with wallet signature verification
 router.post("/wallet-login", async (req, res) => {
   const { address, message, signature } = req.body;
@@ -58,6 +135,29 @@ router.post("/wallet-login", async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   get:
+ *     summary: Get user by ID
+ *     tags:
+ *       - Users
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-fA-F0-9]{24}$'
+ *           example: '68cad398b391bdd7d991d5c7'
+ *     responses:
+ *       200:
+ *         description: User retrieved
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
 // Get User Profile
 router.get("/:id", async (req, res) => {
     try {

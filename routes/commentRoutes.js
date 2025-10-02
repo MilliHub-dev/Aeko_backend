@@ -18,6 +18,8 @@ const router = express.Router();
  *         description: ID of the post to comment on
  *         schema:
  *           type: string
+ *           pattern: '^[a-fA-F0-9]{24}$'
+ *           example: '68cad398b391bdd7d991d5c7'
  *     requestBody:
  *       required: true
  *       content:
@@ -25,18 +27,18 @@ const router = express.Router();
  *           schema:
  *             type: object
  *             properties:
- *               user:
- *                 type: string
- *                 description: User ID of the commenter
  *               text:
  *                 type: string
  *                 description: Comment text
  *             required:
- *               - user
  *               - text
  *     responses:
  *       201:
  *         description: Comment added successfully
+ *       404:
+ *         description: Post not found
+ *       500:
+ *         description: Server error
  *
  *   get:
  *     summary: Get comments for a post
@@ -49,9 +51,13 @@ const router = express.Router();
  *         description: ID of the post to get comments for
  *         schema:
  *           type: string
+ *           pattern: '^[a-fA-F0-9]{24}$'
+ *           example: '68cad398b391bdd7d991d5c7'
  *     responses:
  *       200:
  *         description: List of comments for the post
+ *       500:
+ *         description: Server error
  *
  * /api/comments/like/{commentId}:
  *   post:
@@ -65,6 +71,8 @@ const router = express.Router();
  *         description: ID of the comment to like
  *         schema:
  *           type: string
+ *           pattern: '^[a-fA-F0-9]{24}$'
+ *           example: '68cad398b391bdd7d991d5c7'
  *     requestBody:
  *       required: true
  *       content:
@@ -80,6 +88,10 @@ const router = express.Router();
  *     responses:
  *       200:
  *         description: Comment liked successfully
+ *       404:
+ *         description: Comment not found
+ *       500:
+ *         description: Server error
  */
 
 

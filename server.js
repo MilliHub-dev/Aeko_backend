@@ -100,8 +100,10 @@ app.use("/api/enhanced-bot", enhancedBotRoutes);
 app.use("/api/enhanced-chat", enhancedChatRoutes);
 app.use("/api/livestream", enhancedLiveStreamRoutes);
 
-// Admin Routes (remove conflicting routes since AdminJS handles authentication)
-// app.use('/api/admin', adminRoutes);
+// Admin API Routes
+// Expose admin REST endpoints such as /api/admin/setup/first-admin
+app.use('/api/admin', adminRoutes);
+// If you need separate admin auth endpoints, mount adminAuthRoutes as well
 // app.use('/api/admin', adminAuthRoutes);
 
 // Blockchain and NFT routes

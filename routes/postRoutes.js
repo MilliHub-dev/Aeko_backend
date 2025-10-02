@@ -14,45 +14,214 @@ const normalizeObjectId = (value) => {
   return mongoose.Types.ObjectId.isValid(cleaned) ? cleaned : null;
 };
 
+// Helper to inject Cloudinary transformation into URLs
+const transformCloudinaryUrl = (url, transformation) => {
+  if (!url || typeof url !== 'string') return url;
+  // Only attempt for Cloudinary URLs that contain '/upload/'
+  const marker = '/upload/';
+  const idx = url.indexOf(marker);
+  if (idx === -1 || !transformation) return url;
+  // Avoid duplicate insertions if transformation already present
+  if (url.slice(idx + marker.length).startsWith('e_')) return url;
+  return url.slice(0, idx + marker.length) + transformation + '/' + url.slice(idx + marker.length);
+};
+
 /**
  * @swagger
  * /api/posts/create:
  *   post:
  *     summary: Create a new post
  *     description: Creates a new post with text, image, or video
+ *     tags:
+ *       - Posts
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
- *             required:
- *               - text
- *               - type
  *             properties:
  *               text:
  *                 type: string
- *                 description: The text content of the post
+ *                 description: Optional caption text
  *               type:
  *                 type: string
- *                 description: The type of post (text, image, video)
+ *                 enum: [text, image, video]
+ *                 description: Type of post; inferred from file when media is present
  *               media:
  *                 type: string
- *                 description: URL of the media (optional, required for image/video types)
- *             example:
- *               text: "This is a sample post"
- *               type: "image"
- *               media: "http://example.com/image.jpg"
+ *                 format: binary
+ *                 description: Media file for image/video posts
+ *           encoding:
+ *             media:
+ *               contentType: [image/*, video/*]
  *     responses:
  *       201:
  *         description: Post created successfully
+ *       400:
+ *         description: Bad request
  *       500:
- *         description: Error creating post
- * 
+ *         description: Server error
+ */
+/**
+ * @swagger
+ * /api/posts/{postId}:
+ *   get:
+ *     summary: Get a single post by ID
+ *     tags:
+ *       - Posts
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         description: ID of the post
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-fA-F0-9]{24}$'
+ *           example: '68cad398b391bdd7d991d5c7'
+ *     responses:
+ *       200:
+ *         description: Post retrieved successfully
+ *       400:
+ *         description: Invalid postId format
+ *       404:
+ *         description: Post not found
+ *       500:
+ *         description: Error retrieving post
+ */
+router.get("/:postId", authMiddleware, async (req, res) => {
+  try {
+    const postId = normalizeObjectId(req.params.postId);
+    if (!postId) return res.status(400).json({ error: "Invalid postId format" });
+    const post = await Post.findById(postId).populate("user", "username profilePicture");
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    res.json(post);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/posts/{postId}/reposts:
+ *   get:
+ *     summary: Get reposts of a specific post
+ *     tags:
+ *       - Posts
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         description: ID of the original post
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-fA-F0-9]{24}$'
+ *           example: '68cad398b391bdd7d991d5c7'
+ *     responses:
+ *       200:
+ *         description: List of reposts retrieved successfully
+ *       400:
+ *         description: Invalid postId format
+ *       500:
+ *         description: Error retrieving reposts
+ */
+router.get("/:postId/reposts", authMiddleware, async (req, res) => {
+  try {
+    const postId = normalizeObjectId(req.params.postId);
+    if (!postId) return res.status(400).json({ error: "Invalid postId format" });
+    const reposts = await Post.find({ originalPost: postId }).populate("user", "username profilePicture").sort({ createdAt: -1 });
+    res.json(reposts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/posts/mixed:
+ *   get:
+ *     summary: Get mixed media posts (image or video)
+ *     tags:
+ *       - Posts
+ *     responses:
+ *       200:
+ *         description: Mixed media posts retrieved successfully
+ *       500:
+ *         description: Error retrieving mixed posts
+ */
+router.get("/mixed", authMiddleware, async (req, res) => {
+  try {
+    const posts = await Post.find({ type: { $in: ["image", "video"] } })
+      .populate("user", "username profilePicture")
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.json(posts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/posts/videos:
+ *   get:
+ *     summary: Get video-only feed with optional visual effect
+ *     tags:
+ *       - Posts
+ *     parameters:
+ *       - in: query
+ *         name: effect
+ *         schema:
+ *           type: string
+ *           enum: [grayscale, reverse, loop, accelerate]
+ *         description: Optional Cloudinary visual effect to apply to returned video URLs
+ *     responses:
+ *       200:
+ *         description: Video feed retrieved successfully
+ *       500:
+ *         description: Error retrieving video feed
+ */
+router.get("/videos", authMiddleware, async (req, res) => {
+  try {
+    const { effect } = req.query;
+    // Map friendly effect names to Cloudinary transformation strings
+    const effectMap = {
+      grayscale: 'e_grayscale',
+      reverse: 'e_reverse',
+      loop: 'e_loop:2',
+      accelerate: 'e_accelerate:50',
+    };
+    const transformation = effectMap[effect] || null;
+
+    const posts = await Post.find({ type: "video" })
+      .populate("user", "username profilePicture")
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    if (!transformation) {
+      return res.json(posts);
+    }
+
+    // Apply transformation to media URLs on the fly
+    const transformed = posts.map((p) => {
+      const obj = p.toObject ? p.toObject() : { ...p };
+      obj.media = transformCloudinaryUrl(obj.media, transformation);
+      return obj;
+    });
+
+    res.json(transformed);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
  * /api/posts/repost/{postId}:
  *   post:
- *     summary: Repost a post
- *     description: Reposts an existing post
+ *     summary: Repost an existing post
+ *     tags:
+ *       - Posts
  *     parameters:
  *       - in: path
  *         name: postId
@@ -67,23 +236,72 @@ const normalizeObjectId = (value) => {
  *         description: Post reposted successfully
  *       400:
  *         description: Invalid postId format
+ *       404:
+ *         description: Post not found
  *       500:
- *         description: Error reposting post
- * 
+ *         description: Server error
+ */
+// Repost another user's post (like retweet)
+router.post("/repost/:postId", authMiddleware, async (req, res) => {
+  try {
+    const user = req.userId;
+    const postId = normalizeObjectId(req.params.postId);
+    if (!postId) return res.status(400).json({ error: "Invalid postId format" });
+    const originalPost = await Post.findById(postId);
+    if (!originalPost) return res.status(404).json({ error: "Post not found" });
+
+        const newRepost = new Post({ user, originalPost: originalPost._id, type: originalPost.type, text: originalPost.text || "", media: originalPost.media || "" });
+        await newRepost.save();
+        res.status(201).json(newRepost);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * @swagger
  * /api/posts/feed:
  *   get:
- *     summary: Get video feed
- *     description: Retrieves the latest posts for the video feed
+ *     summary: Get latest posts feed
+ *     tags:
+ *       - Posts
  *     responses:
  *       200:
- *         description: Video feed retrieved successfully
+ *         description: Feed retrieved successfully
  *       500:
- *         description: Error retrieving video feed
- * 
+ *         description: Error retrieving feed
+ */
+// Get video feed (Latest posts, TikTok-style scrolling)
+router.get("/feed", authMiddleware, async (req, res) => {
+    try {
+        const posts = await Post.find().populate("user", "username profilePicture").sort({ createdAt: -1 }).limit(50);
+        res.json(posts);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * @swagger
+ * /api/posts/feed:
+ *   get:
+ *     summary: Get latest posts feed
+ *     tags:
+ *       - Posts
+ *     responses:
+ *       200:
+ *         description: Feed retrieved successfully
+ *       500:
+ *         description: Error retrieving feed
+ */
+
+/**
+ * @swagger
  * /api/posts/like/{postId}:
  *   post:
- *     summary: Like a post
- *     description: Likes or unlikes a post
+ *     summary: Like or unlike a post (toggle)
+ *     tags:
+ *       - Posts
  *     parameters:
  *       - in: path
  *         name: postId
@@ -98,102 +316,11 @@ const normalizeObjectId = (value) => {
  *         description: Post liked/unliked successfully
  *       400:
  *         description: Invalid postId format
+ *       404:
+ *         description: Post not found
  *       500:
- *         description: Error liking/unliking post
- * 
- * /api/posts/create_mixed:
- *   post:
- *     summary: Create a mixed media post
- *     description: Create a post with mixed media (images, videos, audio)
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - mediaFiles
- *               - caption
- *             properties:
- *               mediaFiles:
- *                 type: array
- *                 description: List of media file URLs (images, videos, audio)
- *                 items:
- *                   type: string
- *               caption:
- *                 type: string
- *                 description: The caption for the post
- *             example:
- *               mediaFiles:
- *                 - "http://example.com/image1.jpg"
- *                 - "http://example.com/video1.mp4"
- *               caption: "Check out my new post!"
- *     responses:
- *       201:
- *         description: Mixed media post created successfully
- *       400:
- *         description: Bad request, invalid input
- *       500:
- *         description: Server error while creating post
+ *         description: Server error
  */
-
-
-
-// Create a post (text, image, or video)
-router.post("/create", authMiddleware, upload.single("media"), async (req, res) => {
-    try {
-        const user = req.userId;
-        const { text = "", type: typeFromBody } = req.body;
-        const media = req.file ? req.file.path : null;
-
-        // Determine type: prefer file mimetype, fallback to provided body, default to text
-        let type = "text";
-        if (req.file && req.file.mimetype) {
-            if (req.file.mimetype.startsWith("image/")) type = "image";
-            else if (req.file.mimetype.startsWith("video/")) type = "video";
-        } else if (typeFromBody) {
-            type = typeFromBody;
-        }
-
-        if ((type === "image" || type === "video") && !media) {
-            return res.status(400).json({ error: "Media file is required for image/video posts" });
-        }
-
-        const newPost = new Post({ user, text, media: media || "", type });
-        await newPost.save();
-        res.status(201).json(newPost);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Repost another user's post (like retweet)
-router.post("/repost/:postId", authMiddleware, async (req, res) => {
-    try {
-        const user = req.userId;
-        const postId = normalizeObjectId(req.params.postId);
-        if (!postId) return res.status(400).json({ error: "Invalid postId format" });
-        const originalPost = await Post.findById(postId);
-        if (!originalPost) return res.status(404).json({ error: "Post not found" });
-
-        const newRepost = new Post({ user, originalPost: originalPost._id, type: originalPost.type, text: originalPost.text || "", media: originalPost.media || "" });
-        await newRepost.save();
-        res.status(201).json(newRepost);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Get video feed (Latest posts, TikTok-style scrolling)
-router.get("/feed", authMiddleware, async (req, res) => {
-    try {
-        const posts = await Post.find().populate("user", "username profilePicture").sort({ createdAt: -1 }).limit(50);
-        res.json(posts);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
 // Like a post (Toggle like/unlike)
 router.post("/like/:postId", authMiddleware, async (req, res) => {
     try {
@@ -221,6 +348,39 @@ router.post("/like/:postId", authMiddleware, async (req, res) => {
 
 
 
+/**
+ * @swagger
+ * /api/posts/create_mixed:
+ *   post:
+ *     summary: Create a mixed media post
+ *     description: Create a post with a single image or video file and optional text caption
+ *     tags:
+ *       - Posts
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               text:
+ *                 type: string
+ *                 description: Optional caption text
+ *               media:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image or video file
+ *           encoding:
+ *             media:
+ *               contentType: [image/*, video/*]
+ *     responses:
+ *       201:
+ *         description: Mixed media post created successfully
+ *       400:
+ *         description: Bad request
+ *       500:
+ *         description: Server error
+ */
 // Create a Mixed Media Post
 router.post("/create_mixed", authMiddleware, upload.array("media"), async (req, res) => {
     try {
