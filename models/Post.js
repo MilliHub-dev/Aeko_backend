@@ -40,6 +40,15 @@ const PostSchema = new mongoose.Schema(
             totalComments: { type: Number, default: 0 },
             totalLikes: { type: Number, default: 0 },
             engagementRate: { type: Number, default: 0 }
+        },
+
+        // Advertisement/promotion (optional)
+        ad: {
+            isPromoted: { type: Boolean, default: false },
+            budget: { type: Number, default: 0 }, // In platform currency or USD
+            target: { type: String, default: "" }, // e.g., audience keywords/segments
+            startDate: { type: Date, default: null },
+            endDate: { type: Date, default: null }
         }
     },
     { timestamps: true }
@@ -50,6 +59,7 @@ PostSchema.index({ views: -1 });
 PostSchema.index({ user: 1, views: -1 });
 PostSchema.index({ isEligibleForNFT: 1, nftMinted: 1 });
 PostSchema.index({ isListedForSale: 1 });
+PostSchema.index({ 'ad.isPromoted': 1, 'ad.startDate': 1, 'ad.endDate': 1 });
 
 // Methods for view tracking
 PostSchema.methods.incrementView = function(userId) {

@@ -59,6 +59,9 @@ const transformCloudinaryUrl = (url, transformation) => {
  *           encoding:
  *             media:
  *               contentType: [image/*, video/*]
+ *           example:
+ *             text: "Hello Aeko!"
+ *             type: text
  *           examples:
  *             textPost:
  *               summary: Create a text-only post
@@ -171,6 +174,86 @@ router.get("/:postId/reposts", authMiddleware, async (req, res) => {
     if (!postId) return res.status(400).json({ error: "Invalid postId format" });
     const reposts = await Post.find({ originalPost: postId }).populate("user", "username profilePicture").sort({ createdAt: -1 });
     res.json(reposts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/posts/{postId}/promote:
+ *   post:
+ *     summary: Promote an existing post as an advertisement
+ *     description: Marks a post as promoted and sets advertising parameters like budget and schedule
+ *     tags:
+ *       - Advertisements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         description: ID of the post to promote
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-fA-F0-9]{24}$'
+ *           example: '68cad398b391bdd7d991d5c7'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               budget:
+ *                 type: number
+ *                 example: 100
+ *               target:
+ *                 type: string
+ *                 example: "sports, gaming, tech"
+ *               startDate:
+ *                 type: string
+ *                 format: date-time
+ *                 example: "2025-10-05T00:00:00.000Z"
+ *               endDate:
+ *                 type: string
+ *                 format: date-time
+ *                 example: "2025-11-05T00:00:00.000Z"
+ *     responses:
+ *       200:
+ *         description: Post promoted successfully
+ *       400:
+ *         description: Invalid postId or parameters
+ *       403:
+ *         description: Not authorized to promote this post
+ *       404:
+ *         description: Post not found
+ *       500:
+ *         description: Server error
+ */
+router.post("/:postId/promote", authMiddleware, async (req, res) => {
+  try {
+    const postId = normalizeObjectId(req.params.postId);
+    if (!postId) return res.status(400).json({ error: "Invalid postId format" });
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+    // Only the owner can promote their post
+    if (post.user.toString() !== String(req.userId)) {
+      return res.status(403).json({ error: "Not authorized to promote this post" });
+    }
+
+    const { budget, target, startDate, endDate } = req.body;
+    post.ad = post.ad || {};
+    post.ad.isPromoted = true;
+    if (budget !== undefined) post.ad.budget = Number(budget) || 0;
+    if (typeof target === 'string') post.ad.target = target;
+    if (startDate) post.ad.startDate = new Date(startDate);
+    if (endDate) post.ad.endDate = new Date(endDate);
+
+    await post.save();
+    res.json({ success: true, post });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
