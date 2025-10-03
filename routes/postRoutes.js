@@ -42,8 +42,6 @@ const transformCloudinaryUrl = (url, transformation) => {
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required:
- *               - type
  *             properties:
  *               text:
  *                 type: string
@@ -51,11 +49,11 @@ const transformCloudinaryUrl = (url, transformation) => {
  *               type:
  *                 type: string
  *                 enum: [text, image, video]
- *                 description: Type of post. Use 'text' for text-only, 'image' or 'video' when uploading media.
+ *                 description: Optional. If omitted, it will be inferred from uploaded file (image/video) or defaults to 'text' if no file is sent
  *               media:
  *                 type: string
  *                 format: binary
- *                 description: Media file for image/video posts (required when type is 'image' or 'video')
+ *                 description: Media file for image/video posts (required if inferred or specified type is 'image' or 'video')
  *           encoding:
  *             media:
  *               contentType: [image/*, video/*]
@@ -89,25 +87,28 @@ const transformCloudinaryUrl = (url, transformation) => {
 router.post("/create", authMiddleware, upload.single("media"), async (req, res) => {
   try {
     const user = req.userId;
-    const { text = "", type } = req.body;
+    const { text = "", type: rawType } = req.body;
 
-    if (!type || !["text", "image", "video"].includes(type)) {
-      return res.status(400).json({ error: "Invalid or missing type. Must be one of: text, image, video" });
+    // Infer type if not provided
+    let type = rawType;
+    if (!type) {
+      if (req.file?.mimetype?.startsWith('image/')) type = 'image';
+      else if (req.file?.mimetype?.startsWith('video/')) type = 'video';
+      else type = 'text';
+    }
+
+    if (!['text', 'image', 'video'].includes(type)) {
+      return res.status(400).json({ error: "Invalid type. Must be one of: text, image, video" });
     }
 
     // For image/video, a media file must be provided
-    if ((type === "image" || type === "video") && !req.file) {
+    if ((type === 'image' || type === 'video') && !req.file) {
       return res.status(400).json({ error: "Media file is required for image/video posts" });
     }
 
     const mediaPath = req.file ? req.file.path : ""; // Cloudinary storage exposes URL in file.path
 
-    const newPost = new Post({
-      user,
-      type,
-      text,
-      media: mediaPath
-    });
+    const newPost = new Post({ user, type, text, media: mediaPath });
     await newPost.save();
     res.status(201).json(newPost);
   } catch (error) {
@@ -297,21 +298,6 @@ router.post("/repost/:postId", authMiddleware, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
-/**
- * @swagger
- * /api/posts/feed:
- *   get:
- *     summary: Get latest posts feed
- *     tags:
- *       - Posts
- *     responses:
- *       200:
- *         description: Feed retrieved successfully
- *       500:
- *         description: Error retrieving feed
- */
-// Get video feed (Latest posts, TikTok-style scrolling)
 router.get("/feed", authMiddleware, async (req, res) => {
     try {
         const posts = await Post.find().populate("user", "username profilePicture").sort({ createdAt: -1 }).limit(50);
