@@ -46,10 +46,12 @@ const transformCloudinaryUrl = (url, transformation) => {
  *               text:
  *                 type: string
  *                 description: Optional caption text
+ *                 example: "Hello Aeko!"
  *               type:
  *                 type: string
  *                 enum: [text, image, video]
  *                 description: Optional. If omitted, it will be inferred from uploaded file (image/video) or defaults to 'text' if no file is sent
+ *                 example: text
  *               media:
  *                 type: string
  *                 format: binary
@@ -61,20 +63,17 @@ const transformCloudinaryUrl = (url, transformation) => {
  *             textPost:
  *               summary: Create a text-only post
  *               value:
- *                 type: text
  *                 text: "Hello Aeko!"
  *             imagePost:
  *               summary: Create an image post
  *               value:
  *                 type: image
  *                 text: "My picture"
- *                 media: (binary)
  *             videoPost:
  *               summary: Create a video post
  *               value:
  *                 type: video
  *                 text: "My video"
- *                 media: (binary)
  *     responses:
  *       201:
  *         description: Post created successfully
@@ -172,6 +171,45 @@ router.get("/:postId/reposts", authMiddleware, async (req, res) => {
     if (!postId) return res.status(400).json({ error: "Invalid postId format" });
     const reposts = await Post.find({ originalPost: postId }).populate("user", "username profilePicture").sort({ createdAt: -1 });
     res.json(reposts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/posts/user/{userId}:
+ *   get:
+ *     summary: Get all posts by a user
+ *     tags:
+ *       - Posts
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         description: ID of the user whose posts to fetch
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-fA-F0-9]{24}$'
+ *           example: '68cad398b391bdd7d991d5c7'
+ *     responses:
+ *       200:
+ *         description: List of user's posts
+ *       400:
+ *         description: Invalid userId format
+ *       404:
+ *         description: User not found or no posts
+ *       500:
+ *         description: Server error
+ */
+router.get("/user/:userId", authMiddleware, async (req, res) => {
+  try {
+    const userId = normalizeObjectId(req.params.userId);
+    if (!userId) return res.status(400).json({ error: "Invalid userId format" });
+    const posts = await Post.find({ user: userId })
+      .populate("user", "username profilePicture")
+      .sort({ createdAt: -1 });
+    res.json(posts);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -291,13 +329,33 @@ router.post("/repost/:postId", authMiddleware, async (req, res) => {
     const originalPost = await Post.findById(postId);
     if (!originalPost) return res.status(404).json({ error: "Post not found" });
 
-        const newRepost = new Post({ user, originalPost: originalPost._id, type: originalPost.type, text: originalPost.text || "", media: originalPost.media || "" });
-        await newRepost.save();
-        res.status(201).json(newRepost);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    const newRepost = new Post({
+      user,
+      originalPost: originalPost._id,
+      type: originalPost.type,
+      text: originalPost.text || "",
+      media: originalPost.media || ""
+    });
+    await newRepost.save();
+    res.status(201).json(newRepost);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
+
+/**
+ * @swagger
+ * /api/posts/feed:
+ *   get:
+ *     summary: Get the feed of posts
+ *     tags:
+ *       - Posts
+ *     responses:
+ *       200:
+ *         description: Feed retrieved successfully
+ *       500:
+ *         description: Server error
+ */
 router.get("/feed", authMiddleware, async (req, res) => {
     try {
         const posts = await Post.find().populate("user", "username profilePicture").sort({ createdAt: -1 }).limit(50);
@@ -307,13 +365,6 @@ router.get("/feed", authMiddleware, async (req, res) => {
     }
 });
 
-/**
- * @swagger
- * /api/posts/feed:
- *   get:
- *     summary: Get latest posts feed
- *     tags:
- *       - Posts
 /**
  * @swagger
  * /api/posts/like/{postId}:
@@ -345,7 +396,6 @@ router.post("/like/:postId", authMiddleware, async (req, res) => {
   try {
     const user = req.userId;
     const postId = normalizeObjectId(req.params.postId);
-    if (!postId) return res.status(400).json({ error: "Invalid postId format" });
     const post = await Post.findById(postId);
     if (!post) return res.status(404).json({ error: "Post not found" });
 
