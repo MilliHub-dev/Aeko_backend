@@ -34,12 +34,16 @@ const transformCloudinaryUrl = (url, transformation) => {
  *     description: Creates a new post with text, image, or video
  *     tags:
  *       - Posts
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
  *         multipart/form-data:
  *           schema:
  *             type: object
+ *             required:
+ *               - type
  *             properties:
  *               text:
  *                 type: string
@@ -47,14 +51,32 @@ const transformCloudinaryUrl = (url, transformation) => {
  *               type:
  *                 type: string
  *                 enum: [text, image, video]
- *                 description: Type of post; inferred from file when media is present
+ *                 description: Type of post. Use 'text' for text-only, 'image' or 'video' when uploading media.
  *               media:
  *                 type: string
  *                 format: binary
- *                 description: Media file for image/video posts
+ *                 description: Media file for image/video posts (required when type is 'image' or 'video')
  *           encoding:
  *             media:
  *               contentType: [image/*, video/*]
+ *           examples:
+ *             textPost:
+ *               summary: Create a text-only post
+ *               value:
+ *                 type: text
+ *                 text: "Hello Aeko!"
+ *             imagePost:
+ *               summary: Create an image post
+ *               value:
+ *                 type: image
+ *                 text: "My picture"
+ *                 media: (binary)
+ *             videoPost:
+ *               summary: Create a video post
+ *               value:
+ *                 type: video
+ *                 text: "My video"
+ *                 media: (binary)
  *     responses:
  *       201:
  *         description: Post created successfully
