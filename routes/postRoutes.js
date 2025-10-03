@@ -85,6 +85,35 @@ const transformCloudinaryUrl = (url, transformation) => {
  *       500:
  *         description: Server error
  */
+// Create a new post (text/image/video)
+router.post("/create", authMiddleware, upload.single("media"), async (req, res) => {
+  try {
+    const user = req.userId;
+    const { text = "", type } = req.body;
+
+    if (!type || !["text", "image", "video"].includes(type)) {
+      return res.status(400).json({ error: "Invalid or missing type. Must be one of: text, image, video" });
+    }
+
+    // For image/video, a media file must be provided
+    if ((type === "image" || type === "video") && !req.file) {
+      return res.status(400).json({ error: "Media file is required for image/video posts" });
+    }
+
+    const mediaPath = req.file ? req.file.path : ""; // Cloudinary storage exposes URL in file.path
+
+    const newPost = new Post({
+      user,
+      type,
+      text,
+      media: mediaPath
+    });
+    await newPost.save();
+    res.status(201).json(newPost);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 /**
  * @swagger
  * /api/posts/{postId}:
