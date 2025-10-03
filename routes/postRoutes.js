@@ -89,17 +89,6 @@ const transformCloudinaryUrl = (url, transformation) => {
  *       500:
  *         description: Error retrieving post
  */
-router.get("/:postId", authMiddleware, async (req, res) => {
-  try {
-    const postId = normalizeObjectId(req.params.postId);
-    if (!postId) return res.status(400).json({ error: "Invalid postId format" });
-    const post = await Post.findById(postId).populate("user", "username profilePicture");
-    if (!post) return res.status(404).json({ error: "Post not found" });
-    res.json(post);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 /**
  * @swagger
@@ -288,13 +277,6 @@ router.get("/feed", authMiddleware, async (req, res) => {
  *     summary: Get latest posts feed
  *     tags:
  *       - Posts
- *     responses:
- *       200:
- *         description: Feed retrieved successfully
- *       500:
- *         description: Error retrieving feed
- */
-
 /**
  * @swagger
  * /api/posts/like/{postId}:
@@ -323,87 +305,39 @@ router.get("/feed", authMiddleware, async (req, res) => {
  */
 // Like a post (Toggle like/unlike)
 router.post("/like/:postId", authMiddleware, async (req, res) => {
-    try {
-        const user = req.userId;
-        const postId = normalizeObjectId(req.params.postId);
-        if (!postId) return res.status(400).json({ error: "Invalid postId format" });
-        const post = await Post.findById(postId);
-        if (!post) return res.status(404).json({ error: "Post not found" });
+  try {
+    const user = req.userId;
+    const postId = normalizeObjectId(req.params.postId);
+    if (!postId) return res.status(400).json({ error: "Invalid postId format" });
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
-        const userIdStr = user.toString();
-        const index = post.likes.findIndex((u) => u.toString() === userIdStr);
-        if (index === -1) {
-            post.likes.push(user);
-        } else {
-            post.likes.splice(index, 1);
-        }
-        await post.save();
-
-        res.json(post);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    const userIdStr = user.toString();
+    const index = post.likes.findIndex((u) => u.toString() === userIdStr);
+    if (index === -1) {
+      post.likes.push(user);
+    } else {
+      post.likes.splice(index, 1);
     }
+    await post.save();
+
+    res.json(post);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-
-
-
-/**
- * @swagger
- * /api/posts/create_mixed:
- *   post:
- *     summary: Create a mixed media post
- *     description: Create a post with a single image or video file and optional text caption
- *     tags:
- *       - Posts
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               text:
- *                 type: string
- *                 description: Optional caption text
- *               media:
- *                 type: string
- *                 format: binary
- *                 description: Image or video file
- *           encoding:
- *             media:
- *               contentType: [image/*, video/*]
- *     responses:
- *       201:
- *         description: Mixed media post created successfully
- *       400:
- *         description: Bad request
- *       500:
- *         description: Server error
- */
-// Create a Mixed Media Post
-router.post("/create_mixed", authMiddleware, upload.array("media"), async (req, res) => {
-    try {
-      const user = req.userId;
-      const { text = "" } = req.body;
-      if (!req.files || req.files.length === 0) {
-        return res.status(400).json({ error: "At least one media file is required" });
-      }
-
-      const first = req.files[0];
-      let type = "text";
-      if (first.mimetype.startsWith("image/")) type = "image";
-      else if (first.mimetype.startsWith("video/")) type = "video";
-      else return res.status(400).json({ error: "Unsupported media type for first file" });
-
-      const media = first.path;
-
-      const post = new Post({ user, text, media, type });
-      await post.save();
-      res.status(201).json({ success: true, post });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+// Place dynamic postId route at the end to avoid capturing literal paths like /feed or /mixed
+router.get("/:postId", authMiddleware, async (req, res) => {
+  try {
+    const postId = normalizeObjectId(req.params.postId);
+    if (!postId) return res.status(400).json({ error: "Invalid postId format" });
+    const post = await Post.findById(postId).populate("user", "username profilePicture");
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    res.json(post);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 export default router; // ✅ Correct ES Module export
