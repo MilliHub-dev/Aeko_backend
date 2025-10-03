@@ -1,3 +1,4 @@
+creat admin
 pinata
 API Key: f5ecb8197361f204dc77
 API Secret: 855fdb1249d94075b8d8e60ca1f48cd38ffbdc396f71a60354e448e17ccacb04
