@@ -73,7 +73,8 @@ router.get("/balance", authMiddleware, async (req, res) => {
  * @swagger
  * /api/aeko/connect-wallet:
  *   post:
- *     summary: Connect Solana wallet to user account
+ *     summary: Deprecated: Connect Solana wallet (use /api/aeko/import-wallet)
+ *     deprecated: true
  *     tags: [Aeko Coin]
  *     security:
  *       - bearerAuth: []
@@ -91,7 +92,7 @@ router.get("/balance", authMiddleware, async (req, res) => {
  *                 description: Solana wallet public address
  *     responses:
  *       200:
- *         description: Wallet connected successfully
+ *         description: Wallet connected successfully (Deprecated endpoint; prefer POST /api/aeko/import-wallet)
  *       400:
  *         description: Invalid wallet address
  */
@@ -105,13 +106,11 @@ router.post("/connect-wallet", authMiddleware, async (req, res) => {
         message: "Invalid Solana wallet address"
       });
     }
-
     // Check if wallet is already connected to another user
-    const existingUser = await User.findOne({ 
+    const existingUser = await User.findOne({
       solanaWalletAddress: walletAddress,
       _id: { $ne: req.user.id }
     });
-
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -122,8 +121,7 @@ router.post("/connect-wallet", authMiddleware, async (req, res) => {
     // Update user's wallet
     const user = await User.findById(req.user.id);
     user.solanaWalletAddress = walletAddress;
-    
-    // Get initial balance
+
     const balance = await getAekoBalance(walletAddress);
     user.aekoBalance = balance;
     
@@ -131,7 +129,7 @@ router.post("/connect-wallet", authMiddleware, async (req, res) => {
 
     res.json({
       success: true,
-      message: "Wallet connected successfully",
+      message: "DEPRECATED: Use /api/aeko/import-wallet. Wallet connected successfully",
       data: {
         walletAddress,
         aekoBalance: balance
