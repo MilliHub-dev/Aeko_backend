@@ -73,7 +73,7 @@ router.get("/balance", authMiddleware, async (req, res) => {
  * @swagger
  * /api/aeko/connect-wallet:
  *   post:
- *     summary: Deprecated: Connect Solana wallet (use /api/aeko/import-wallet)
+ *     summary: "Deprecated: Connect Solana wallet (use /api/aeko/import-wallet)"
  *     deprecated: true
  *     tags: [Aeko Coin]
  *     security:

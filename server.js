@@ -26,6 +26,7 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import adminAuthRoutes from "./routes/adminAuth.js";
 import swaggerDocs from "./swagger.js";
+import passport from "./config/passport.js";
 import AdminJS from "adminjs";
 import AdminJSExpress from "@adminjs/express";
 import { Database, Resource } from "@adminjs/mongoose";
@@ -80,6 +81,8 @@ app.use(admin.options.rootPath, adminRouter);
 // Body parser middleware (after AdminJS router, before API routes)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Initialize Passport (OAuth)
+app.use(passport.initialize());
 
 // API Routes
 app.use("/api/auth", authRoutes);

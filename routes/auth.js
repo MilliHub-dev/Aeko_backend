@@ -7,6 +7,7 @@ import User from "../models/User.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import emailService from "../services/emailService.js";
 import nodemailer from 'nodemailer';
+import passport from "../config/passport.js";
 
 
 /**
@@ -311,6 +312,59 @@ const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider("https://sepolia.infura.io/")); // Polygon zkEVM
 
 // Enhanced user registration with email verification
+/**
+ * @swagger
+ * /api/auth/google:
+ *   get:
+ *     summary: Redirect to Google for OAuth login/signup
+ *     tags:
+ *       - Authentication
+ *     responses:
+ *       302:
+ *         description: Redirects to Google OAuth consent screen
+ *
+ * /api/auth/google/callback:
+ *   get:
+ *     summary: Google OAuth callback. Issues JWT and redirects to frontend
+ *     tags:
+ *       - Authentication
+ *     responses:
+ *       302:
+ *         description: Redirects to success or failure URL after issuing JWT
+ *       401:
+ *         description: OAuth failed
+ */
+router.get(
+  "/google",
+  passport.authenticate("google", { scope: ["profile", "email"], prompt: "select_account" })
+);
+
+router.get(
+  "/google/callback",
+  passport.authenticate("google", { session: false, failureRedirect: process.env.OAUTH_FAILURE_REDIRECT || "/auth/failed" }),
+  async (req, res) => {
+    try {
+      const payload = { id: req.user._id, email: req.user.email };
+      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+      // Set JWT in HttpOnly cookie
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+
+      // Redirect to frontend
+      const successUrl = process.env.OAUTH_SUCCESS_REDIRECT || "http://localhost:3000/auth/success";
+      res.redirect(successUrl);
+    } catch (err) {
+      const failUrl = process.env.OAUTH_FAILURE_REDIRECT || "http://localhost:3000/auth/failed";
+      res.redirect(failUrl);
+    }
+  }
+);
+
 router.post("/signup", async (req, res) => {
     try {
         const { name, username, email, password } = req.body;
