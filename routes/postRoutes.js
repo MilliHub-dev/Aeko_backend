@@ -123,6 +123,7 @@ router.post("/create", authMiddleware,
 
     const newPost = new Post({ user, type, text, media: mediaPath });
     await newPost.save();
+    await newPost.populate('user', 'name email username profilePicture');
     res.status(201).json(newPost);
   } catch (error) {
     res.status(500).json({ error: error.message });
