@@ -100,11 +100,11 @@ const generalStorage = new CloudinaryStorage({
                     fetch_format: 'auto'
                 }
             ] : undefined,
-            public_id: () => {
+            public_id: (() => {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
                 const name = file.originalname.split('.')[0];
                 return `${name}-${uniqueSuffix}`;
-            }
+            })()
         };
     },
 });

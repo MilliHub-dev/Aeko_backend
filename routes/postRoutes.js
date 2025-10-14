@@ -86,7 +86,18 @@ const transformCloudinaryUrl = (url, transformation) => {
  *         description: Server error
  */
 // Create a new post (text/image/video)
-router.post("/create", authMiddleware, upload.single("media"), async (req, res) => {
+router.post("/create", authMiddleware,
+  // Wrap multer to return JSON on errors instead of HTML
+  (req, res, next) => {
+    upload.single("media")(req, res, (err) => {
+      if (err) {
+        const status = err.name === 'MulterError' ? 400 : 500;
+        return res.status(status).json({ error: err.message || 'Upload failed' });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
   try {
     const user = req.userId;
     const { text = "", type: rawType } = req.body;
