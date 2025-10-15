@@ -123,8 +123,14 @@ router.post("/create", authMiddleware,
 
     const newPost = new Post({ user, type, text, media: mediaPath });
     await newPost.save();
-    await newPost.populate('user', 'name email username profilePicture');
-    res.status(201).json(newPost);
+    // Re-fetch populated to ensure proper serialization
+    const populated = await Post.findById(newPost._id)
+      .populate('user', 'name email username profilePicture');
+    res.status(201).json({
+      ...populated.toObject(),
+      likesCount: populated.likes?.length || 0,
+      commentsCount: populated.comments?.length || 0
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -302,7 +308,7 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
     const userId = normalizeObjectId(req.params.userId);
     if (!userId) return res.status(400).json({ error: "Invalid userId format" });
     const posts = await Post.find({ user: userId })
-      .populate("user", "username profilePicture")
+      .populate("user", "name email username profilePicture")
       .sort({ createdAt: -1 });
     res.json(posts);
   } catch (error) {
@@ -326,7 +332,7 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
 router.get("/mixed", authMiddleware, async (req, res) => {
   try {
     const posts = await Post.find({ type: { $in: ["image", "video"] } })
-      .populate("user", "username profilePicture")
+      .populate("user", "name email username profilePicture")
       .sort({ createdAt: -1 })
       .limit(50);
     res.json(posts);
@@ -368,7 +374,7 @@ router.get("/videos", authMiddleware, async (req, res) => {
     const transformation = effectMap[effect] || null;
 
     const posts = await Post.find({ type: "video" })
-      .populate("user", "username profilePicture")
+      .populate("user", "name email username profilePicture")
       .sort({ createdAt: -1 })
       .limit(50);
 
@@ -432,7 +438,12 @@ router.post("/repost/:postId", authMiddleware, async (req, res) => {
       media: originalPost.media || ""
     });
     await newRepost.save();
-    res.status(201).json(newRepost);
+    await newRepost.populate('user', 'name email username profilePicture');
+    res.status(201).json({
+      ...newRepost.toObject(),
+      likesCount: newRepost.likes?.length || 0,
+      commentsCount: newRepost.comments?.length || 0
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -503,7 +514,20 @@ router.post("/like/:postId", authMiddleware, async (req, res) => {
     }
     await post.save();
 
-    res.json(post);
+    // Update engagement totals (likes/comments)
+    post.engagement = post.engagement || {};
+    post.engagement.totalLikes = post.likes.length;
+    post.engagement.totalComments = post.comments.length;
+    await post.save();
+
+    const populated = await Post.findById(post._id)
+      .populate("user", "name email username profilePicture");
+
+    res.json({
+      ...populated.toObject(),
+      likesCount: populated.likes?.length || 0,
+      commentsCount: populated.comments?.length || 0
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -514,7 +538,7 @@ router.get("/:postId", authMiddleware, async (req, res) => {
   try {
     const postId = normalizeObjectId(req.params.postId);
     if (!postId) return res.status(400).json({ error: "Invalid postId format" });
-    const post = await Post.findById(postId).populate("user", "username profilePicture");
+    const post = await Post.findById(postId).populate("user", "name email username profilePicture");
     if (!post) return res.status(404).json({ error: "Post not found" });
     res.json(post);
   } catch (error) {
