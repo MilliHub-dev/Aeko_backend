@@ -8,8 +8,33 @@ const router = express.Router();
 router.post("/create", authMiddleware, async (req, res) => {
   try {
     const { title } = req.body;
-    const space = new Space({ title, participants: [] });
+    const space = new Space({ title, host: req.user?._id || req.userId, participants: [] });
 
+    await space.save();
+    res.json({ success: true, space });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// End a Space
+router.patch("/:spaceId/end", authMiddleware, async (req, res) => {
+  try {
+    const space = await Space.findById(req.params.spaceId);
+    if (!space) {
+      return res.status(404).json({ success: false, error: "Space not found" });
+    }
+
+    const requesterId = String(req.user?._id || req.userId);
+    if (String(space.host) !== requesterId) {
+      return res.status(403).json({ success: false, error: "Only the host can end this space" });
+    }
+
+    if (!space.isLive) {
+      return res.json({ success: true, space });
+    }
+
+    space.isLive = false;
     await space.save();
     res.json({ success: true, space });
   } catch (error) {

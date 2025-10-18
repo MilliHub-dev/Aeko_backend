@@ -92,7 +92,7 @@ app.use("/api/comments", commentRoutes);
 app.use("/api/status", statusRoutes);
 app.use("/api/debates", debateRoutes);
 app.use("/api/challenges", challengeRoutes);
-app.use("/api/space", spaceRoutes);
+app.use("/api/spaces", spaceRoutes);
 app.use("/api/chat", chatRoutes);
 app.use('/api/ads', adRoutes);
 app.use("/api/bot", botRoutes);
