@@ -142,4 +142,29 @@ export default router;
  *         description: Space not found
  *       500:
  *         description: Server error
+ *  /api/spaces/{spaceId}/end:
+ *   patch:
+ *     summary: End a space
+ *     tags:
+ *       - Spaces
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: spaceId
+ *         in: path
+ *         required: true
+ *         description: ID of the space
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Space ended successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Space not found
+ *       500:
+ *         description: Server error
  */
