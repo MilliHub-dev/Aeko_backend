@@ -97,22 +97,47 @@ const router = express.Router();
 
 
 // Add a comment to a post
-router.post("/:postId", async (req, res) => {
-    try {
-        const { user, text } = req.body;
-        const post = await Post.findById(req.params.postId);
-        if (!post) return res.status(404).json({ error: "Post not found" });
+router.post("/:postId", authMiddleware, async (req, res) => {
+  try {
+    const { text } = req.body;
+    const post = await Post.findById(req.params.postId);
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
-        const newComment = new Comment({ user, post: post._id, text });
-        await newComment.save();
+    const user = req.userId || req.body.user; // prefer auth, fallback for backward-compat
+    if (!user) return res.status(400).json({ error: "User not provided" });
 
-        post.comments.push(newComment._id);
-        await post.save();
+    const newComment = new Comment({ user, post: post._id, text });
+    await newComment.save();
 
-        res.status(201).json(newComment);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    post.comments.push(newComment._id);
+    await post.save();
+
+    // Update engagement counts on the post
+    if (typeof post.updateEngagement === 'function') {
+      await post.updateEngagement();
+    } else {
+      post.engagement = post.engagement || {};
+      post.engagement.totalComments = post.comments.length;
+      post.engagement.totalLikes = post.likes?.length || 0;
+      post.engagement.totalShares = post.reposts?.length || 0;
+      await post.save();
     }
+
+    const populatedComment = await Comment.findById(newComment._id)
+      .populate('user', 'name email username profilePicture');
+
+    res.status(201).json({
+      comment: populatedComment,
+      postCounts: {
+        totalComments: post.engagement.totalComments || 0,
+        totalLikes: post.engagement.totalLikes || 0,
+        totalShares: post.engagement.totalShares || 0,
+        engagementRate: post.engagement.engagementRate || 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Like a comment
