@@ -190,7 +190,9 @@ router.get("/:postId/reposts", authMiddleware, async (req, res) => {
   try {
     const postId = normalizeObjectId(req.params.postId);
     if (!postId) return res.status(400).json({ error: "Invalid postId format" });
-    const reposts = await Post.find({ originalPost: postId }).populate("user", "username profilePicture").sort({ createdAt: -1 });
+    const reposts = await Post.find({ originalPost: postId })
+      .populate("user", "name email username profilePicture")
+      .sort({ createdAt: -1 });
     res.json(reposts);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -464,7 +466,10 @@ router.post("/repost/:postId", authMiddleware, async (req, res) => {
  */
 router.get("/feed", authMiddleware, async (req, res) => {
     try {
-        const posts = await Post.find().populate("user", "username profilePicture").sort({ createdAt: -1 }).limit(50);
+        const posts = await Post.find()
+          .populate("user", "name email username profilePicture")
+          .sort({ createdAt: -1 })
+          .limit(50);
         res.json(posts);
     } catch (error) {
         res.status(500).json({ error: error.message });
