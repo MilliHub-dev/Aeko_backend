@@ -161,7 +161,7 @@ router.post("/like/:commentId", authMiddleware, async (req, res) => {
 router.get("/:postId", authMiddleware, async (req, res) => {
     try {
         const comments = await Comment.find({ post: req.params.postId })
-            .populate("user", "username profilePicture")
+            .populate("user", "name email username profilePicture")
             .sort({ createdAt: -1 });
 
         res.json(comments);
