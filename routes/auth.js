@@ -302,7 +302,34 @@ import passport from "../config/passport.js";
  *           hasWalletConnected: true
  *           hasVerifiedEmail: true
  *         createdAt: "2024-01-01T12:00:00Z"
- *         updatedAt: "2024-01-01T12:00:00Z"
+ *         updatedAt: "2024-01-01T12:00:00Z" 
+ * /api/auth/forgot-password:
+ *   post:
+ *     summary: Request password reset for user
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *             example:
+ *               email: "john@example.com"
+ *     responses:
+ *       200:
+ *         description: Email sent successfully
+ *       400:
+ *         description: Bad request (e.g. invalid email)
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ * 
  */
 
 
