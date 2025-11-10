@@ -3,9 +3,9 @@ import jwt from "jsonwebtoken";
 import Web3 from "web3";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
+import emailService from "../services/emailService.js";
 import User from "../models/User.js";
 import authMiddleware from "../middleware/authMiddleware.js";
-import emailService from "../services/emailService.js";
 import nodemailer from 'nodemailer';
 import passport from "../config/passport.js";
 
@@ -812,9 +812,7 @@ router.post('/forgot-password', async (req, res) => {
             { expiresIn: '15m' }
         );
 
-        // Use the existing EmailService instead of creating a new transporter
-        const emailService = require('../services/emailService');
-        
+        // Use the imported EmailService
         if (!emailService.isAvailable()) {
             clearTimeout(timeout);
             return res.status(500).json({
