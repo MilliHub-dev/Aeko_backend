@@ -138,6 +138,141 @@ class EmailService {
     }
   }
 
+  // Send password reset email
+  async sendPasswordResetEmail(email, username, resetLink) {
+    if (!this.isAvailable()) {
+      console.warn('Email service not available. Password reset email not sent.');
+      return { success: false, message: 'Email service not configured' };
+    }
+
+    const mailOptions = {
+      from: `"Aeko" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: '🔑 Reset Your Aeko Password',
+      html: `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Password Reset - Aeko</title>
+          <style>
+            body { 
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+              margin: 0; 
+              padding: 0; 
+              background-color: #f5f5f5; 
+              color: #333;
+            }
+            .container { 
+              max-width: 600px; 
+              margin: 0 auto; 
+              background-color: white; 
+              border-radius: 8px;
+              overflow: hidden;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .header { 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+              color: white; 
+              padding: 40px 20px; 
+              text-align: center; 
+            }
+            .content { 
+              padding: 30px; 
+              line-height: 1.6;
+            }
+            .button { 
+              display: inline-block; 
+              padding: 12px 30px; 
+              background-color: #667eea; 
+              color: white !important; 
+              text-decoration: none; 
+              border-radius: 5px; 
+              margin: 20px 0; 
+              font-weight: 500;
+            }
+            .footer { 
+              background-color: #f8f9fa; 
+              padding: 20px; 
+              text-align: center; 
+              color: #6c757d; 
+              border-top: 1px solid #dee2e6;
+              font-size: 14px;
+            }
+            .code-box { 
+              background-color: #f8f9ff; 
+              border: 2px dashed #667eea; 
+              border-radius: 10px; 
+              padding: 15px; 
+              margin: 25px 0;
+              text-align: center;
+            }
+            .warning { 
+              background-color: #fff3cd; 
+              border: 1px solid #ffeaa7; 
+              color: #856404; 
+              padding: 15px; 
+              border-radius: 5px; 
+              margin: 20px 0;
+              font-size: 14px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🔑 Reset Your Password</h1>
+              <p>Hello ${username || 'User'}, we received a request to reset your password</p>
+            </div>
+            
+            <div class="content">
+              <p>Click the button below to reset your password. This link will expire in 15 minutes.</p>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${resetLink}" class="button">Reset Password</a>
+              </div>
+              
+              <div class="code-box">
+                <p>Or copy and paste this link into your browser:</p>
+                <p style="word-break: break-all; color: #667eea; font-size: 14px;">${resetLink}</p>
+              </div>
+              
+              <div class="warning">
+                <strong>⚠️ Security Tip:</strong> If you didn't request this password reset, please ignore this email or contact support if you have concerns.
+              </div>
+              
+              <p>For security reasons, this link will expire in 15 minutes. If you need to reset your password again, you can request a new link from the login page.</p>
+              
+              <p>Thanks,<br>The Aeko Team</p>
+            </div>
+            
+            <div class="footer">
+              <p>Need help? Contact us at <a href="mailto:support@aeko.social" style="color: #667eea;">support@aeko.social</a></p>
+              <p style="margin-top: 10px; font-size: 12px; color: #999;">
+                © ${new Date().getFullYear()} Aeko. All rights reserved.<br>
+                You're receiving this email because a password reset was requested for this account.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+
+    try {
+      await this.transporter.sendMail(mailOptions);
+      return { success: true, message: 'Password reset email sent successfully' };
+    } catch (error) {
+      console.error('Error sending password reset email:', error);
+      return { 
+        success: false, 
+        message: 'Failed to send password reset email',
+        error: error.message 
+      };
+    }
+  }
+
   // Send blue tick notification
   async sendBlueTickNotification(email, username) {
     const mailOptions = {

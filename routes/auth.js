@@ -775,43 +775,83 @@ router.post('/logout', (req, res) => {
 
 // ✅ Forgot Password Route
 router.post('/forgot-password', async (req, res) => {
+    const emailSendingTimeout = 10000; // 10 seconds timeout
+    const timeout = setTimeout(() => {
+        if (!res.headersSent) {
+            res.status(504).json({
+                success: false,
+                error: 'Email sending timed out. Please try again later.'
+            });
+        }
+    }, emailSendingTimeout);
+
     try {
         const { email } = req.body;
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(404).json({ 
+        
+        if (!email) {
+            clearTimeout(timeout);
+            return res.status(400).json({
                 success: false,
-                error: 'User not found' 
+                error: 'Email is required'
             });
         }
 
-        const resetToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+        const user = await User.findOne({ email }).select('_id email');
+        if (!user) {
+            clearTimeout(timeout);
+            // Don't reveal that the email doesn't exist for security
+            return res.json({ 
+                success: true,
+                message: 'If an account with that email exists, a password reset link has been sent.'
+            });
+        }
 
-        // Send email (Use your SMTP settings)
-        const transporter = nodemailer.createTransport({
-            service: 'Gmail',
-            auth: { 
-                user: process.env.EMAIL_USER, 
-                pass: process.env.EMAIL_PASS 
-            }
-        });
+        const resetToken = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '15m' }
+        );
 
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'Password Reset Request',
-            html: `<p>Click <a href="${process.env.FRONTEND_URL}/reset-password/${resetToken}">here</a> to reset your password.</p>`
-        };
+        // Use the existing EmailService instead of creating a new transporter
+        const emailService = require('../services/emailService');
+        
+        if (!emailService.isAvailable()) {
+            clearTimeout(timeout);
+            return res.status(500).json({
+                success: false,
+                error: 'Email service is not properly configured.'
+            });
+        }
 
-        await transporter.sendMail(mailOptions);
+        // Send email using the configured email service
+        const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+        const emailResult = await emailService.sendPasswordResetEmail(
+            email,
+            user.username || 'User',
+            resetLink
+        );
+
+        if (!emailResult.success) {
+            throw new Error(emailResult.message || 'Failed to send password reset email');
+        }
+
+        clearTimeout(timeout);
         res.json({ 
             success: true, 
-            message: 'Password reset link sent to email' 
+            message: 'If an account with that email exists, a password reset link has been sent.'
         });
     } catch (error) {
+        clearTimeout(timeout);
+        console.error('Password reset error:', error);
+        
+        // Don't expose internal errors to the client
+        const errorMessage = process.env.NODE_ENV === 'development' 
+            ? error.message 
+            : 'An error occurred while processing your request.';
+            
         res.status(500).json({ 
             success: false,
-            error: error.message 
+            error: errorMessage
         });
     }
 });

@@ -80,12 +80,23 @@ export default router;
  *             properties:
  *               title:
  *                 type: string
+ *                 description: Title of the space
  *     responses:
  *       200:
  *         description: Space created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 space:
+ *                   $ref: '#/components/schemas/Space'
  *       400:
  *         description: Bad request
  *
+ * @swagger
  * /api/spaces/{spaceId}/highlight:
  *   put:
  *     summary: Add a video highlight to a space
@@ -94,14 +105,14 @@ export default router;
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - name: spaceId
- *         in: path
+ *       - in: path
+ *         name: spaceId
  *         required: true
- *         description: ID of the space
  *         schema:
  *           type: string
+ *         description: ID of the space
  *     requestBody:
- *       required: true   
+ *       required: true
  *       content:
  *         application/json:
  *           schema:
@@ -111,38 +122,45 @@ export default router;
  *             properties:
  *               videoUrl:
  *                 type: string
+ *                 format: uri
+ *                 description: URL of the video highlight
  *     responses:
  *       200:
- *         description: Video highlight added successfully
- *       400:
- *         description: Bad request
+ *         description: Highlight added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Space'
  *       404:
  *         description: Space not found
  *
+ * @swagger
  * /api/spaces/{spaceId}:
  *   get:
  *     summary: Get details of a space
  *     tags:
  *       - Spaces
  *     parameters:
- *       - name: spaceId
- *         in: path
+ *       - in: path
+ *         name: spaceId
  *         required: true
- *         description: ID of the space
  *         schema:
  *           type: string
+ *         description: ID of the space to retrieve
  *     responses:
  *       200:
  *         description: Space details retrieved successfully
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Space'
  *       404:
  *         description: Space not found
  *       500:
  *         description: Server error
- *  /api/spaces/{spaceId}/end:
+ *
+ * @swagger
+ * /api/spaces/{spaceId}/end:
  *   patch:
  *     summary: End a space
  *     tags:
@@ -150,21 +168,21 @@ export default router;
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - name: spaceId
- *         in: path
+ *       - in: path
+ *         name: spaceId
  *         required: true
- *         description: ID of the space
  *         schema:
  *           type: string
+ *         description: ID of the space to end
  *     responses:
  *       200:
  *         description: Space ended successfully
- *       401:
- *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Space'
  *       403:
- *         description: Forbidden
+ *         description: Only the host can end this space
  *       404:
  *         description: Space not found
- *       500:
- *         description: Server error
  */
