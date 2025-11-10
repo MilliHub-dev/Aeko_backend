@@ -821,20 +821,32 @@ router.post('/forgot-password', async (req, res) => {
             });
         }
 
-        // Send email using the configured email service
+        // Send email in the background
         const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-        const emailResult = await emailService.sendPasswordResetEmail(
-            email,
-            user.username || 'User',
-            resetLink
-        );
+        
+        // Start email sending in the background
+        (async () => {
+            try {
+                console.log(`Sending password reset email to ${email}...`);
+                const emailResult = await emailService.sendPasswordResetEmail(
+                    email,
+                    user.username || 'User',
+                    resetLink
+                );
+                
+                if (emailResult.success) {
+                    console.log(`Password reset email sent to ${email}`);
+                } else {
+                    console.error('Failed to send password reset email:', emailResult.message);
+                }
+            } catch (emailError) {
+                console.error('Background email sending failed:', emailError);
+            }
+        })();
 
-        if (!emailResult.success) {
-            throw new Error(emailResult.message || 'Failed to send password reset email');
-        }
-
+        // Immediately respond to the client
         clearTimeout(timeout);
-        res.json({ 
+        return res.json({ 
             success: true, 
             message: 'If an account with that email exists, a password reset link has been sent.'
         });

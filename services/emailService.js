@@ -18,6 +18,10 @@ class EmailService {
         host: 'smtp.gmail.com',
         port: 587,
         secure: false, // Use TLS
+        connectionTimeout: 10000, // 10 seconds timeout for initial connection
+        socketTimeout: 30000,     // 30 seconds timeout for socket
+        greetingTimeout: 10000,   // 10 seconds to wait for greeting
+        debug: process.env.NODE_ENV === 'development', // Enable debug logging in development
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS
