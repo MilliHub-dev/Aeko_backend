@@ -54,6 +54,12 @@ import setupVideoCallSocket from './sockets/videoCallSocket.js';
 dotenv.config();
 connectDB();
 
+// Configuration
+const isProduction = process.env.NODE_ENV === 'production';
+const PORT = process.env.PORT || 5000;
+
+// Production Configuration
+
 const app = express();
 const server = http.createServer(app);
 
