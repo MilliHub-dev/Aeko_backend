@@ -48,7 +48,6 @@ import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
 import cookieParser from "cookie-parser";
 import EnhancedChatSocket from "./sockets/enhancedChatSocket.js";
 import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
-import { Server } from 'socket.io';
 import setupVideoCallSocket from './sockets/videoCallSocket.js';
 
 
