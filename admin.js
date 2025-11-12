@@ -19,11 +19,37 @@ import Chat from "./models/Chat.js";
 import Message from "./models/Message.js";
 import AekoTransaction from "./models/AekoTransaction.js";
 import NFTMarketplace from "./models/NFTMarketplace.js";
+import Interest from "./models/Interest.js";
 
 AdminJS.registerAdapter(AdminJSMongoose);
 
 const admin = new AdminJS({
   resources: [
+    // ===== INTEREST MANAGEMENT =====
+    {
+      resource: Interest,
+      options: {
+        parent: {
+          name: 'Content Management',
+          icon: 'Tag'
+        },
+        properties: {
+          _id: { isVisible: { list: true, show: true, edit: false } },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
+          updatedAt: { isVisible: { list: false, show: true, edit: false } }
+        },
+        actions: {
+          new: { isVisible: true },
+          edit: { isVisible: true },
+          delete: { isVisible: true },
+          bulkDelete: { isVisible: true }
+        },
+        listProperties: ['name', 'displayName', 'isActive', 'createdAt'],
+        showProperties: ['name', 'displayName', 'description', 'icon', 'isActive', 'createdAt', 'updatedAt'],
+        editProperties: ['name', 'displayName', 'description', 'icon', 'isActive']
+      }
+    },
+    
     // ===== USER MANAGEMENT =====
     {
       resource: User,

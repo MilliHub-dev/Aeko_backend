@@ -62,6 +62,16 @@ const UserSchema = new mongoose.Schema({
     hasVerifiedEmail: { type: Boolean, default: false },
     completedAt: { type: Date, default: null },
     completionPercentage: { type: Number, default: 0 }
+  },
+  // User interests
+  interests: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Interest'
+  }],
+  // Onboarding status
+  onboarding: {
+    interestsSelected: { type: Boolean, default: false },
+    completed: { type: Boolean, default: false }
   }
 }, { timestamps: true });
 

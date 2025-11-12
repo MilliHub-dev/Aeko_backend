@@ -3,6 +3,9 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import http from "http";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import { Server } from "socket.io";
 import path from "path";
 import fs from "fs";
 import connectDB from "./config/db.js";
@@ -38,6 +41,8 @@ import postTransferRoutes from "./routes/postTransferRoutes.js";
 import enhancedBotRoutes from "./routes/enhancedBotRoutes.js";
 import enhancedChatRoutes from "./routes/enhancedChatRoutes.js";
 import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
+import interestRoutes from "./routes/interestRoutes.js";
+import userInterestRoutes from "./routes/userInterestRoutes.js";
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
 import cookieParser from "cookie-parser";
@@ -99,6 +104,8 @@ app.use("/api/bot", botRoutes);
 app.use("/api/aeko", aekoRoutes);
 app.use("/api/aeko", aekoWalletRoutes);
 app.use("/api/nft", nftRoutes);
+app.use("/api/interests", interestRoutes);
+app.use("/api/user/interests", userInterestRoutes);
 app.use('/api/video', videoEditRoutes);
 app.use('/api/photo', photoEditRoutes);
 app.use('/api/payments', paymentRoutes);
@@ -340,23 +347,53 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Start Server
-const PORT = process.env.PORT || 5000;
-const io = new Server(server, { cors: { origin: '*' } });
-setupVideoCallSocket(io);
-server.listen(PORT, () => {
-  console.log(`🚀 Aeko Backend Server starting...`);
-  console.log(`📡 Server running on port ${PORT}`);
-  console.log(`🔗 Socket.IO ready for real-time communication`);
-  console.log(`🤖 AI Bot integrated and ready`);
-  console.log(`📁 File uploads supported (max 100MB)`);
-  console.log(`😊 Emoji reactions enabled`);
-  console.log(`🎵 Voice messages supported`);
-  console.log(`💬 Enhanced Chat System Active`);
-  console.log(`🎥 Enhanced LiveStream Platform Active`);
-  console.log(`🌐 WebRTC streaming enabled`);
-  console.log(`📊 Stream analytics and monetization ready`);
-  console.log(`🛡️ Stream moderation tools enabled`);
-  console.log(`🎬 Screen sharing and co-hosting supported`);
-  console.log('✨ All systems ready!');
-});
+// Start server
+const startServer = async () => {
+  try {
+    // Add any pre-start checks here (e.g., database connection)
+    
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Aeko Backend Server ${isProduction ? 'Production' : 'Development'} Mode`);
+      console.log(`📡 Server running on port ${PORT}`);
+      
+      if (!isProduction) {
+        console.log('🔗 API Documentation:');
+        console.log(`   - Swagger UI: http://localhost:${PORT}/api-docs`);
+        console.log(`   - API Spec: http://localhost:${PORT}/api-docs.json`);
+      }
+      
+      console.log('✨ All systems ready!');
+    });
+    
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (err) => {
+      console.error('UNHANDLED REJECTION! 💥 Shutting down...');
+      console.error(err);
+      server.close(() => {
+        process.exit(1);
+      });
+    });
+    
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (err) => {
+      console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+      console.error(err);
+      process.exit(1);
+    });
+    
+    // Handle SIGTERM (for Docker/Heroku)
+    process.on('SIGTERM', () => {
+      console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
+      server.close(() => {
+        console.log('💥 Process terminated!');
+      });
+    });
+    
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+};
+
+// Start the application
+startServer();
