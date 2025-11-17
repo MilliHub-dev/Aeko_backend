@@ -43,12 +43,18 @@ import enhancedChatRoutes from "./routes/enhancedChatRoutes.js";
 import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
 import interestRoutes from "./routes/interestRoutes.js";
 import userInterestRoutes from "./routes/userInterestRoutes.js";
+import communityRoutes from "./routes/communityRoutes.js";
+import communityProfileRoutes from "./routes/communityProfileRoutes.js";
+import communityPaymentRoutes from "./routes/communityPaymentRoutes.js";
+import Transaction from "./models/Transaction.js";
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
 import cookieParser from "cookie-parser";
 import EnhancedChatSocket from "./sockets/enhancedChatSocket.js";
 import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
 import setupVideoCallSocket from './sockets/videoCallSocket.js';
+// Import scheduled jobs
+import "./jobs/expireSubscriptions.js";
 
 
 dotenv.config();
@@ -126,6 +132,11 @@ app.use('/api/admin', adminRoutes);
 // If you need separate admin auth endpoints, mount adminAuthRoutes as well
 // app.use('/api/admin', adminAuthRoutes);
 
+// Community routes
+app.use("/api/communities", communityRoutes);
+app.use("/api/community-profiles", communityProfileRoutes);
+app.use("/api/community/payment", communityPaymentRoutes); // Added route
+
 // Blockchain and NFT routes
 app.use("/api/posts", postTransferRoutes);
 
@@ -137,42 +148,32 @@ AdminJS.registerAdapter({ Database, Resource });
 
 
 // Configure AdminJS
-/* const adminOptions = {
+const adminOptions = {
   resources: [
     {
       resource: User,
       options: {
         properties: {
           password: { isVisible: false }, // Hide password
-        },
-        actions: {
-          banUser: {
-            actionType: "record",
-            icon: "Ban",
-            handler: async (request, response, context) => {
-              const { record } = context;
-              await record.update({ banned: true });
-              return { record: record.toJSON() };
-            },
-          },
-        },
-      },
+          resetPasswordToken: { isVisible: false },
+          resetPasswordExpire: { isVisible: false }
+        }
+      }
     },
     {
       resource: Post,
       options: {
         actions: {
-          delete: { isVisible: true }, // Allow post deletion
-        },
-      },
-    },
-    
+          delete: { isVisible: true } // Allow post deletion
+        }
+      }
+    }
   ],
   branding: {
     companyName: "Aeko Admin",
-    logo: "https://your-logo-url.com/logo.png",
-  },
-}; */
+    logo: "https://your-logo-url.com/logo.png"
+  }
+};
 
 // Remove conflicting admin auth routes - AdminJS handles this
 // app.post('/admin/login', adminLogin);

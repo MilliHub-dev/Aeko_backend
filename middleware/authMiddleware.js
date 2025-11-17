@@ -70,3 +70,7 @@ const authMiddleware = async (req, res, next) => {
 };
 
 export default authMiddleware;
+
+// Named exports for convenience
+export const protect = authMiddleware;
+export const authenticate = authMiddleware;

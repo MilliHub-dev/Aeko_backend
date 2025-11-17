@@ -68,6 +68,96 @@ const UserSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Interest'
   }],
+  // Community features
+  communities: [{
+    community: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Community'
+    },
+    role: {
+      type: String,
+      enum: ['member', 'moderator', 'owner'],
+      default: 'member'
+    },
+    joinedAt: {
+      type: Date,
+      default: Date.now
+    },
+    notifications: {
+      type: Boolean,
+      default: true
+    },
+    // Track subscription for paid communities
+    subscription: {
+      type: {
+        type: String,
+        enum: ['trial', 'one_time', 'monthly', 'yearly']
+      },
+      startDate: Date,
+      endDate: Date,
+      isActive: {
+        type: Boolean,
+        default: false
+      },
+      paymentMethod: String,
+      transactionId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Transaction'
+      }
+    }
+  }],
+  ownedCommunities: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Community'
+  }],
+  // Communities the user is following (without joining chat)
+  followingCommunities: [{
+    community: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Community'
+    },
+    followedAt: {
+      type: Date,
+      default: Date.now
+    },
+    notifications: {
+      type: Boolean,
+      default: true
+    }
+  }],
+  // Communities the user is a member of (including chat)
+  communityMemberships: [{
+    community: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Community'
+    },
+    role: {
+      type: String,
+      enum: ['member', 'moderator', 'owner'],
+      default: 'member'
+    },
+    joinedAt: {
+      type: Date,
+      default: Date.now
+    },
+    notifications: {
+      type: Boolean,
+      default: true
+    },
+    // Track payment status for paid communities
+    paymentStatus: {
+      isPaid: {
+        type: Boolean,
+        default: false
+      },
+      amountPaid: Number,
+      currency: String,
+      paymentDate: Date,
+      expiresAt: Date,
+      subscriptionId: String,
+      paymentMethod: String
+    }
+  }],
   // Onboarding status
   onboarding: {
     interestsSelected: { type: Boolean, default: false },

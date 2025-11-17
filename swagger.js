@@ -1,5 +1,13 @@
 import swaggerJSDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Import community documentation
+import communityDocs from './docs/community.docs.js';
 
 const swaggerConfig = {
     openapi: "3.0.0",
@@ -975,6 +983,9 @@ The enhanced chat system uses **Socket.IO** for real-time features:
             bearerAuth: []
         }
     ],
+    // Include community documentation
+    ...communityDocs,
+    
     paths: {
         "/health": {
             get: {

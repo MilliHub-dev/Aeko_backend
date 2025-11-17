@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import cron from "node-cron";
+import { checkExpiringSubscriptions } from "./subscriptionExpirationNotifications.js";
 
 // Run daily at midnight
 cron.schedule("0 0 * * *", async () => {
@@ -12,4 +13,10 @@ cron.schedule("0 0 * * *", async () => {
   );
 
   console.log("Expired subscriptions removed.");
+});
+
+// Run daily at 9 AM to check for subscriptions expiring in 7 days
+cron.schedule("0 9 * * *", async () => {
+  console.log("Checking for expiring subscriptions (7-day notice)...");
+  await checkExpiringSubscriptions();
 });

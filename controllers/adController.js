@@ -79,10 +79,20 @@ export async function createAd(req, res) {
 
     } catch (error) {
         console.error('Create ad error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Validation error',
+                errors: Object.values(error.errors).map(e => e.message)
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to create advertisement',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -119,10 +129,11 @@ export async function getUserAds(req, res) {
 
     } catch (error) {
         console.error('Get user ads error:', error);
+        
         res.status(500).json({
             success: false,
             message: 'Failed to fetch advertisements',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -145,10 +156,11 @@ export async function getTargetedAds(req, res) {
 
     } catch (error) {
         console.error('Get targeted ads error:', error);
+        
         res.status(500).json({
             success: false,
             message: 'Failed to fetch targeted advertisements',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -201,10 +213,19 @@ export async function trackImpression(req, res) {
 
     } catch (error) {
         console.error('Track impression error:', error);
+        
+        // Handle invalid ObjectId
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid ad ID format'
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to track impression',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -251,10 +272,19 @@ export async function trackClick(req, res) {
 
     } catch (error) {
         console.error('Track click error:', error);
+        
+        // Handle invalid ObjectId
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid ad ID format'
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to track click',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -293,10 +323,19 @@ export async function trackConversion(req, res) {
 
     } catch (error) {
         console.error('Track conversion error:', error);
+        
+        // Handle invalid ObjectId
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid ad ID format'
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to track conversion',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -358,10 +397,19 @@ export async function getAdAnalytics(req, res) {
 
     } catch (error) {
         console.error('Get ad analytics error:', error);
+        
+        // Handle invalid ObjectId
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid ad ID format'
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to fetch ad analytics',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -407,10 +455,28 @@ export async function updateAd(req, res) {
 
     } catch (error) {
         console.error('Update ad error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Validation error',
+                errors: Object.values(error.errors).map(e => e.message)
+            });
+        }
+        
+        // Handle invalid ObjectId
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid ad ID format'
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to update advertisement',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -453,10 +519,19 @@ export async function deleteAd(req, res) {
 
     } catch (error) {
         console.error('Delete ad error:', error);
+        
+        // Handle invalid ObjectId
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid ad ID format'
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to delete advertisement',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -489,10 +564,11 @@ export async function getAllAdsForReview(req, res) {
 
     } catch (error) {
         console.error('Get ads for review error:', error);
+        
         res.status(500).json({
             success: false,
             message: 'Failed to fetch ads for review',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -539,10 +615,19 @@ export async function reviewAd(req, res) {
 
     } catch (error) {
         console.error('Review ad error:', error);
+        
+        // Handle invalid ObjectId
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid ad ID format'
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: 'Failed to review advertisement',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -604,10 +689,11 @@ export async function getAdDashboard(req, res) {
 
     } catch (error) {
         console.error('Get ad dashboard error:', error);
+        
         res.status(500).json({
             success: false,
             message: 'Failed to fetch ad dashboard',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
