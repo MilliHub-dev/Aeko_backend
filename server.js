@@ -5,6 +5,9 @@ import dotenv from "dotenv";
 import http from "http";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import blockingMiddleware from "./middleware/blockingMiddleware.js";
+import privacyMiddleware from "./middleware/privacyMiddleware.js";
+import twoFactorMiddleware from "./middleware/twoFactorMiddleware.js";
 import { Server } from "socket.io";
 import path from "path";
 import fs from "fs";
@@ -46,6 +49,7 @@ import userInterestRoutes from "./routes/userInterestRoutes.js";
 import communityRoutes from "./routes/communityRoutes.js";
 import communityProfileRoutes from "./routes/communityProfileRoutes.js";
 import communityPaymentRoutes from "./routes/communityPaymentRoutes.js";
+import securityRoutes from "./routes/security.js";
 import Transaction from "./models/Transaction.js";
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
@@ -100,45 +104,72 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Initialize Passport (OAuth)
 app.use(passport.initialize());
 
-// API Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/posts", postRoutes);
-app.use("/api/comments", commentRoutes);
-app.use("/api/status", statusRoutes);
-app.use("/api/debates", debateRoutes);
-app.use("/api/challenges", challengeRoutes);
-app.use("/api/spaces", spaceRoutes);
-app.use("/api/chat", chatRoutes);
-app.use('/api/ads', adRoutes);
-app.use("/api/bot", botRoutes);
-app.use("/api/aeko", aekoRoutes);
-app.use("/api/aeko", aekoWalletRoutes);
-app.use("/api/nft", nftRoutes);
-app.use("/api/interests", interestRoutes);
-app.use("/api/user/interests", userInterestRoutes);
-app.use('/api/video', videoEditRoutes);
-app.use('/api/photo', photoEditRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/profile', profileRoutes);
-app.use('/api/subscription', subscriptionRoutes);
-app.use("/api/enhanced-bot", enhancedBotRoutes);
-app.use("/api/enhanced-chat", enhancedChatRoutes);
-app.use("/api/livestream", enhancedLiveStreamRoutes);
+// Security rate limiting for sensitive endpoints
+const securityRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 requests per windowMs for security endpoints
+  message: {
+    success: false,
+    message: 'Too many security requests, please try again later'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-// Admin API Routes
+// General API rate limiting
+const apiRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: {
+    success: false,
+    message: 'Too many requests, please try again later'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// API Routes with security middleware
+app.use("/api/auth", apiRateLimit, authRoutes);
+app.use("/api/users", apiRateLimit, blockingMiddleware.checkProfileAccess(), privacyMiddleware.checkProfileAccess(), userRoutes);
+app.use("/api/posts", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), postRoutes);
+app.use("/api/comments", apiRateLimit, blockingMiddleware.checkPostInteraction(), commentRoutes);
+app.use("/api/status", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), statusRoutes);
+app.use("/api/debates", apiRateLimit, blockingMiddleware.checkPostInteraction(), debateRoutes);
+app.use("/api/challenges", apiRateLimit, blockingMiddleware.checkPostInteraction(), challengeRoutes);
+app.use("/api/spaces", apiRateLimit, blockingMiddleware.checkPostInteraction(), spaceRoutes);
+app.use("/api/chat", apiRateLimit, blockingMiddleware.checkMessagingAccess(), chatRoutes);
+app.use('/api/ads', apiRateLimit, adRoutes);
+app.use("/api/bot", apiRateLimit, botRoutes);
+app.use("/api/aeko", apiRateLimit, aekoRoutes);
+app.use("/api/aeko", apiRateLimit, aekoWalletRoutes);
+app.use("/api/nft", apiRateLimit, nftRoutes);
+app.use("/api/interests", apiRateLimit, interestRoutes);
+app.use("/api/user/interests", apiRateLimit, userInterestRoutes);
+app.use('/api/video', apiRateLimit, videoEditRoutes);
+app.use('/api/photo', apiRateLimit, photoEditRoutes);
+app.use('/api/payments', apiRateLimit, paymentRoutes);
+app.use('/api/profile', apiRateLimit, blockingMiddleware.checkProfileAccess(), privacyMiddleware.checkProfileAccess(), profileRoutes);
+app.use('/api/subscription', apiRateLimit, subscriptionRoutes);
+app.use("/api/enhanced-bot", apiRateLimit, enhancedBotRoutes);
+app.use("/api/enhanced-chat", apiRateLimit, blockingMiddleware.checkMessagingAccess(), enhancedChatRoutes);
+app.use("/api/livestream", apiRateLimit, blockingMiddleware.checkPostInteraction(), enhancedLiveStreamRoutes);
+
+// Security routes with rate limiting
+app.use("/api/security", securityRateLimit, securityRoutes);
+
+// Admin API Routes with 2FA protection for sensitive operations
 // Expose admin REST endpoints such as /api/admin/setup/first-admin
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', apiRateLimit, adminRoutes);
 // If you need separate admin auth endpoints, mount adminAuthRoutes as well
 // app.use('/api/admin', adminAuthRoutes);
 
 // Community routes
-app.use("/api/communities", communityRoutes);
-app.use("/api/community-profiles", communityProfileRoutes);
-app.use("/api/community/payment", communityPaymentRoutes); // Added route
+app.use("/api/communities", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), communityRoutes);
+app.use("/api/community-profiles", apiRateLimit, blockingMiddleware.checkProfileAccess(), privacyMiddleware.checkProfileAccess(), communityProfileRoutes);
+app.use("/api/community/payment", apiRateLimit, communityPaymentRoutes); // Added route
 
 // Blockchain and NFT routes
-app.use("/api/posts", postTransferRoutes);
+app.use("/api/posts", apiRateLimit, postTransferRoutes);
 
 swaggerDocs(app);
 

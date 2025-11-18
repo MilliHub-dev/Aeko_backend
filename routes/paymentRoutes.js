@@ -1,5 +1,7 @@
 import express from 'express';
 import { initiatePayment, verifyPayment } from '../services/paymentService.js';
+import authMiddleware from '../middleware/authMiddleware.js';
+import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 
 const router = express.Router();
 
@@ -75,7 +77,7 @@ const router = express.Router();
  *         description: Bad request
  */
 
-router.post('/pay', initiatePayment);
-router.get('/verify', verifyPayment);
+router.post('/pay', authMiddleware, twoFactorMiddleware.requireTwoFactor(), initiatePayment);
+router.get('/verify', authMiddleware, verifyPayment);
 
 export default router;

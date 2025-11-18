@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/authMiddleware.js';
 import { isCommunityAdmin } from '../middleware/communityMiddleware.js';
 import * as paymentService from '../services/communityPaymentService.js';
 import Transaction from '../models/Transaction.js';
+import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 import {
   validatePaymentInitialization,
   validatePaymentVerification,
@@ -220,7 +221,7 @@ router.get('/verify', validatePaymentVerification, async (req, res) => {
  *       404:
  *         description: Community not found
  */
-router.post('/withdraw', authenticate, isCommunityAdmin, validateWithdrawalRequest, async (req, res) => {
+router.post('/withdraw', authenticate, isCommunityAdmin, twoFactorMiddleware.requireTwoFactor(), validateWithdrawalRequest, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

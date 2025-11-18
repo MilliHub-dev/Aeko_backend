@@ -1,6 +1,7 @@
 import express from "express";
 import Space from "../models/Space.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
 const router = express.Router();
 

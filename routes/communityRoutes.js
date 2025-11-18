@@ -16,6 +16,8 @@ import {
   isCommunityAdminOrModerator,
   checkPrivateCommunityAccess 
 } from '../middleware/communityMiddleware.js';
+import BlockingMiddleware from '../middleware/blockingMiddleware.js';
+import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 
 const router = express.Router();
 
@@ -67,6 +69,7 @@ const router = express.Router();
 router.post(
   '/',
   protect,
+  twoFactorMiddleware.requireTwoFactor(),
   [
     body('name', 'Name is required').not().isEmpty().trim(),
     body('description', 'Description is required').isLength({ min: 10 }),
@@ -290,6 +293,6 @@ router.put(
  *       404:
  *         description: Community not found
  */
-router.delete('/:id', protect, isCommunityAdmin, deleteCommunity);
+router.delete('/:id', protect, isCommunityAdmin, twoFactorMiddleware.requireTwoFactor(), deleteCommunity);
 
 export default router;

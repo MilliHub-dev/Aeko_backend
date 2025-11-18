@@ -16,6 +16,7 @@ import {
 } from '../controllers/adController.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 import { adminAuth } from '../middleware/adminAuth.js';
+import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 
 const router = express.Router();
 
@@ -685,7 +686,7 @@ router.get('/:adId/analytics', authMiddleware, getAdAnalytics);
 
 // CRUD operations for specific ads
 router.put('/:adId', authMiddleware, updateAd);
-router.delete('/:adId', authMiddleware, deleteAd);
+router.delete('/:adId', authMiddleware, twoFactorMiddleware.requireTwoFactor(), deleteAd);
 
 // Admin routes
 router.get('/admin/review', adminAuth, getAllAdsForReview);

@@ -49,6 +49,32 @@ const PostSchema = new mongoose.Schema(
             target: { type: String, default: "" }, // e.g., audience keywords/segments
             startDate: { type: Date, default: null },
             endDate: { type: Date, default: null }
+        },
+
+        // Privacy settings
+        privacy: {
+            level: {
+                type: String,
+                enum: ['public', 'followers', 'select_users', 'only_me'],
+                default: 'public'
+            },
+            selectedUsers: [{
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User'
+            }],
+            updatedAt: {
+                type: Date,
+                default: Date.now
+            },
+            updateHistory: [{
+                previousLevel: String,
+                newLevel: String,
+                updatedAt: Date,
+                updatedBy: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'User'
+                }
+            }]
         }
     },
     { timestamps: true }
@@ -60,6 +86,11 @@ PostSchema.index({ user: 1, views: -1 });
 PostSchema.index({ isEligibleForNFT: 1, nftMinted: 1 });
 PostSchema.index({ isListedForSale: 1 });
 PostSchema.index({ 'ad.isPromoted': 1, 'ad.startDate': 1, 'ad.endDate': 1 });
+
+// Privacy-related indexes for optimized queries
+PostSchema.index({ 'privacy.level': 1 });
+PostSchema.index({ 'privacy.selectedUsers': 1 });
+PostSchema.index({ user: 1, 'privacy.level': 1 });
 
 // Methods for view tracking
 PostSchema.methods.incrementView = function(userId) {
@@ -109,6 +140,107 @@ PostSchema.methods.updateEngagement = function() {
     }
     
     return this.save();
+};
+
+// Privacy validation and access control methods
+PostSchema.methods.validatePrivacyLevel = function(privacyLevel, selectedUsers = []) {
+    const validLevels = ['public', 'followers', 'select_users', 'only_me'];
+    
+    if (!validLevels.includes(privacyLevel)) {
+        throw new Error('Invalid privacy level');
+    }
+    
+    if (privacyLevel === 'select_users' && (!selectedUsers || selectedUsers.length === 0)) {
+        throw new Error('Selected users must be provided for select_users privacy level');
+    }
+    
+    return true;
+};
+
+PostSchema.methods.canUserAccess = async function(requestingUserId) {
+    // Post creator can always access their own posts
+    if (this.user.toString() === requestingUserId.toString()) {
+        return true;
+    }
+    
+    switch (this.privacy.level) {
+        case 'public':
+            return true;
+            
+        case 'only_me':
+            return false;
+            
+        case 'followers':
+            // Check if requesting user follows the post creator
+            const User = mongoose.model('User');
+            const postCreator = await User.findById(this.user);
+            return postCreator && postCreator.followers.includes(requestingUserId);
+            
+        case 'select_users':
+            return this.privacy.selectedUsers.includes(requestingUserId);
+            
+        default:
+            return false;
+    }
+};
+
+PostSchema.methods.updatePrivacy = function(newPrivacyLevel, selectedUsers = [], updatedBy) {
+    // Validate the new privacy level
+    this.validatePrivacyLevel(newPrivacyLevel, selectedUsers);
+    
+    // Store previous level for audit trail
+    const previousLevel = this.privacy.level;
+    
+    // Update privacy settings
+    this.privacy.level = newPrivacyLevel;
+    this.privacy.selectedUsers = newPrivacyLevel === 'select_users' ? selectedUsers : [];
+    this.privacy.updatedAt = new Date();
+    
+    // Add to update history for audit trail
+    this.privacy.updateHistory.push({
+        previousLevel: previousLevel,
+        newLevel: newPrivacyLevel,
+        updatedAt: new Date(),
+        updatedBy: updatedBy
+    });
+    
+    return this.save();
+};
+
+// Static method to find posts accessible by a specific user
+PostSchema.statics.findAccessiblePosts = async function(requestingUserId) {
+    const User = mongoose.model('User');
+    const requestingUser = await User.findById(requestingUserId);
+    
+    if (!requestingUser) {
+        throw new Error('User not found');
+    }
+    
+    // Build query for accessible posts
+    const query = {
+        $or: [
+            // Public posts
+            { 'privacy.level': 'public' },
+            // User's own posts
+            { user: requestingUserId },
+            // Posts where user is in selectedUsers
+            { 
+                'privacy.level': 'select_users',
+                'privacy.selectedUsers': requestingUserId 
+            }
+        ]
+    };
+    
+    // Add followers-only posts if user follows the creators
+    const followedUsers = requestingUser.following || [];
+    if (followedUsers.length > 0) {
+        query.$or.push({
+            'privacy.level': 'followers',
+            user: { $in: followedUsers }
+        });
+    }
+    
+    return this.find(query);
 };
 
 // Static method to find NFT eligible posts

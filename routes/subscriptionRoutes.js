@@ -1,6 +1,7 @@
 import express from "express";
 import User from "../models/User.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const router = express.Router();
 
 
 // Subscribe to Golden Tick
-router.post("/subscribe", authMiddleware, async (req, res) => {
+router.post("/subscribe", authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   const { userId, paymentSuccess } = req.body; // Payment must be verified
 
   try {

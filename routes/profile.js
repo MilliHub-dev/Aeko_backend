@@ -2,6 +2,10 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import authMiddleware from "../middleware/authMiddleware.js";
+import BlockingMiddleware from "../middleware/blockingMiddleware.js";
+import privacyFilterMiddleware from "../middleware/privacyMiddleware.js";
+import PrivacyManager from '../services/privacyManager.js';
+import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 
 const router = express.Router();
 
@@ -214,7 +218,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // ✅ Update Profile
-router.put('/update', authMiddleware, async (req, res) => {
+router.put('/update', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const { username, email, profilePic, bio } = req.body;
     const user = await User.findByIdAndUpdate(req.userId, { username, email, profilePic, bio }, { new: true });
@@ -225,7 +229,7 @@ router.put('/update', authMiddleware, async (req, res) => {
 });
 
 // ✅ Change Password
-router.put('/change-password', authMiddleware, async (req, res) => {
+router.put('/change-password', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     const user = await User.findById(req.userId);
@@ -244,7 +248,7 @@ router.put('/change-password', authMiddleware, async (req, res) => {
 });
 
 // ✅ Delete Account
-router.delete('/delete-account', authMiddleware, async (req, res) => {
+router.delete('/delete-account', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     await User.findByIdAndDelete(req.userId);
     res.json({ success: true, message: 'User account deleted successfully' });
@@ -253,21 +257,41 @@ router.delete('/delete-account', authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ List Followers
-router.get('/followers', authMiddleware, async (req, res) => {
+// ✅ List Followers - Updated with privacy controls
+router.get('/followers', authMiddleware, BlockingMiddleware.filterBlockedContent('followers', '_id'), async (req, res) => {
   try {
-    const user = await User.findById(req.userId).populate('followers', 'username email profilePic');
-    res.json({ success: true, followers: user.followers });
+    const user = await User.findById(req.userId).populate('followers', 'username email profilePicture');
+    
+    // Filter followers based on privacy settings
+    const filteredFollowers = [];
+    for (const follower of user.followers) {
+      const canView = await PrivacyManager.canViewProfile(req.userId, follower._id);
+      if (canView) {
+        filteredFollowers.push(follower);
+      }
+    }
+    
+    res.json({ success: true, followers: filteredFollowers });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// ✅ List Following
-router.get('/following', authMiddleware, async (req, res) => {
+// ✅ List Following - Updated with privacy controls
+router.get('/following', authMiddleware, BlockingMiddleware.filterBlockedContent('following', '_id'), async (req, res) => {
   try {
-    const user = await User.findById(req.userId).populate('following', 'username email profilePic');
-    res.json({ success: true, following: user.following });
+    const user = await User.findById(req.userId).populate('following', 'username email profilePicture');
+    
+    // Filter following list based on privacy settings
+    const filteredFollowing = [];
+    for (const followedUser of user.following) {
+      const canView = await PrivacyManager.canViewProfile(req.userId, followedUser._id);
+      if (canView) {
+        filteredFollowing.push(followedUser);
+      }
+    }
+    
+    res.json({ success: true, following: filteredFollowing });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -288,9 +312,15 @@ router.get('/followers/search', authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ Unfollow User
-router.put('/unfollow/:id', authMiddleware, async (req, res) => {
+// ✅ Unfollow User - Updated with privacy controls
+router.put('/unfollow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess(), async (req, res) => {
   try {
+    // Check if user can interact with the target user
+    const canView = await PrivacyManager.canViewProfile(req.userId, req.params.id);
+    if (!canView) {
+      return res.status(403).json({ error: 'You cannot unfollow this user' });
+    }
+
     const user = await User.findById(req.userId);
     const unfollowUser = await User.findById(req.params.id);
 
@@ -309,7 +339,7 @@ router.put('/unfollow/:id', authMiddleware, async (req, res) => {
 });
 
 // Verify user and give Blue Tick
-router.post("/verify", authMiddleware, async (req, res) => {
+router.post("/verify", authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
     const { userId } = req.body;
   
     try {

@@ -9,6 +9,7 @@ import NFTMarketplace from '../models/NFTMarketplace.js';
 import BotSettings from '../models/BotSettings.js';
 import Debate from '../models/Debate.js';
 import Challenge from '../models/Challenge.js';
+import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 
 const router = express.Router();
 
@@ -96,7 +97,7 @@ router.get('/stats', adminAuth, async (req, res) => {
 });
 
 // ===== USER MANAGEMENT =====
-router.put('/users/:userId/ban', adminAuth, async (req, res) => {
+router.put('/users/:userId/ban', adminAuth, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const { reason } = req.body;
     const user = await User.findByIdAndUpdate(
@@ -115,7 +116,7 @@ router.put('/users/:userId/ban', adminAuth, async (req, res) => {
   }
 });
 
-router.put('/users/:userId/unban', adminAuth, async (req, res) => {
+router.put('/users/:userId/unban', adminAuth, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(
       req.params.userId,
@@ -133,7 +134,7 @@ router.put('/users/:userId/unban', adminAuth, async (req, res) => {
   }
 });
 
-router.put('/users/:userId/verify', adminAuth, async (req, res) => {
+router.put('/users/:userId/verify', adminAuth, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const { tickType } = req.body; // 'blue' or 'golden'
     const updateData = tickType === 'golden' ? { goldenTick: true } : { blueTick: true };
@@ -155,7 +156,7 @@ router.put('/users/:userId/verify', adminAuth, async (req, res) => {
 });
 
 // ===== CONTENT MODERATION =====
-router.delete('/posts/:postId', adminAuth, async (req, res) => {
+router.delete('/posts/:postId', adminAuth, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const post = await Post.findByIdAndDelete(req.params.postId);
     
@@ -387,7 +388,7 @@ router.get('/system/logs', superAdminAuth, async (req, res) => {
 });
 
 // ===== ADMIN USER MANAGEMENT =====
-router.post('/admins/create', async (req, res) => {
+router.post('/admins/create', superAdminAuth, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const { email, permissions } = req.body;
     const user = await User.findOneAndUpdate(
@@ -463,7 +464,7 @@ router.post('/setup/first-admin', async (req, res) => {
   }
 });
 
-router.delete('/admins/:userId', superAdminAuth, async (req, res) => {
+router.delete('/admins/:userId', superAdminAuth, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(
       req.params.userId,

@@ -2,6 +2,7 @@ import express from 'express';
 import Interest from '../models/Interest.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 import adminMiddleware from '../middleware/adminMiddleware.js';
+import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ const router = express.Router();
  *       409:
  *         description: Interest already exists
  */
-router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
     try {
         const { name, displayName, description = '', icon = '' } = req.body;
         
@@ -140,7 +141,7 @@ router.get('/', async (req, res) => {
  *       404:
  *         description: Interest not found
  */
-router.put('/:id', authMiddleware, adminMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
     try {
         const { displayName, description, icon, isActive } = req.body;
         const interest = await Interest.findById(req.params.id);
@@ -193,7 +194,7 @@ router.put('/:id', authMiddleware, adminMiddleware, async (req, res) => {
  *       404:
  *         description: Interest not found
  */
-router.delete('/:id', authMiddleware, adminMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
     try {
         const interest = await Interest.findByIdAndDelete(req.params.id);
         

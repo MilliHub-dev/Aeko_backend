@@ -7,6 +7,7 @@ import LiveStream from "../models/LiveStream.js";
 import User from "../models/User.js";
 import EnhancedMessage from "../models/EnhancedMessage.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { uploadImage } from '../middleware/upload.js';
 
 const router = express.Router();
@@ -823,7 +824,7 @@ router.delete('/:streamId/moderators/:userId', authMiddleware, async (req, res) 
  * @desc    Process donation to stream
  * @access  Private
  */
-router.post('/:streamId/donate', authMiddleware, async (req, res) => {
+router.post('/:streamId/donate', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const { streamId } = req.params;
     const { amount, message, currency = 'USD' } = req.body;

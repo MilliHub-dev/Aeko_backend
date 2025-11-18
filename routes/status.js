@@ -2,6 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import Status from '../models/Status.js';
 import authMiddleware from "../middleware/authMiddleware.js";
+import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 const router = express.Router();
 
 
@@ -57,12 +58,93 @@ router.post('/', authMiddleware, async (req, res) => {
  *     responses:
  *       200:
  *         description: List of active statuses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 statuses:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       userId:
+ *                         type: object
+ *                       type:
+ *                         type: string
+ *                         enum: [text, image, video, shared_post]
+ *                       content:
+ *                         type: string
+ *                       sharedPostData:
+ *                         type: object
+ *                         properties:
+ *                           originalPost:
+ *                             type: object
+ *                           shareInfo:
+ *                             type: object
  */
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const statuses = await Status.find({ expiresAt: { $gt: new Date() } }).populate('userId', 'username profilePic');
-    res.json({ success: true, statuses });
+    const requestingUserId = req.userId;
+    
+    // Find active statuses and populate user information
+    const statuses = await Status.find({ expiresAt: { $gt: new Date() } })
+      .populate('userId', 'username profilePic')
+      .populate('originalContent.creator', 'username profilePic')
+      .populate('shareMetadata.sharedBy', 'username profilePic')
+      .sort({ createdAt: -1 });
+
+    // Apply blocking filter
+    const BlockingService = (await import('../services/blockingService.js')).default;
+    const filteredStatuses = [];
+    
+    for (const status of statuses) {
+      const authorId = status.userId._id || status.userId;
+      const canInteract = await BlockingService.enforceBlockingRules(requestingUserId, authorId);
+      if (canInteract) {
+        filteredStatuses.push(status);
+      }
+    }
+
+    // Format statuses to include shared post information
+    const formattedStatuses = await Promise.all(filteredStatuses.map(async (status) => {
+      const statusObj = status.toObject();
+      
+      // If this is a shared post, add formatted shared post data
+      if (status.isSharedPost()) {
+        const sharedPostData = await status.getSharedPostData();
+        statusObj.sharedPostData = sharedPostData;
+        
+        // Format the display content for shared posts
+        statusObj.displayContent = {
+          type: 'shared_post',
+          originalCreator: sharedPostData.originalPost.creator,
+          originalContent: sharedPostData.originalPost.content,
+          originalMedia: sharedPostData.originalPost.media,
+          originalType: sharedPostData.originalPost.type,
+          originalCreatedAt: sharedPostData.originalPost.createdAt,
+          sharedBy: sharedPostData.shareInfo.sharedBy,
+          sharedAt: sharedPostData.shareInfo.sharedAt,
+          additionalContent: sharedPostData.shareInfo.additionalContent
+        };
+      } else {
+        // For regular statuses, keep the original format
+        statusObj.displayContent = {
+          type: status.type,
+          content: status.content
+        };
+      }
+      
+      return statusObj;
+    }));
+
+    res.json({ success: true, statuses: formattedStatuses });
   } catch (error) {
+    console.error('Error fetching statuses:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -127,7 +209,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
  *       200:
  *         description: Reaction added successfully
  */
-router.post('/:id/react', authMiddleware, async (req, res) => {
+router.post('/:id/react', authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
   try {
     const { emoji } = req.body;
     const status = await Status.findById(req.params.id);

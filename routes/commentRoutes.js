@@ -2,6 +2,7 @@ import express from "express";
 import Comment from "../models/Comment.js";
 import Post from "../models/Post.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
 const router = express.Router();
 /**
@@ -97,7 +98,7 @@ const router = express.Router();
 
 
 // Add a comment to a post
-router.post("/:postId", authMiddleware, async (req, res) => {
+router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
   try {
     const { text } = req.body;
     const post = await Post.findById(req.params.postId);
@@ -141,11 +142,26 @@ router.post("/:postId", authMiddleware, async (req, res) => {
 });
 
 // Like a comment
-router.post("/like/:commentId", authMiddleware, async (req, res) => {
+router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
     try {
         const { user } = req.body;
-        const comment = await Comment.findById(req.params.commentId);
+        const comment = await Comment.findById(req.params.commentId).populate('user');
         if (!comment) return res.status(404).json({ error: "Comment not found" });
+
+        // Check if user can interact with comment author
+        const currentUserId = req.user?.id || req.user?._id;
+        const commentAuthorId = comment.user._id || comment.user;
+        
+        if (currentUserId && commentAuthorId) {
+            const BlockingService = (await import('../services/blockingService.js')).default;
+            const canInteract = await BlockingService.enforceBlockingRules(currentUserId, commentAuthorId);
+            
+            if (!canInteract) {
+                return res.status(403).json({
+                    error: 'Cannot interact with comment due to blocking relationship'
+                });
+            }
+        }
 
         if (!comment.likes.includes(user)) {
             comment.likes.push(user);
@@ -158,13 +174,17 @@ router.post("/like/:commentId", authMiddleware, async (req, res) => {
 });
 
 // Get comments for a post
-router.get("/:postId", authMiddleware, async (req, res) => {
+router.get("/:postId", authMiddleware, BlockingMiddleware.filterBlockedContent('comments', 'user._id'), async (req, res) => {
     try {
         const comments = await Comment.find({ post: req.params.postId })
             .populate("user", "name email username profilePicture")
             .sort({ createdAt: -1 });
 
-        res.json(comments);
+        // Store comments in res.locals for middleware filtering
+        res.locals.comments = comments;
+        
+        // Apply blocking filter through middleware, then return filtered results
+        res.json(res.locals.comments || comments);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

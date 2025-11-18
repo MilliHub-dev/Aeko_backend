@@ -4,13 +4,29 @@ import authMiddleware from "../middleware/authMiddleware.js";
 import getBotResponse from "../ai/bot.js";
 import enhancedBot from "../ai/enhancedBot.js";
 import { botResponseMiddleware} from "../middleware/botMiddleware.js";
+import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
 
 const router = express.Router();
 
 // Send message
-router.post("/send-message", authMiddleware, async (req, res) => {
+router.post("/send-message", authMiddleware, BlockingMiddleware.checkMessagingAccess(), async (req, res) => {
   const { recipientId, message } = req.body;
+
+  // Additional privacy check for messaging
+  try {
+    const PrivacyManager = (await import('../services/privacyManager.js')).default;
+    const canSendMessage = await PrivacyManager.canSendMessage(req.userId, recipientId);
+    
+    if (!canSendMessage) {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot send message due to privacy settings'
+      });
+    }
+  } catch (error) {
+    console.error('Privacy check error:', error);
+  }
 
   // Save message in DB
   const chatMessage = new Chat({

@@ -6,8 +6,7 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Import community documentation
-import communityDocs from './docs/community.docs.js';
+// Community documentation is included via the apis configuration below
 
 const swaggerConfig = {
     openapi: "3.0.0",
@@ -568,6 +567,56 @@ The enhanced chat system uses **Socket.IO** for real-time features:
                         enum: ["text", "image", "video"],
                         description: "Post type"
                     },
+                    privacy: {
+                        type: "object",
+                        description: "Privacy settings for the post",
+                        properties: {
+                            level: {
+                                type: "string",
+                                enum: ["public", "followers", "select_users", "only_me"],
+                                description: "Privacy level of the post",
+                                default: "public"
+                            },
+                            selectedUsers: {
+                                type: "array",
+                                items: {
+                                    type: "string",
+                                    description: "User ID"
+                                },
+                                description: "Array of user IDs for 'select_users' privacy level"
+                            },
+                            updatedAt: {
+                                type: "string",
+                                format: "date-time",
+                                description: "When privacy settings were last updated"
+                            },
+                            updateHistory: {
+                                type: "array",
+                                items: {
+                                    type: "object",
+                                    properties: {
+                                        previousLevel: {
+                                            type: "string",
+                                            description: "Previous privacy level"
+                                        },
+                                        newLevel: {
+                                            type: "string",
+                                            description: "New privacy level"
+                                        },
+                                        updatedAt: {
+                                            type: "string",
+                                            format: "date-time"
+                                        },
+                                        updatedBy: {
+                                            type: "string",
+                                            description: "User ID who made the change"
+                                        }
+                                    }
+                                },
+                                description: "Audit trail of privacy changes"
+                            }
+                        }
+                    },
                     views: {
                         type: "integer",
                         description: "Total post views"
@@ -617,6 +666,105 @@ The enhanced chat system uses **Socket.IO** for real-time features:
                             totalLikes: { type: "integer" },
                             engagementRate: { type: "number" }
                         }
+                    },
+                    createdAt: {
+                        type: "string",
+                        format: "date-time"
+                    },
+                    updatedAt: {
+                        type: "string",
+                        format: "date-time"
+                    }
+                }
+            },
+            Status: {
+                type: "object",
+                properties: {
+                    _id: {
+                        type: "string",
+                        description: "Status ID"
+                    },
+                    userId: {
+                        $ref: "#/components/schemas/User"
+                    },
+                    type: {
+                        type: "string",
+                        enum: ["text", "image", "video", "shared_post"],
+                        description: "Status type"
+                    },
+                    content: {
+                        type: "string",
+                        description: "Status content (text or media URL)"
+                    },
+                    reactions: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                userId: {
+                                    type: "string",
+                                    description: "User ID who reacted"
+                                },
+                                emoji: {
+                                    type: "string",
+                                    description: "Emoji reaction"
+                                }
+                            }
+                        },
+                        description: "User reactions to the status"
+                    },
+                    sharedPost: {
+                        type: "string",
+                        description: "ID of the original post (for shared_post type)",
+                        nullable: true
+                    },
+                    originalContent: {
+                        type: "object",
+                        description: "Preserved content from the original shared post",
+                        properties: {
+                            text: {
+                                type: "string",
+                                description: "Original post text"
+                            },
+                            media: {
+                                type: "string",
+                                description: "Original post media URL"
+                            },
+                            type: {
+                                type: "string",
+                                enum: ["text", "image", "video"],
+                                description: "Original post type"
+                            },
+                            creator: {
+                                type: "string",
+                                description: "Original post creator ID"
+                            },
+                            createdAt: {
+                                type: "string",
+                                format: "date-time",
+                                description: "Original post creation date"
+                            }
+                        }
+                    },
+                    shareMetadata: {
+                        type: "object",
+                        description: "Metadata about the sharing action",
+                        properties: {
+                            sharedAt: {
+                                type: "string",
+                                format: "date-time",
+                                description: "When the post was shared"
+                            },
+                            sharedBy: {
+                                type: "string",
+                                description: "User ID who shared the post"
+                            }
+                        }
+                    },
+                    expiresAt: {
+                        type: "string",
+                        format: "date-time",
+                        description: "When the status expires (24 hours from creation)"
                     },
                     createdAt: {
                         type: "string",
@@ -983,8 +1131,7 @@ The enhanced chat system uses **Socket.IO** for real-time features:
             bearerAuth: []
         }
     ],
-    // Include community documentation
-    ...communityDocs,
+    // Community documentation is included via the apis configuration below
     
     paths: {
         "/health": {
@@ -1250,7 +1397,7 @@ socket.emit('send-message', { chatId, content });
 // Define Swagger options
 const options = {
     definition: swaggerConfig,
-    apis: ["./routes/*.js"], // This will include all route files including enhancedChatRoutes.js
+    apis: ["./routes/*.js", "./docs/*.js"], // Include route files and documentation files
 };
 
 // Generate Swagger specification

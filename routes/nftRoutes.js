@@ -4,6 +4,7 @@ import User from "../models/User.js";
 import NFTMarketplace from "../models/NFTMarketplace.js";
 import AekoTransaction from "../models/AekoTransaction.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { 
   mintPostAsNFT,
   transferNFT,
@@ -320,7 +321,7 @@ router.get("/marketplace", async (req, res) => {
  *       404:
  *         description: NFT not found
  */
-router.post("/purchase", authMiddleware, async (req, res) => {
+router.post("/purchase", authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const { nftId, buyerPrivateKey } = req.body;
     const buyerId = req.user.id;
@@ -747,7 +748,7 @@ router.post("/bid", authMiddleware, async (req, res) => {
  *       404:
  *         description: NFT not found
  */
-router.post("/donate", authMiddleware, async (req, res) => {
+router.post("/donate", authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const { nftId, amount, privateKey, message = "" } = req.body;
     const donorId = req.user.id;

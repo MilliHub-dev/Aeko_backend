@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 
 const UserSchema = new mongoose.Schema({
@@ -162,6 +163,49 @@ const UserSchema = new mongoose.Schema({
   onboarding: {
     interestsSelected: { type: Boolean, default: false },
     completed: { type: Boolean, default: false }
+  },
+  
+  // Security Features - Blocking System
+  blockedUsers: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    blockedAt: { type: Date, default: Date.now },
+    reason: { type: String, default: "" }
+  }],
+  
+  // Privacy Settings
+  privacy: {
+    isPrivate: { type: Boolean, default: false },
+    allowFollowRequests: { type: Boolean, default: true },
+    showOnlineStatus: { type: Boolean, default: true },
+    allowDirectMessages: { 
+      type: String, 
+      enum: ["everyone", "followers", "none"], 
+      default: "everyone" 
+    }
+  },
+  
+  // Follow Requests for Private Accounts
+  followRequests: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    requestedAt: { type: Date, default: Date.now },
+    status: { 
+      type: String, 
+      enum: ["pending", "approved", "rejected"], 
+      default: "pending" 
+    }
+  }],
+  
+  // Two-Factor Authentication
+  twoFactorAuth: {
+    isEnabled: { type: Boolean, default: false },
+    secret: { type: String, default: null }, // Encrypted TOTP secret
+    backupCodes: [{ 
+      code: { type: String, required: true }, // Hashed backup code
+      used: { type: Boolean, default: false },
+      usedAt: { type: Date, default: null }
+    }],
+    enabledAt: { type: Date, default: null },
+    lastUsed: { type: Date, default: null }
   }
 }, { timestamps: true });
 
@@ -206,6 +250,63 @@ UserSchema.methods.comparePassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
 
+// 2FA Secret Encryption/Decryption Methods
+UserSchema.methods.encrypt2FASecret = function(secret) {
+  if (!secret) return null;
+  
+  const algorithm = 'aes-256-cbc';
+  const key = crypto.scryptSync(process.env.JWT_SECRET || 'fallback-key', 'salt', 32);
+  const iv = crypto.randomBytes(16);
+  
+  const cipher = crypto.createCipher(algorithm, key);
+  
+  let encrypted = cipher.update(secret, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  
+  return {
+    encrypted,
+    iv: iv.toString('hex')
+  };
+};
+
+UserSchema.methods.decrypt2FASecret = function(encryptedData) {
+  if (!encryptedData || !encryptedData.encrypted) return null;
+  
+  try {
+    const algorithm = 'aes-256-cbc';
+    const key = crypto.scryptSync(process.env.JWT_SECRET || 'fallback-key', 'salt', 32);
+    
+    const decipher = crypto.createDecipher(algorithm, key);
+    
+    let decrypted = decipher.update(encryptedData.encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return decrypted;
+  } catch (error) {
+    console.error('Error decrypting 2FA secret:', error);
+    return null;
+  }
+};
+
+// Set encrypted 2FA secret
+UserSchema.methods.set2FASecret = function(secret) {
+  const encryptedData = this.encrypt2FASecret(secret);
+  this.twoFactorAuth.secret = JSON.stringify(encryptedData);
+};
+
+// Get decrypted 2FA secret
+UserSchema.methods.get2FASecret = function() {
+  if (!this.twoFactorAuth.secret) return null;
+  
+  try {
+    const encryptedData = JSON.parse(this.twoFactorAuth.secret);
+    return this.decrypt2FASecret(encryptedData);
+  } catch (error) {
+    console.error('Error parsing encrypted 2FA secret:', error);
+    return null;
+  }
+};
+
 // Generate 4-digit verification code
 UserSchema.methods.generateVerificationCode = function() {
   const code = Math.floor(1000 + Math.random() * 9000).toString();
@@ -247,6 +348,20 @@ UserSchema.methods.canRequestNewCode = function() {
   const timeSinceLastCode = Date.now() - this.emailVerification.lastCodeSent.getTime();
   return timeSinceLastCode > 60000; // 1 minute cooldown
 };
+
+// Indexes for efficient blocking queries
+UserSchema.index({ "blockedUsers.user": 1 });
+UserSchema.index({ "blockedUsers.blockedAt": 1 });
+
+// Indexes for privacy and follow request queries
+UserSchema.index({ "privacy.isPrivate": 1 });
+UserSchema.index({ "followRequests.user": 1 });
+UserSchema.index({ "followRequests.status": 1 });
+UserSchema.index({ "followRequests.requestedAt": 1 });
+
+// Indexes for 2FA queries
+UserSchema.index({ "twoFactorAuth.isEnabled": 1 });
+UserSchema.index({ "twoFactorAuth.enabledAt": 1 });
 
 const User = mongoose.model("User", UserSchema);
 export default User;

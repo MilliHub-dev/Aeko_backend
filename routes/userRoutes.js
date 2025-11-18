@@ -5,6 +5,9 @@ import User from"../models/User.js";
 const router = express.Router();
 import Web3  from "web3"; // Correct way to import in Web3 v4
 import authMiddleware from "../middleware/authMiddleware.js";
+import BlockingMiddleware from "../middleware/blockingMiddleware.js";
+import privacyFilterMiddleware from "../middleware/privacyMiddleware.js";
+import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 
 const web3 = new Web3(new Web3.providers.HttpProvider("https://sepolia.infura.io/")); // Use Polygon zkEVM
 
@@ -158,11 +161,57 @@ router.post("/wallet-login", async (req, res) => {
  *       500:
  *         description: Server error
  */
-// Get User Profile
-router.get("/:id", async (req, res) => {
+// Get User Profile - Updated with privacy controls
+router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), privacyFilterMiddleware.checkProfileAccess(), async (req, res) => {
     try {
-        const user = await User.findById(req.params.id).select("-password");
-        res.json(user);
+        const user = await User.findById(req.params.id).select("-password -twoFactorAuth.secret -twoFactorAuth.backupCodes");
+        
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        // Filter sensitive information based on privacy settings
+        const viewerId = req.userId;
+        const profileId = req.params.id;
+        
+        // If viewing own profile, return full information
+        if (viewerId === profileId) {
+            return res.json(user);
+        }
+
+        // For other users, filter based on privacy settings
+        const filteredUser = {
+            _id: user._id,
+            username: user.username,
+            name: user.name,
+            profilePicture: user.profilePicture,
+            bio: user.bio,
+            blueTick: user.blueTick,
+            goldenTick: user.goldenTick,
+            createdAt: user.createdAt
+        };
+
+        // Show follower counts and following status based on privacy
+        if (!user.privacy?.isPrivate) {
+            filteredUser.followers = user.followers;
+            filteredUser.following = user.following;
+            filteredUser.posts = user.posts;
+        } else {
+            // For private accounts, only show if viewer is a follower
+            const isFollower = user.followers.includes(viewerId);
+            if (isFollower) {
+                filteredUser.followers = user.followers;
+                filteredUser.following = user.following;
+                filteredUser.posts = user.posts;
+            } else {
+                filteredUser.isPrivate = true;
+                filteredUser.followersCount = user.followers?.length || 0;
+                filteredUser.followingCount = user.following?.length || 0;
+                filteredUser.postsCount = user.posts?.length || 0;
+            }
+        }
+
+        res.json(filteredUser);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -203,7 +252,7 @@ import upload from "../middleware/upload.js";
  *       500:
  *         description: Server error
  */
-router.put("/profile-picture", authMiddleware, upload.single("image"), async (req, res) => {
+router.put("/profile-picture", authMiddleware, twoFactorMiddleware.requireTwoFactor(), upload.single("image"), async (req, res) => {
     try {
         const user = await User.findByIdAndUpdate(req.userId, { profilePicture: req.file.path }, { new: true });
         res.json(user);

@@ -8,6 +8,8 @@ import User from "../models/User.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import nodemailer from 'nodemailer';
 import passport from "../config/passport.js";
+import TwoFactorService from "../services/twoFactorService.js";
+import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 
 
 /**
@@ -598,10 +600,10 @@ router.post("/resend-verification", async (req, res) => {
     }
 });
 
-// Enhanced login with email verification check
-router.post("/login", async (req, res) => {
+// Enhanced login with email verification check and 2FA support
+router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, twoFactorToken, backupCode } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ 
@@ -648,6 +650,49 @@ router.post("/login", async (req, res) => {
             });
         }
 
+        // Check if 2FA is enabled for this user
+        const twoFactorStatus = await TwoFactorService.get2FAStatus(user._id);
+        
+        if (twoFactorStatus.isEnabled) {
+            // 2FA is enabled, verify the token or backup code
+            if (!twoFactorToken && !backupCode) {
+                return res.status(200).json({
+                    success: false,
+                    message: "2FA verification required",
+                    requires2FA: true,
+                    userId: user._id
+                });
+            }
+
+            let twoFactorValid = false;
+
+            if (backupCode) {
+                // Verify backup code
+                try {
+                    twoFactorValid = await TwoFactorService.verifyBackupCodeForLogin(user._id, backupCode);
+                } catch (error) {
+                    console.log(`2FA backup code verification failed for user ${email}:`, error.message);
+                }
+            } else if (twoFactorToken) {
+                // Verify TOTP token
+                try {
+                    twoFactorValid = await TwoFactorService.validateLoginWith2FA(user._id, twoFactorToken);
+                } catch (error) {
+                    console.log(`2FA TOTP verification failed for user ${email}:`, error.message);
+                }
+            }
+
+            if (!twoFactorValid) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Invalid 2FA token or backup code",
+                    requires2FA: true
+                });
+            }
+
+            console.log(`2FA verification successful for user ${email}`);
+        }
+
         const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
         
         res.json({ 
@@ -666,7 +711,8 @@ router.post("/login", async (req, res) => {
                 aekoBalance: user.aekoBalance,
                 emailVerification: { isVerified: user.emailVerification.isVerified },
                 profileCompletion: user.profileCompletion,
-                isAdmin: user.isAdmin
+                isAdmin: user.isAdmin,
+                twoFactorEnabled: twoFactorStatus.isEnabled
             }
         });
 

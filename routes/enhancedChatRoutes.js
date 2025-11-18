@@ -8,6 +8,7 @@ import Chat from "../models/Chat.js";
 import EnhancedMessage from "../models/EnhancedMessage.js";
 import enhancedBot from "../ai/enhancedBot.js";
 import { generalUpload } from '../middleware/upload.js';
+import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
 const router = express.Router();
 
@@ -274,7 +275,7 @@ router.get('/messages/:chatId', authenticate, async (req, res) => {
  *       200:
  *         description: Message sent successfully
  */
-router.post('/send-message', authenticate, async (req, res) => {
+router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAccess(), async (req, res) => {
   try {
     const { receiverId, chatId, content, messageType = 'text', replyToId } = req.body;
 
@@ -693,7 +694,7 @@ router.post('/bot-chat', authenticate, async (req, res) => {
  *       200:
  *         description: Chat created successfully
  */
-router.post('/create-chat', authenticate, async (req, res) => {
+router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAccess(), async (req, res) => {
   try {
     const { participants, isGroup = false, groupName } = req.body;
 
