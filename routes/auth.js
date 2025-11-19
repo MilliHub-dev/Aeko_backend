@@ -384,15 +384,181 @@ router.get(
         maxAge: 7 * 24 * 60 * 60 * 1000
       });
 
-      // Redirect to frontend
+      // Redirect to frontend with token in URL for flexibility
       const successUrl = process.env.OAUTH_SUCCESS_REDIRECT || "http://localhost:3000/auth/success";
-      res.redirect(successUrl);
+      const separator = successUrl.includes('?') ? '&' : '?';
+      res.redirect(`${successUrl}${separator}token=${token}`);
     } catch (err) {
+      console.error('OAuth callback error:', err);
       const failUrl = process.env.OAUTH_FAILURE_REDIRECT || "http://localhost:3000/auth/failed";
-      res.redirect(failUrl);
+      const separator = failUrl.includes('?') ? '&' : '?';
+      const errorMessage = encodeURIComponent(err.message || 'Authentication failed');
+      res.redirect(`${failUrl}${separator}error=oauth_failed&message=${errorMessage}`);
     }
   }
 );
+
+/**
+ * @swagger
+ * /api/auth/google/mobile:
+ *   post:
+ *     summary: Google OAuth for mobile apps (React Native)
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - idToken
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *                 description: Google ID token from mobile SDK
+ *               user:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   email:
+ *                     type: string
+ *                   photo:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Successful authentication
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 token:
+ *                   type: string
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Bad request - missing ID token
+ *       401:
+ *         description: Invalid ID token
+ */
+router.post('/google/mobile', async (req, res) => {
+  try {
+    const { idToken, user } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID token is required'
+      });
+    }
+
+    // Import and verify the ID token
+    const passportModule = await import('../config/passport.js');
+    const verifyGoogleIdToken = passportModule.verifyGoogleIdToken;
+    
+    const payload = await verifyGoogleIdToken(idToken);
+
+    if (!payload) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid ID token'
+      });
+    }
+
+    const email = payload.email?.toLowerCase();
+    const oauthId = payload.sub;
+
+    // Find or create user (same logic as web OAuth)
+    let dbUser = await User.findOne({ oauthProvider: 'google', oauthId });
+
+    if (!dbUser) {
+      if (email) {
+        dbUser = await User.findOne({ email });
+      }
+
+      if (dbUser) {
+        // Link existing account
+        dbUser.oauthProvider = 'google';
+        dbUser.oauthId = oauthId;
+        dbUser.avatar = user?.photo || dbUser.avatar || '';
+        dbUser.emailVerification.isVerified = true;
+        await dbUser.save();
+        console.log(`Linked existing account ${email} to Google OAuth (mobile)`);
+      } else {
+        // Create new user with unique username
+        const usernameBase = user?.name || (email ? email.split('@')[0] : `user_${oauthId.slice(-6)}`);
+        let username = usernameBase.replace(/\s+/g, '').toLowerCase();
+        let counter = 1;
+        
+        while (await User.findOne({ username })) {
+          username = `${usernameBase.replace(/\s+/g, '').toLowerCase()}${counter}`;
+          counter++;
+        }
+
+        dbUser = await User.create({
+          name: user?.name || username,
+          username,
+          email: email || `${oauthId}@google-oauth.local`,
+          password: oauthId,
+          oauthProvider: 'google',
+          oauthId,
+          avatar: user?.photo || '',
+          'emailVerification.isVerified': true,
+        });
+        console.log(`Created new user ${username} via Google OAuth (mobile)`);
+      }
+    }
+
+    // Update last login and avatar
+    dbUser.lastLoginAt = new Date();
+    if (user?.photo && dbUser.avatar !== user.photo) {
+      dbUser.avatar = user.photo;
+    }
+    await dbUser.save();
+
+    // Generate JWT
+    const token = jwt.sign(
+      { id: dbUser._id, email: dbUser.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token,
+      user: {
+        _id: dbUser._id,
+        name: dbUser.name,
+        username: dbUser.username,
+        email: dbUser.email,
+        profilePicture: dbUser.profilePicture,
+        avatar: dbUser.avatar,
+        bio: dbUser.bio,
+        blueTick: dbUser.blueTick,
+        goldenTick: dbUser.goldenTick,
+        aekoBalance: dbUser.aekoBalance,
+        emailVerification: { isVerified: dbUser.emailVerification.isVerified },
+        profileCompletion: dbUser.profileCompletion,
+        isAdmin: dbUser.isAdmin,
+        oauthProvider: dbUser.oauthProvider,
+      }
+    });
+  } catch (error) {
+    console.error('Mobile Google OAuth error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Authentication failed',
+      error: error.message
+    });
+  }
+});
 
 router.post("/signup", async (req, res) => {
     try {
@@ -811,8 +977,58 @@ router.post("/wallet-login", async (req, res) => {
     }
 });
 
+// Get current authenticated user (useful after OAuth)
+router.get('/me', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select('-password -twoFactorAuth.secret -twoFactorAuth.backupCodes');
+        
+        if (!user) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'User not found' 
+            });
+        }
+
+        res.json({ 
+            success: true,
+            user: {
+                _id: user._id,
+                name: user.name,
+                username: user.username,
+                email: user.email,
+                profilePicture: user.profilePicture,
+                avatar: user.avatar,
+                bio: user.bio,
+                blueTick: user.blueTick,
+                goldenTick: user.goldenTick,
+                aekoBalance: user.aekoBalance,
+                emailVerification: { isVerified: user.emailVerification.isVerified },
+                profileCompletion: user.profileCompletion,
+                isAdmin: user.isAdmin,
+                oauthProvider: user.oauthProvider,
+                lastLoginAt: user.lastLoginAt,
+                createdAt: user.createdAt
+            }
+        });
+    } catch (error) {
+        console.error('Get user error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to get user information', 
+            error: error.message 
+        });
+    }
+});
+
 // ✅ Logout Route
 router.post('/logout', (req, res) => {
+    // Clear the token cookie
+    res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax"
+    });
+    
     res.json({ 
         success: true, 
         message: 'Logged out successfully' 
