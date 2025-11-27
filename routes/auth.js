@@ -384,13 +384,12 @@ router.get(
         maxAge: 7 * 24 * 60 * 60 * 1000
       });
 
-      // Redirect to frontend with token in URL for flexibility
-      const successUrl = process.env.OAUTH_SUCCESS_REDIRECT || "http://localhost:3000/auth/success";
-      const separator = successUrl.includes('?') ? '&' : '?';
-      res.redirect(`${successUrl}${separator}token=${token}`);
+      // Redirect to deep link for mobile app
+      const deepLinkUrl = `aeko://home?token=${token}`;
+      res.redirect(deepLinkUrl);
     } catch (err) {
       console.error('OAuth callback error:', err);
-      const failUrl = process.env.OAUTH_FAILURE_REDIRECT || "http://localhost:3000/auth/failed";
+      const failUrl = process.env.OAUTH_FAILURE_REDIRECT || "aeko://auth/failed";
       const separator = failUrl.includes('?') ? '&' : '?';
       const errorMessage = encodeURIComponent(err.message || 'Authentication failed');
       res.redirect(`${failUrl}${separator}error=oauth_failed&message=${errorMessage}`);
@@ -440,6 +439,10 @@ router.get(
  *                   type: string
  *                 token:
  *                   type: string
+ *                 deepLink:
+ *                   type: string
+ *                   description: Deep link URL for mobile app navigation
+ *                   example: "aeko://home?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *                 user:
  *                   $ref: '#/components/schemas/User'
  *       400:
@@ -533,6 +536,7 @@ router.post('/google/mobile', async (req, res) => {
       success: true,
       message: 'Login successful',
       token,
+      deepLink: `aeko://home?token=${token}`,
       user: {
         _id: dbUser._id,
         name: dbUser.name,
@@ -684,6 +688,7 @@ router.post("/verify-email", async (req, res) => {
             success: true,
             message: "Email verified successfully! Welcome to Aeko!",
             token,
+            deepLink: `aeko://home?token=${token}`,
             user: {
                 _id: user._id,
                 name: user.name,
@@ -865,6 +870,7 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
             success: true,
             message: "Login successful",
             token,
+            deepLink: `aeko://home?token=${token}`,
             user: {
                 _id: user._id,
                 name: user.name,

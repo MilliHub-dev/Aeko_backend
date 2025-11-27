@@ -221,6 +221,150 @@ import upload from "../middleware/upload.js";
 
 /**
  * @swagger
+ * /api/users:
+ *   get:
+ *     summary: Get all users
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Number of users per page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search users by name or username
+ *     responses:
+ *       200:
+ *         description: List of users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 users:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     currentPage:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *                     totalUsers:
+ *                       type: integer
+ *                     hasNext:
+ *                       type: boolean
+ *                     hasPrev:
+ *                       type: boolean
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.get("/", authMiddleware, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+        const search = req.query.search;
+        const skip = (page - 1) * limit;
+
+        // Build search query
+        let query = {};
+        if (search) {
+            query = {
+                $or: [
+                    { name: { $regex: search, $options: 'i' } },
+                    { username: { $regex: search, $options: 'i' } }
+                ]
+            };
+        }
+
+        // Get total count for pagination
+        const totalUsers = await User.countDocuments(query);
+        const totalPages = Math.ceil(totalUsers / limit);
+
+        // Get users with pagination
+        const users = await User.find(query)
+            .select("-password -twoFactorAuth.secret -twoFactorAuth.backupCodes -emailVerification.code -emailVerification.codeAttempts")
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+
+        // Filter users based on privacy settings
+        const filteredUsers = users.map(user => {
+            const userObj = user.toObject();
+            
+            // Remove sensitive fields and apply privacy filters
+            const publicUser = {
+                _id: userObj._id,
+                name: userObj.name,
+                username: userObj.username,
+                profilePicture: userObj.profilePicture,
+                avatar: userObj.avatar,
+                bio: userObj.bio,
+                blueTick: userObj.blueTick,
+                goldenTick: userObj.goldenTick,
+                createdAt: userObj.createdAt,
+                emailVerification: { isVerified: userObj.emailVerification?.isVerified || false }
+            };
+
+            // Add follower counts if profile is not private
+            if (!userObj.privacy?.isPrivate) {
+                publicUser.followersCount = userObj.followers?.length || 0;
+                publicUser.followingCount = userObj.following?.length || 0;
+                publicUser.postsCount = userObj.posts?.length || 0;
+            } else {
+                publicUser.isPrivate = true;
+            }
+
+            return publicUser;
+        });
+
+        res.json({
+            success: true,
+            users: filteredUsers,
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalUsers,
+                hasNext: page < totalPages,
+                hasPrev: page > 1,
+                limit
+            }
+        });
+    } catch (error) {
+        console.error('Get all users error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: "Failed to retrieve users", 
+            error: error.message 
+        });
+    }
+});
+
+/**
+ * @swagger
  * /api/users/profile-picture:
  *   put:
  *     summary: Upload or update profile picture
