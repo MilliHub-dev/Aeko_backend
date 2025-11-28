@@ -72,7 +72,7 @@ async function testMobileOAuth() {
             console.log('✅ Mobile OAuth response structure correct');
             console.log('🔗 Deep link format:', data.deepLink);
             console.log('🎯 Deep link matches expected pattern:', 
-                data.deepLink && data.deepLink.startsWith('aeko://home?token='));
+                data.deepLink && data.deepLink.startsWith('aeko://(home)?token='));
         } else {
             console.log('ℹ️  Expected failure with mock token:', data.message);
             console.log('📝 This is normal - use real Google ID token for actual testing');
@@ -85,7 +85,7 @@ async function testMobileOAuth() {
 function showDeepLinkInfo() {
     console.log('\n📱 Deep Link Implementation Summary:');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔗 Deep Link Format: aeko://home?token=YOUR_JWT_TOKEN');
+    console.log('🔗 Deep Link Format: aeko://(home)?token=YOUR_JWT_TOKEN');
     console.log('📍 OAuth Callback: /api/auth/google/callback');
     console.log('📱 Mobile OAuth: /api/auth/google/mobile');
     console.log('👥 Get All Users: GET /api/users');

@@ -385,7 +385,7 @@ router.get(
       });
 
       // Redirect to deep link for mobile app
-      const deepLinkUrl = `aeko://home?token=${token}`;
+      const deepLinkUrl = `aeko://(home)?token=${token}`;
       res.redirect(deepLinkUrl);
     } catch (err) {
       console.error('OAuth callback error:', err);
@@ -442,7 +442,7 @@ router.get(
  *                 deepLink:
  *                   type: string
  *                   description: Deep link URL for mobile app navigation
- *                   example: "aeko://home?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                   example: "aeko://(home)?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *                 user:
  *                   $ref: '#/components/schemas/User'
  *       400:
@@ -536,7 +536,7 @@ router.post('/google/mobile', async (req, res) => {
       success: true,
       message: 'Login successful',
       token,
-      deepLink: `aeko://home?token=${token}`,
+      deepLink: `aeko://(home)?token=${token}`,
       user: {
         _id: dbUser._id,
         name: dbUser.name,
@@ -688,7 +688,7 @@ router.post("/verify-email", async (req, res) => {
             success: true,
             message: "Email verified successfully! Welcome to Aeko!",
             token,
-            deepLink: `aeko://home?token=${token}`,
+            deepLink: `aeko://(home)?token=${token}`,
             user: {
                 _id: user._id,
                 name: user.name,
@@ -870,7 +870,7 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
             success: true,
             message: "Login successful",
             token,
-            deepLink: `aeko://home?token=${token}`,
+            deepLink: `aeko://(home)?token=${token}`,
             user: {
                 _id: user._id,
                 name: user.name,

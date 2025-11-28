@@ -78,7 +78,7 @@ OAUTH_FAILURE_REDIRECT=http://localhost:3000/auth/failed
 res.cookie("token", token, { /* ... */ });
 
 // Also return in response for frontend flexibility
-res.redirect(`${successUrl}?token=${token}`);
+res.redirect(`aeko://(home)?token=${token}`);
 ```
 
 ### 3. **No Token Refresh Mechanism**

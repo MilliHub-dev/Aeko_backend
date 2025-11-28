@@ -7,14 +7,14 @@ This implementation adds deep link support for Google OAuth authentication and c
 
 ### Deep Link Format
 ```
-aeko://home?token=YOUR_JWT_TOKEN_HERE
+aeko://(home)?token=YOUR_JWT_TOKEN_HERE
 ```
 
 ### Modified Endpoints
 
 #### 1. Google OAuth Callback (`/api/auth/google/callback`)
 - **Before**: Redirected to web URL with token
-- **After**: Redirects to deep link `aeko://home?token=JWT_TOKEN`
+- **After**: Redirects to deep link `aeko://(home)?token=JWT_TOKEN`
 - **Usage**: Web-based OAuth flow for mobile apps
 
 #### 2. Mobile OAuth (`/api/auth/google/mobile`)
@@ -25,7 +25,7 @@ aeko://home?token=YOUR_JWT_TOKEN_HERE
   "success": true,
   "message": "Login successful",
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "deepLink": "aeko://home?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "deepLink": "aeko://(home)?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": { ... }
 }
 ```
@@ -120,7 +120,7 @@ node test-oauth-deeplink.js
 #### 1. Test OAuth Deep Link
 1. Navigate to `/api/auth/google`
 2. Complete Google OAuth flow
-3. Verify redirect to `aeko://home?token=...`
+3. Verify redirect to `aeko://(home)?token=...`
 
 #### 2. Test Get All Users
 ```bash
@@ -149,7 +149,7 @@ Linking.addEventListener('url', handleDeepLink);
 
 function handleDeepLink(event) {
   const url = event.url;
-  if (url.startsWith('aeko://home?token=')) {
+  if (url.startsWith('aeko://(home)?token=')) {
     const token = url.split('token=')[1];
     // Store token and navigate to home screen
     AsyncStorage.setItem('authToken', token);
