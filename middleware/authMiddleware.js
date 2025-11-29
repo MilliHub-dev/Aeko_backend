@@ -60,7 +60,8 @@ const authMiddleware = async (req, res, next) => {
     }
 
     req.user = user;
-    req.userId = userId; // For backward compatibility
+    req.user.id = userId; // Ensure req.user.id is set
+    req.userId = userId; // For backward compatibility with routes that use req.userId
     next();
     
   } catch (error) {

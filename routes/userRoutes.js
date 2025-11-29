@@ -171,7 +171,7 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
         }
 
         // Filter sensitive information based on privacy settings
-        const viewerId = req.userId;
+        const viewerId = req.userId || req.user?.id || req.user?._id;
         const profileId = req.params.id;
         
         // If viewing own profile, return full information
@@ -398,7 +398,11 @@ router.get("/", authMiddleware, async (req, res) => {
  */
 router.put("/profile-picture", authMiddleware, twoFactorMiddleware.requireTwoFactor(), upload.single("image"), async (req, res) => {
     try {
-        const user = await User.findByIdAndUpdate(req.userId, { profilePicture: req.file.path }, { new: true });
+        const userId = req.userId || req.user?.id || req.user?._id;
+        const user = await User.findByIdAndUpdate(userId, { profilePicture: req.file.path }, { new: true });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
         res.json(user);
     } catch (error) {
         res.status(500).json({ error: error.message });

@@ -116,7 +116,7 @@ router.post("/create", authMiddleware,
   },
   async (req, res) => {
   try {
-    const user = req.userId;
+    const user = req.userId || req.user?.id || req.user?._id;
     const { text = "", type: rawType, privacy = "public", selectedUsers: rawSelectedUsers } = req.body;
 
     // Infer type if not provided
@@ -345,8 +345,10 @@ router.put("/:postId/privacy", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Post not found" });
     }
 
+    const userId = req.userId || req.user?.id || req.user?._id;
+    
     // Only the post creator can update privacy settings
-    if (post.user.toString() !== String(req.userId)) {
+    if (post.user.toString() !== String(userId)) {
       return res.status(403).json({ error: "Not authorized to update privacy for this post" });
     }
 
@@ -369,17 +371,17 @@ router.put("/:postId/privacy", authMiddleware, async (req, res) => {
       }
 
       // Validate that all selectedUsers are valid ObjectIds
-      for (const userId of selectedUsers) {
-        if (!mongoose.Types.ObjectId.isValid(userId)) {
+      for (const userIdToCheck of selectedUsers) {
+        if (!mongoose.Types.ObjectId.isValid(userIdToCheck)) {
           return res.status(400).json({ 
-            error: `Invalid user ID format: ${userId}` 
+            error: `Invalid user ID format: ${userIdToCheck}` 
           });
         }
       }
     }
 
     // Use the Post model's updatePrivacy method to handle the update and audit trail
-    await post.updatePrivacy(privacy, selectedUsers, req.userId);
+    await post.updatePrivacy(privacy, selectedUsers, userId);
 
     // Fetch the updated post with populated fields
     const updatedPost = await Post.findById(postId)
@@ -583,8 +585,10 @@ router.post("/:postId/share-to-status", authMiddleware, ...SecurityMiddleware.po
       return res.status(404).json({ error: "Post not found" });
     }
 
+    const userId = req.userId || req.user?.id || req.user?._id;
+    
     // Check if the requesting user can access the original post
-    const canAccess = await originalPost.canUserAccess(req.userId);
+    const canAccess = await originalPost.canUserAccess(userId);
     if (!canAccess) {
       return res.status(403).json({ error: "You don't have permission to share this post" });
     }
@@ -598,7 +602,7 @@ router.post("/:postId/share-to-status", authMiddleware, ...SecurityMiddleware.po
     // Create shared status using the Status model's static method
     const sharedStatus = await Status.createSharedPostStatus(
       postId, 
-      req.userId, 
+      userId, 
       additionalContent
     );
 
@@ -687,11 +691,12 @@ router.post("/:postId/promote", authMiddleware, ...SecurityMiddleware.sensitiveO
     const postId = normalizeObjectId(req.params.postId);
     if (!postId) return res.status(400).json({ error: "Invalid postId format" });
 
+    const userId = req.userId || req.user?.id || req.user?._id;
     const post = await Post.findById(postId);
     if (!post) return res.status(404).json({ error: "Post not found" });
 
     // Only the owner can promote their post
-    if (post.user.toString() !== String(req.userId)) {
+    if (post.user.toString() !== String(userId)) {
       return res.status(403).json({ error: "Not authorized to promote this post" });
     }
 
@@ -748,7 +753,7 @@ router.get("/user/:userId", authMiddleware, BlockingMiddleware.checkProfileAcces
     const userId = normalizeObjectId(req.params.userId);
     if (!userId) return res.status(400).json({ error: "Invalid userId format" });
     
-    const requestingUserId = req.userId;
+    const requestingUserId = req.userId || req.user?.id || req.user?._id;
     
     // Build privacy-aware query that includes user filter
     const baseQuery = { user: userId };
@@ -818,7 +823,7 @@ router.get("/user/:userId", authMiddleware, BlockingMiddleware.checkProfileAcces
  */
 router.get("/mixed", authMiddleware, async (req, res) => {
   try {
-    const requestingUserId = req.userId;
+    const requestingUserId = req.userId || req.user?.id || req.user?._id;
     
     // Build privacy-aware query
     const accessQuery = await privacyFilterMiddleware.buildAccessQuery(requestingUserId);
@@ -877,7 +882,7 @@ router.get("/mixed", authMiddleware, async (req, res) => {
 router.get("/videos", authMiddleware, async (req, res) => {
   try {
     const { effect } = req.query;
-    const requestingUserId = req.userId;
+    const requestingUserId = req.userId || req.user?.id || req.user?._id;
     
     // Map friendly effect names to Cloudinary transformation strings
     const effectMap = {
@@ -962,7 +967,7 @@ router.get("/videos", authMiddleware, async (req, res) => {
 // Repost another user's post (like retweet)
 router.post("/repost/:postId", authMiddleware, ...SecurityMiddleware.postOperations(), async (req, res) => {
   try {
-    const user = req.userId;
+    const user = req.userId || req.user?.id || req.user?._id;
     const postId = normalizeObjectId(req.params.postId);
     if (!postId) return res.status(400).json({ error: "Invalid postId format" });
     const originalPost = await Post.findById(postId);
@@ -1020,7 +1025,7 @@ router.post("/repost/:postId", authMiddleware, ...SecurityMiddleware.postOperati
  */
 router.get("/feed", authMiddleware, async (req, res) => {
     try {
-        const requestingUserId = req.userId;
+        const requestingUserId = req.userId || req.user?.id || req.user?._id;
         
         // Build privacy-aware query for better performance
         const accessQuery = await privacyFilterMiddleware.buildAccessQuery(requestingUserId);
@@ -1089,7 +1094,7 @@ router.get("/feed", authMiddleware, async (req, res) => {
 // Like a post (Toggle like/unlike)
 router.post("/like/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
   try {
-    const user = req.userId;
+    const user = req.userId || req.user?.id || req.user?._id;
     const postId = normalizeObjectId(req.params.postId);
     const post = await Post.findById(postId);
     if (!post) return res.status(404).json({ error: "Post not found" });
@@ -1202,7 +1207,7 @@ router.get("/:postId", authMiddleware, async (req, res) => {
     
     if (!post) return res.status(404).json({ error: "Post not found" });
     
-    const requestingUserId = req.userId;
+    const requestingUserId = req.userId || req.user?.id || req.user?._id;
     
     // Check if the requesting user can access this post
     const canAccess = await post.canUserAccess(requestingUserId);

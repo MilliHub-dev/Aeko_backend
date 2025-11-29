@@ -38,8 +38,9 @@ const router = express.Router();
  */
 router.post('/', authMiddleware, async (req, res) => {
   try {
+    const userId = req.userId || req.user?.id || req.user?._id;
     const { type, content } = req.body;
-    const newStatus = await Status.create({ userId: req.userId, type, content });
+    const newStatus = await Status.create({ userId, type, content });
     res.status(201).json({ success: true, status: newStatus });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -89,7 +90,7 @@ router.post('/', authMiddleware, async (req, res) => {
  */
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const requestingUserId = req.userId;
+    const requestingUserId = req.userId || req.user?.id || req.user?._id;
     
     // Find active statuses and populate user information
     const statuses = await Status.find({ expiresAt: { $gt: new Date() } })
@@ -170,7 +171,8 @@ router.get('/', authMiddleware, async (req, res) => {
  */
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
-    const status = await Status.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    const userId = req.userId || req.user?.id || req.user?._id;
+    const status = await Status.findOneAndDelete({ _id: req.params.id, userId });
     if (!status) return res.status(404).json({ error: 'Status not found' });
 
     res.json({ success: true, message: 'Status deleted' });
@@ -211,11 +213,12 @@ router.delete('/:id', authMiddleware, async (req, res) => {
  */
 router.post('/:id/react', authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
   try {
+    const userId = req.userId || req.user?.id || req.user?._id;
     const { emoji } = req.body;
     const status = await Status.findById(req.params.id);
     if (!status) return res.status(404).json({ error: 'Status not found' });
 
-    status.reactions.push({ userId: req.userId, emoji });
+    status.reactions.push({ userId, emoji });
     await status.save();
 
     res.json({ success: true, message: 'Reaction added' });
