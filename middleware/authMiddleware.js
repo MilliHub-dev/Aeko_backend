@@ -7,18 +7,24 @@ const authMiddleware = async (req, res, next) => {
     const token = req.headers.authorization?.split(" ")[1];
 
     if (!token) {
+      console.log('❌ Auth failed: No token provided');
+      console.log('Headers:', req.headers);
       return res.status(401).json({ 
         success: false,
         error: "Unauthorized: No token provided" 
       });
     }
 
+    console.log('🔑 Token received:', token.substring(0, 20) + '...');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('✅ Token decoded:', decoded);
     
     // Handle both 'id' and 'userId' from different token formats
     const userId = decoded.id || decoded.userId;
+    console.log('👤 Extracted userId:', userId);
     
     if (!userId) {
+      console.log('❌ No userId found in token. Decoded:', decoded);
       return res.status(403).json({ 
         success: false,
         error: "Forbidden: Invalid token format" 
@@ -27,8 +33,10 @@ const authMiddleware = async (req, res, next) => {
 
     // Fetch user and attach to request
     const user = await User.findById(userId).select('-password');
+    console.log('🔍 User lookup result:', user ? `Found: ${user.username}` : 'Not found');
     
     if (!user) {
+      console.log('❌ User not found for ID:', userId);
       return res.status(404).json({ 
         success: false,
         error: "User not found" 
@@ -62,6 +70,7 @@ const authMiddleware = async (req, res, next) => {
     req.user = user;
     req.user.id = userId; // Ensure req.user.id is set
     req.userId = userId; // For backward compatibility with routes that use req.userId
+    console.log('✅ Auth successful. User:', user.username, 'ID:', userId);
     next();
     
   } catch (error) {
