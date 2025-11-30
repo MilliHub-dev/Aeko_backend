@@ -130,7 +130,7 @@ const apiRateLimit = rateLimit({
 
 // API Routes with security middleware
 app.use("/api/auth", apiRateLimit, authRoutes);
-app.use("/api/users", apiRateLimit, blockingMiddleware.checkProfileAccess(), privacyMiddleware.checkProfileAccess(), userRoutes);
+app.use("/api/users", apiRateLimit, userRoutes);
 app.use("/api/posts", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), postRoutes);
 app.use("/api/comments", apiRateLimit, blockingMiddleware.checkPostInteraction(), commentRoutes);
 app.use("/api/status", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), statusRoutes);
