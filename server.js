@@ -148,7 +148,7 @@ app.use("/api/user/interests", apiRateLimit, userInterestRoutes);
 app.use('/api/video', apiRateLimit, videoEditRoutes);
 app.use('/api/photo', apiRateLimit, photoEditRoutes);
 app.use('/api/payments', apiRateLimit, paymentRoutes);
-app.use('/api/profile', apiRateLimit, blockingMiddleware.checkProfileAccess(), privacyMiddleware.checkProfileAccess(), profileRoutes);
+app.use('/api/profile', apiRateLimit, profileRoutes);
 app.use('/api/subscription', apiRateLimit, subscriptionRoutes);
 app.use("/api/enhanced-bot", apiRateLimit, enhancedBotRoutes);
 app.use("/api/enhanced-chat", apiRateLimit, blockingMiddleware.checkMessagingAccess(), enhancedChatRoutes);
