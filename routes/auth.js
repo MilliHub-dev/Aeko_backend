@@ -363,14 +363,16 @@ const web3 = new Web3(new Web3.providers.HttpProvider("https://sepolia.infura.io
  *       401:
  *         description: OAuth failed
  */
-router.get(
-  "/google",
-  passport.authenticate("google", { scope: ["profile", "email"], prompt: "select_account" })
-);
+// Google OAuth routes - only available if credentials are configured
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  router.get(
+    "/google",
+    passport.authenticate("google", { scope: ["profile", "email"], prompt: "select_account" })
+  );
 
-router.get(
-  "/google/callback",
-  passport.authenticate("google", { session: false, failureRedirect: process.env.OAUTH_FAILURE_REDIRECT || "/auth/failed" }),
+  router.get(
+    "/google/callback",
+    passport.authenticate("google", { session: false, failureRedirect: process.env.OAUTH_FAILURE_REDIRECT || "/auth/failed" }),
   async (req, res) => {
     try {
       const payload = { id: req.user._id, email: req.user.email };
@@ -395,7 +397,23 @@ router.get(
       res.redirect(`${failUrl}${separator}error=oauth_failed&message=${errorMessage}`);
     }
   }
-);
+  );
+} else {
+  // Provide fallback routes when Google OAuth is not configured
+  router.get("/google", (req, res) => {
+    res.status(503).json({
+      success: false,
+      message: "Google OAuth is not configured on this server"
+    });
+  });
+
+  router.get("/google/callback", (req, res) => {
+    res.status(503).json({
+      success: false,
+      message: "Google OAuth is not configured on this server"
+    });
+  });
+}
 
 /**
  * @swagger
@@ -450,16 +468,18 @@ router.get(
  *       401:
  *         description: Invalid ID token
  */
-router.post('/google/mobile', async (req, res) => {
-  try {
-    const { idToken, user } = req.body;
+// Mobile Google OAuth endpoint - only available if credentials are configured
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  router.post('/google/mobile', async (req, res) => {
+    try {
+      const { idToken, user } = req.body;
 
-    if (!idToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID token is required'
-      });
-    }
+      if (!idToken) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID token is required'
+        });
+      }
 
     // Import and verify the ID token
     const passportModule = await import('../config/passport.js');
@@ -562,7 +582,16 @@ router.post('/google/mobile', async (req, res) => {
       error: error.message
     });
   }
-});
+  });
+} else {
+  // Provide fallback route when Google OAuth is not configured
+  router.post('/google/mobile', (req, res) => {
+    res.status(503).json({
+      success: false,
+      message: "Google OAuth is not configured on this server"
+    });
+  });
+}
 
 router.post("/signup", async (req, res) => {
     try {

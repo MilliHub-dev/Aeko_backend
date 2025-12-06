@@ -43,14 +43,15 @@ router.get("/", protect, async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Get current user to exclude their own content and people they follow
-    const currentUser = await User.findById(userId).select("following interests blockedUsers");
+    const currentUser = await User.findById(userId).select("following interests blockedUsers communities");
     
     if (!currentUser) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    const blockedUserIds = currentUser.blockedUsers.map(b => b.user);
+    const blockedUserIds = currentUser.blockedUsers?.map(b => b.user) || [];
     const followingIds = currentUser.following || [];
+    const userCommunityIds = currentUser.communities?.map(c => c.community) || [];
 
     // 1. Trending Posts (high engagement, not from followed users)
     const trendingPosts = await Post.find({
@@ -69,14 +70,20 @@ router.get("/", protect, async (req, res) => {
       .lean();
 
     // 2. Suggested Users (not following, similar interests, verified users)
-    const suggestedUsers = await User.find({
+    const suggestedUsersQuery = {
       _id: { $nin: [...followingIds, userId, ...blockedUserIds] },
       $or: [
-        { interests: { $in: currentUser.interests } },
         { blueTick: true },
         { goldenTick: true }
       ]
-    })
+    };
+
+    // Add interest-based matching if user has interests
+    if (currentUser.interests && Array.isArray(currentUser.interests) && currentUser.interests.length > 0) {
+      suggestedUsersQuery.$or.push({ interests: { $in: currentUser.interests } });
+    }
+
+    const suggestedUsers = await User.find(suggestedUsersQuery)
       .sort({ "followers.length": -1 })
       .limit(10)
       .select("username name profilePicture bio blueTick goldenTick followers")
@@ -86,7 +93,7 @@ router.get("/", protect, async (req, res) => {
     const activeCommunities = await Community.find({
       "settings.isPrivate": false,
       isActive: true,
-      _id: { $nin: currentUser.communities.map(c => c.community) }
+      _id: { $nin: userCommunityIds }
     })
       .sort({ memberCount: -1, createdAt: -1 })
       .limit(8)
@@ -119,7 +126,7 @@ router.get("/", protect, async (req, res) => {
 
     // 6. Interest-based Posts (based on user interests)
     let interestBasedPosts = [];
-    if (currentUser.interests && currentUser.interests.length > 0) {
+    if (currentUser.interests && Array.isArray(currentUser.interests) && currentUser.interests.length > 0) {
       // Find users with similar interests
       const usersWithSimilarInterests = await User.find({
         interests: { $in: currentUser.interests },
@@ -130,15 +137,17 @@ router.get("/", protect, async (req, res) => {
 
       const similarUserIds = usersWithSimilarInterests.map(u => u._id);
 
-      interestBasedPosts = await Post.find({
-        user: { $in: similarUserIds },
-        "privacy.level": "public",
-        createdAt: { $gte: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) }
-      })
-        .sort({ createdAt: -1, "engagement.totalLikes": -1 })
-        .limit(10)
-        .populate("user", "username name profilePicture blueTick goldenTick")
-        .lean();
+      if (similarUserIds.length > 0) {
+        interestBasedPosts = await Post.find({
+          user: { $in: similarUserIds },
+          "privacy.level": "public",
+          createdAt: { $gte: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) }
+        })
+          .sort({ createdAt: -1, "engagement.totalLikes": -1 })
+          .limit(10)
+          .populate("user", "username name profilePicture blueTick goldenTick")
+          .lean();
+      }
     }
 
     // Calculate total for pagination

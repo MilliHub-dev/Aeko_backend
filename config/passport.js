@@ -3,8 +3,8 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { OAuth2Client } from 'google-auth-library';
 import User from '../models/User.js';
 
-// Initialize Google OAuth2 client for ID token verification
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+// Initialize Google OAuth2 client for ID token verification (only if credentials exist)
+const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
 
 /**
  * Verify Google ID token
@@ -12,6 +12,10 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
  * @returns {Promise<Object>} - Verified token payload
  */
 async function verifyGoogleIdToken(idToken) {
+  if (!googleClient) {
+    throw new Error('Google OAuth not configured');
+  }
+  
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken: idToken,
@@ -42,12 +46,13 @@ async function generateUniqueUsername(baseUsername) {
   return username;
 }
 
-// Google OAuth strategy
-passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_CALLBACK_URL,
-}, async (accessToken, refreshToken, profile, done) => {
+// Google OAuth strategy - only initialize if credentials are provided
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL,
+  }, async (accessToken, refreshToken, profile, done) => {
   try {
     // Verify ID token if available (enhanced security)
     if (profile._json && profile._json.sub) {
@@ -112,7 +117,10 @@ passport.use(new GoogleStrategy({
     console.error('Google OAuth strategy error:', err);
     return done(err);
   }
-}));
+  }));
+} else {
+  console.warn('Google OAuth credentials not configured. Google OAuth will be disabled.');
+}
 
 export { verifyGoogleIdToken };
 export default passport;
