@@ -50,6 +50,7 @@ import communityRoutes from "./routes/communityRoutes.js";
 import communityProfileRoutes from "./routes/communityProfileRoutes.js";
 import communityPaymentRoutes from "./routes/communityPaymentRoutes.js";
 import securityRoutes from "./routes/security.js";
+import exploreRoutes from "./routes/explore.js";
 import Transaction from "./models/Transaction.js";
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
@@ -156,6 +157,9 @@ app.use("/api/livestream", apiRateLimit, blockingMiddleware.checkPostInteraction
 
 // Security routes with rate limiting
 app.use("/api/security", securityRateLimit, securityRoutes);
+
+// Explore route
+app.use("/api/explore", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), exploreRoutes);
 
 // Admin API Routes with 2FA protection for sensitive operations
 // Expose admin REST endpoints such as /api/admin/setup/first-admin
