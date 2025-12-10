@@ -441,21 +441,15 @@ Authorization: Bearer YOUR_JWT_TOKEN
     
     console.log('🔄 Setting up Swagger routes...');
     
-    app.use('/api-docs', swaggerUi.default.serve, swaggerUi.default.setup(swaggerSpec, {
-      customCss: `
-        .swagger-ui .topbar { display: none }
-        .swagger-ui .info { margin: 20px 0 }
-        .swagger-ui .info .title { color: #667eea }
-        .swagger-ui .scheme-container { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0 }
-      `,
+    // Simple, reliable Swagger UI setup
+    app.use('/api-docs', swaggerUi.default.serve);
+    app.get('/api-docs', swaggerUi.default.setup(swaggerSpec, {
+      customCss: '.swagger-ui .topbar { display: none }',
       customSiteTitle: 'Aeko API Documentation',
       swaggerOptions: {
         persistAuthorization: true,
         displayRequestDuration: true,
-        docExpansion: 'list',
-        filter: true,
-        showExtensions: true,
-        showCommonExtensions: true
+        docExpansion: 'list'
       }
     }));
     
@@ -744,8 +738,13 @@ app.get('/', (req, res) => {
                 <div class="link-desc">Real-time API and database status monitoring</div>
             </a>
             
+            <a href="/api/info" class="link-card">
+                <div class="link-title">ℹ️ Project Info</div>
+                <div class="link-desc">Detailed information about features and technology stack</div>
+            </a>
+            
             <a href="/api/routes" class="link-card">
-                <div class="link-title">🛣️ Available Routes</div>
+                <div class="link-title">�️ Availa ble Routes</div>
                 <div class="link-desc">List of all loaded API endpoints and services</div>
             </a>
             
@@ -785,32 +784,7 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-app.get('/api', (req, res) => {
-  res.json({ 
-    name: 'Aeko Backend API',
-    description: 'Social Media Platform Backend API',
-    version: '1.0.0',
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    endpoints: {
-      documentation: '/api-docs',
-      health: '/api/health',
-      routes: '/api/routes',
-      spec: '/api-docs.json'
-    },
-    features: [
-      'User Authentication & Authorization',
-      'Social Media Posts & Comments',
-      'Real-time Chat & Messaging',
-      'File Upload & Media Processing',
-      'Interest-based Content Discovery',
-      'Profile Management',
-      'Payment Integration',
-      'Admin Dashboard'
-    ]
-  });
-});
+// Removed /api endpoint to avoid confusion - use /api-docs for documentation
 
 app.get('/api/health', async (req, res) => {
   try {
@@ -954,7 +928,6 @@ app.use('*', (req, res) => {
     suggestion: 'Visit the root URL (/) for the API landing page with all available links',
     availableEndpoints: [
       '/ - Beautiful API landing page',
-      '/api - API information (JSON)',
       '/api/info - Project details and features',
       '/api/health - Health check with system status',
       '/api/routes - Available routes',
