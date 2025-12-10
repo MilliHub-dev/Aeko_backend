@@ -80,21 +80,21 @@ const enhancedChatSocket = new EnhancedChatSocket(server);
 // Initialize Enhanced LiveStream Socket System
 const enhancedLiveStreamSocket = new EnhancedLiveStreamSocket(server);
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = 'uploads';
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+// Note: File uploads are handled by Cloudinary in production
 
 // CORS and cookie parser (keep these before AdminJS)
 app.use(cookieParser());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5000'],
+  origin: process.env.NODE_ENV === 'production' 
+    ? [process.env.FRONTEND_URL, 'https://your-backend-domain.vercel.app']
+    : ['http://localhost:3000', 'http://localhost:5000', 'http://localhost:9876'],
   credentials: true
 }));
 
-// Static file serving for uploads
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Static file serving for uploads (disabled in production - using Cloudinary)
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+}
 
 // Mount AdminJS router BEFORE body parsers to avoid WrongArgumentError
 app.use(admin.options.rootPath, adminRouter);
@@ -437,4 +437,9 @@ const startServer = async () => {
 };
 
 // Start the application
-startServer();
+if (process.env.NODE_ENV !== 'production') {
+  startServer();
+}
+
+// Export for Vercel
+export default app;
