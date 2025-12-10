@@ -14,10 +14,5 @@
   ],
   "env": {
     "NODE_ENV": "production"
-  },
-  "functions": {
-    "api/production.js": {
-      "maxDuration": 30
-    }
   }
 }
