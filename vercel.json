@@ -2,21 +2,21 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/simple.js",
+      "src": "api/production.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/api/simple.js"
+      "dest": "/api/production.js"
     }
   ],
   "env": {
     "NODE_ENV": "production"
   },
   "functions": {
-    "api/simple.js": {
+    "api/production.js": {
       "maxDuration": 30
     }
   }

@@ -39,6 +39,15 @@ JWT_SECRET=your_strong_jwt_secret_here
 FRONTEND_URL=https://your-frontend-domain.vercel.app
 ```
 
+### CRITICAL: MongoDB Atlas Setup
+1. Create MongoDB Atlas account at https://mongodb.com/atlas
+2. Create a new cluster
+3. Go to Database Access → Add Database User
+4. Go to Network Access → Add IP Address → Allow access from anywhere (0.0.0.0/0)
+5. Get connection string from Connect → Connect your application
+6. Replace `<password>` with your database user password
+7. Replace `<dbname>` with `aeko_db`
+
 ### OAuth Configuration:
 ```
 GOOGLE_CLIENT_ID=your_google_client_id
@@ -90,9 +99,19 @@ const API_BASE_URL = 'https://your-backend-domain.vercel.app/api';
 
 ## Step 5: Test Your Deployment
 
-1. Visit your Vercel URL
-2. Test API endpoints: `https://your-backend-domain.vercel.app/api/auth/status`
-3. Check Swagger docs: `https://your-backend-domain.vercel.app/api-docs`
+1. **Landing Page**: `https://your-app.vercel.app/` (Beautiful HTML page with project info)
+2. **API Info**: `https://your-app.vercel.app/api` (JSON response with API details)
+3. **Project Info**: `https://your-app.vercel.app/api/info` (Detailed feature information)
+4. **Health Check**: `https://your-app.vercel.app/api/health` (System status with database)
+5. **Available Routes**: `https://your-app.vercel.app/api/routes` (Loaded routes status)
+6. **Swagger Documentation**: `https://your-app.vercel.app/api-docs` (Interactive API docs)
+7. **API Spec JSON**: `https://your-app.vercel.app/api-docs.json` (OpenAPI specification)
+
+### Test Endpoints:
+- Auth: `https://your-app.vercel.app/api/auth/*`
+- Users: `https://your-app.vercel.app/api/users`
+- Posts: `https://your-app.vercel.app/api/posts`
+- Profile: `https://your-app.vercel.app/api/profile`
 
 ## Important Notes
 
