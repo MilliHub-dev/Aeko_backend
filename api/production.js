@@ -41,72 +41,470 @@ const apiRateLimit = rateLimit({
 
 app.use(apiRateLimit);
 
-// Swagger setup with dynamic import
+// Swagger setup with inline specification
 const setupSwagger = async () => {
   try {
-    const [swaggerUi, swaggerJsdoc] = await Promise.all([
-      import('swagger-ui-express'),
-      import('swagger-jsdoc')
-    ]);
+    console.log('🔄 Setting up Swagger documentation...');
+    const swaggerUi = await import('swagger-ui-express');
+    console.log('✅ Swagger UI imported successfully');
 
-    const swaggerOptions = {
-      definition: {
-        openapi: '3.0.0',
-        info: {
-          title: 'Aeko Backend API',
-          version: '1.0.0',
-          description: 'Social media platform backend API',
+    // Define comprehensive API specification inline
+    const swaggerSpec = {
+      openapi: '3.0.0',
+      info: {
+        title: 'Aeko Backend API',
+        version: '1.0.0',
+        description: `
+# Aeko Social Media Platform API
+
+A comprehensive backend API for a modern social media platform with blockchain integration.
+
+## Features
+- 🔐 JWT Authentication with Google OAuth
+- 👥 User Management & Profiles
+- 📝 Posts, Comments & Social Interactions
+- 💬 Real-time Chat & Messaging
+- 🎥 Live Streaming Support
+- 🖼️ Media Upload via Cloudinary
+- 🔗 Blockchain Integration (Solana)
+- 💳 Payment Processing
+- 🎯 Interest-based Content Discovery
+- 🛡️ Privacy Controls & Blocking
+- 📊 Admin Dashboard
+
+## Authentication
+Most endpoints require authentication via JWT token in the Authorization header:
+\`\`\`
+Authorization: Bearer YOUR_JWT_TOKEN
+\`\`\`
+        `,
+        contact: {
+          name: 'Aeko API Support',
+          email: 'support@aeko.com'
         },
-        servers: [
-          {
-            url: isProduction ? process.env.FRONTEND_URL?.replace('3000', '5000') || 'https://your-app.vercel.app' : 'http://localhost:9876',
-            description: isProduction ? 'Production server' : 'Development server',
-          },
-        ],
-        components: {
-          securitySchemes: {
-            bearerAuth: {
-              type: 'http',
-              scheme: 'bearer',
-              bearerFormat: 'JWT',
-            },
-          },
-        },
+        license: {
+          name: 'ISC',
+          url: 'https://opensource.org/licenses/ISC'
+        }
       },
-      apis: ['./routes/*.js', './api/*.js'],
+      servers: [
+        {
+          url: isProduction ? 'https://aeko-backend1.vercel.app' : 'http://localhost:9876',
+          description: isProduction ? 'Production Server' : 'Development Server'
+        }
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'Enter your JWT token'
+          }
+        },
+        schemas: {
+          User: {
+            type: 'object',
+            properties: {
+              _id: { type: 'string', example: '507f1f77bcf86cd799439011' },
+              username: { type: 'string', example: 'johndoe' },
+              email: { type: 'string', format: 'email', example: 'john@example.com' },
+              name: { type: 'string', example: 'John Doe' },
+              profilePicture: { type: 'string', example: 'https://cloudinary.com/image.jpg' },
+              bio: { type: 'string', example: 'Software developer and crypto enthusiast' },
+              blueTick: { type: 'boolean', example: false },
+              goldenTick: { type: 'boolean', example: false },
+              followers: { type: 'array', items: { type: 'string' } },
+              following: { type: 'array', items: { type: 'string' } },
+              createdAt: { type: 'string', format: 'date-time' }
+            }
+          },
+          Post: {
+            type: 'object',
+            properties: {
+              _id: { type: 'string', example: '507f1f77bcf86cd799439011' },
+              content: { type: 'string', example: 'This is my first post!' },
+              media: { type: 'string', example: 'https://cloudinary.com/image.jpg' },
+              user: { $ref: '#/components/schemas/User' },
+              likes: { type: 'array', items: { type: 'string' } },
+              comments: { type: 'array', items: { type: 'string' } },
+              createdAt: { type: 'string', format: 'date-time' }
+            }
+          },
+          Error: {
+            type: 'object',
+            properties: {
+              error: { type: 'string', example: 'Error message' },
+              message: { type: 'string', example: 'Detailed error description' },
+              timestamp: { type: 'string', format: 'date-time' }
+            }
+          }
+        }
+      },
+      paths: {
+        '/api/health': {
+          get: {
+            tags: ['System'],
+            summary: 'Health check endpoint',
+            description: 'Returns the current health status of the API and database connection',
+            responses: {
+              200: {
+                description: 'API is healthy',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        status: { type: 'string', example: 'healthy' },
+                        database: { type: 'boolean', example: true },
+                        timestamp: { type: 'string', format: 'date-time' },
+                        uptime: { type: 'number', example: 12345.67 },
+                        memory: {
+                          type: 'object',
+                          properties: {
+                            used: { type: 'string', example: '45 MB' },
+                            total: { type: 'string', example: '128 MB' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        '/api/auth/signup': {
+          post: {
+            tags: ['Authentication'],
+            summary: 'User registration',
+            description: 'Register a new user account with email verification',
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['username', 'email', 'password'],
+                    properties: {
+                      username: { type: 'string', example: 'johndoe' },
+                      email: { type: 'string', format: 'email', example: 'john@example.com' },
+                      password: { type: 'string', minLength: 6, example: 'password123' },
+                      name: { type: 'string', example: 'John Doe' }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: {
+                description: 'User registered successfully',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'User registered successfully' },
+                        user: { $ref: '#/components/schemas/User' }
+                      }
+                    }
+                  }
+                }
+              },
+              400: { description: 'Bad request - validation errors' },
+              409: { description: 'User already exists' }
+            }
+          }
+        },
+        '/api/auth/login': {
+          post: {
+            tags: ['Authentication'],
+            summary: 'User login',
+            description: 'Authenticate user and return JWT token',
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['email', 'password'],
+                    properties: {
+                      email: { type: 'string', format: 'email', example: 'john@example.com' },
+                      password: { type: 'string', example: 'password123' }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: {
+                description: 'Login successful',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                        user: { $ref: '#/components/schemas/User' }
+                      }
+                    }
+                  }
+                }
+              },
+              401: { description: 'Invalid credentials' }
+            }
+          }
+        },
+        '/api/users': {
+          get: {
+            tags: ['Users'],
+            summary: 'Get all users',
+            description: 'Retrieve a paginated list of users',
+            security: [{ bearerAuth: [] }],
+            parameters: [
+              {
+                name: 'page',
+                in: 'query',
+                schema: { type: 'integer', minimum: 1, default: 1 },
+                description: 'Page number'
+              },
+              {
+                name: 'limit',
+                in: 'query',
+                schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+                description: 'Number of users per page'
+              },
+              {
+                name: 'search',
+                in: 'query',
+                schema: { type: 'string' },
+                description: 'Search users by name or username'
+              }
+            ],
+            responses: {
+              200: {
+                description: 'Users retrieved successfully',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        success: { type: 'boolean', example: true },
+                        users: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/User' }
+                        },
+                        pagination: {
+                          type: 'object',
+                          properties: {
+                            currentPage: { type: 'integer', example: 1 },
+                            totalPages: { type: 'integer', example: 5 },
+                            totalUsers: { type: 'integer', example: 100 },
+                            hasNext: { type: 'boolean', example: true },
+                            hasPrev: { type: 'boolean', example: false }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              401: { description: 'Unauthorized' }
+            }
+          }
+        },
+        '/api/users/{id}': {
+          get: {
+            tags: ['Users'],
+            summary: 'Get user by ID',
+            description: 'Retrieve a specific user by their ID',
+            security: [{ bearerAuth: [] }],
+            parameters: [
+              {
+                name: 'id',
+                in: 'path',
+                required: true,
+                schema: { type: 'string' },
+                description: 'User ID',
+                example: '507f1f77bcf86cd799439011'
+              }
+            ],
+            responses: {
+              200: {
+                description: 'User retrieved successfully',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/User' }
+                  }
+                }
+              },
+              404: { description: 'User not found' },
+              403: { description: 'Access denied - privacy settings' }
+            }
+          }
+        },
+        '/api/posts': {
+          get: {
+            tags: ['Posts'],
+            summary: 'Get all posts',
+            description: 'Retrieve a feed of posts with pagination',
+            security: [{ bearerAuth: [] }],
+            parameters: [
+              {
+                name: 'page',
+                in: 'query',
+                schema: { type: 'integer', minimum: 1, default: 1 }
+              },
+              {
+                name: 'limit',
+                in: 'query',
+                schema: { type: 'integer', minimum: 1, maximum: 50, default: 10 }
+              }
+            ],
+            responses: {
+              200: {
+                description: 'Posts retrieved successfully',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        posts: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Post' }
+                        },
+                        pagination: {
+                          type: 'object',
+                          properties: {
+                            currentPage: { type: 'integer' },
+                            totalPages: { type: 'integer' },
+                            totalPosts: { type: 'integer' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          post: {
+            tags: ['Posts'],
+            summary: 'Create a new post',
+            description: 'Create a new post with optional media upload',
+            security: [{ bearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                'multipart/form-data': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      content: { type: 'string', example: 'This is my new post!' },
+                      media: { type: 'string', format: 'binary', description: 'Image or video file' },
+                      privacy: {
+                        type: 'string',
+                        enum: ['public', 'followers', 'only_me', 'select_users'],
+                        default: 'public'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: {
+                description: 'Post created successfully',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/Post' }
+                  }
+                }
+              },
+              400: { description: 'Bad request' },
+              401: { description: 'Unauthorized' }
+            }
+          }
+        }
+      },
+      tags: [
+        { name: 'System', description: 'System health and status endpoints' },
+        { name: 'Authentication', description: 'User authentication and authorization' },
+        { name: 'Users', description: 'User management and profiles' },
+        { name: 'Posts', description: 'Social media posts and content' },
+        { name: 'Comments', description: 'Post comments and interactions' },
+        { name: 'Chat', description: 'Real-time messaging' },
+        { name: 'Profile', description: 'User profile management' },
+        { name: 'Explore', description: 'Content discovery' }
+      ]
     };
-
-    const swaggerSpec = swaggerJsdoc.default(swaggerOptions);
+    
+    console.log('🔄 Setting up Swagger routes...');
     
     app.use('/api-docs', swaggerUi.default.serve, swaggerUi.default.setup(swaggerSpec, {
-      customCss: '.swagger-ui .topbar { display: none }',
-      customSiteTitle: 'Aeko API Documentation'
+      customCss: `
+        .swagger-ui .topbar { display: none }
+        .swagger-ui .info { margin: 20px 0 }
+        .swagger-ui .info .title { color: #667eea }
+        .swagger-ui .scheme-container { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0 }
+      `,
+      customSiteTitle: 'Aeko API Documentation',
+      swaggerOptions: {
+        persistAuthorization: true,
+        displayRequestDuration: true,
+        docExpansion: 'list',
+        filter: true,
+        showExtensions: true,
+        showCommonExtensions: true
+      }
     }));
     
     app.get('/api-docs.json', (req, res) => {
       res.setHeader('Content-Type', 'application/json');
-      res.send(swaggerSpec);
+      res.json(swaggerSpec);
+    });
+
+    // Add a test route to verify setup
+    app.get('/api/swagger-test', (req, res) => {
+      res.json({
+        message: 'Swagger setup is working!',
+        swaggerUI: '/api-docs',
+        apiSpec: '/api-docs.json',
+        timestamp: new Date().toISOString()
+      });
     });
 
     console.log('✅ Swagger documentation setup complete');
+    console.log('📚 Swagger UI available at /api-docs');
+    console.log('📄 API spec available at /api-docs.json');
     return true;
   } catch (error) {
     console.error('❌ Swagger setup failed:', error);
+    console.error('Error details:', error.stack);
     
     // Fallback documentation endpoint
     app.get('/api-docs', (req, res) => {
-      res.json({
-        message: 'API Documentation',
-        endpoints: {
-          health: '/api/health',
-          auth: '/api/auth/*',
-          users: '/api/users/*',
-          posts: '/api/posts/*',
-          profile: '/api/profile/*',
-          explore: '/api/explore/*'
-        },
-        note: 'Swagger UI temporarily unavailable'
-      });
+      res.send(`
+        <html>
+          <head><title>API Documentation</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 40px; background: #f5f5f5;">
+            <div style="max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <h1 style="color: #667eea;">🚀 Aeko API Documentation</h1>
+              <p>Swagger UI is temporarily unavailable. Here are the available endpoints:</p>
+              <ul style="line-height: 2;">
+                <li><strong>GET /api/health</strong> - Health check</li>
+                <li><strong>POST /api/auth/signup</strong> - User registration</li>
+                <li><strong>POST /api/auth/login</strong> - User login</li>
+                <li><strong>GET /api/users</strong> - Get all users</li>
+                <li><strong>GET /api/users/{id}</strong> - Get user by ID</li>
+                <li><strong>GET /api/posts</strong> - Get all posts</li>
+                <li><strong>POST /api/posts</strong> - Create new post</li>
+              </ul>
+              <p><a href="/api-docs.json" style="color: #667eea;">View Raw API Specification (JSON)</a></p>
+            </div>
+          </body>
+        </html>
+      `);
     });
     
     return false;
