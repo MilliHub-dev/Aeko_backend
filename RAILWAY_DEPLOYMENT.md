@@ -104,12 +104,48 @@ const API_BASE_URL = 'https://your-app-name.railway.app/api';
 2. **API Info**: `https://your-app.railway.app/api` (JSON response with API details)
 3. **Health Check**: `https://your-app.railway.app/api/health` (System status with database)
 4. **Swagger Documentation**: `https://your-app.railway.app/api-docs` (Interactive API docs)
+5. **Admin Panel**: `https://your-app.railway.app/admin` (AdminJS dashboard)
+
+### 🔧 Admin Panel Access
+- **URL**: `https://your-app.railway.app/admin`
+- **Login**: Use admin credentials (create admin user first)
+- **Features**: User management, content moderation, analytics, blockchain monitoring
+
+### 📚 API Documentation
+- **Swagger UI**: `https://your-app.railway.app/api-docs`
+- **OpenAPI Spec**: `https://your-app.railway.app/api-docs.json`
+- **Features**: Interactive API testing, complete endpoint documentation
 
 ### Test Endpoints:
 - Auth: `https://your-app.railway.app/api/auth/*`
 - Users: `https://your-app.railway.app/api/users`
 - Posts: `https://your-app.railway.app/api/posts`
 - Profile: `https://your-app.railway.app/api/profile`
+
+### 👤 Create First Admin User
+
+After deployment, create your first admin user:
+
+```bash
+# Method 1: API Endpoint (No auth required for first admin)
+curl -X POST https://your-app.railway.app/api/admin/setup/first-admin \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Admin User",
+    "username": "admin",
+    "email": "admin@yourdomain.com",
+    "password": "your-secure-password"
+  }'
+
+# Method 2: Register normal user, then promote via database
+# 1. Register: POST /api/auth/register
+# 2. Update user in admin panel or database: { isAdmin: true }
+```
+
+**Default Admin Credentials** (if using create-admin.js script):
+- Email: `admin@aeko.com`
+- Password: `admin123`
+- **⚠️ Change these immediately after first login!**
 
 ## Railway Advantages
 

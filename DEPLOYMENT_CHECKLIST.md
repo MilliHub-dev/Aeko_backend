@@ -99,9 +99,23 @@
 - [ ] **Health Check**: `https://your-app.railway.app/api/health`
 - [ ] **API Info**: `https://your-app.railway.app/api`
 - [ ] **Swagger Docs**: `https://your-app.railway.app/api-docs`
+- [ ] **Admin Panel**: `https://your-app.railway.app/admin`
 - [ ] **Database Connection**: Check health endpoint shows DB connected
 - [ ] **Authentication**: Test login/register endpoints
 - [ ] **File Upload**: Test image upload (should use Cloudinary)
+
+### ✅ 5.1. Admin Panel Setup
+- [ ] **Access Admin Panel**: Navigate to `/admin`
+- [ ] **Create First Admin**: Use first-admin endpoint or script
+- [ ] **Login to Admin**: Test admin credentials
+- [ ] **Verify Admin Features**: Check user management, content moderation
+- [ ] **Test Admin Actions**: Try banning/unbanning users, approving content
+
+### ✅ 5.2. API Documentation
+- [ ] **Swagger UI Loads**: Interactive documentation displays
+- [ ] **API Spec Available**: JSON spec accessible at `/api-docs.json`
+- [ ] **Test API Endpoints**: Try sample requests from Swagger UI
+- [ ] **Authentication Works**: Test protected endpoints with JWT tokens
 
 ### ✅ 6. Frontend Integration
 - [ ] Update frontend API base URL to Railway domain
@@ -155,6 +169,9 @@ railway up
 
 # Check status
 railway status
+
+# Test admin and swagger accessibility
+node test-admin-swagger.js https://your-app.railway.app
 ```
 
 ## Success Criteria
@@ -166,6 +183,10 @@ Your deployment is successful when:
 - [ ] ✅ Authentication endpoints work
 - [ ] ✅ File uploads work (via Cloudinary)
 - [ ] ✅ All major API endpoints respond correctly
+- [ ] ✅ **Admin Panel accessible** at `/admin`
+- [ ] ✅ **Swagger Docs accessible** at `/api-docs`
+- [ ] ✅ **Admin login works** with created credentials
+- [ ] ✅ **API documentation loads** and is interactive
 - [ ] ✅ Frontend can communicate with backend
 - [ ] ✅ OAuth login flow works end-to-end
 

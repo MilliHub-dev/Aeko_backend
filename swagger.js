@@ -139,12 +139,10 @@ The enhanced chat system uses **Socket.IO** for real-time features:
     },
     servers: [
         {
-            url: "http://localhost:5000",
-            description: "Development server"
-        },
-        {
-            url: "https://api.aeko.com",
-            description: "Production server"
+            url: process.env.NODE_ENV === 'production' 
+                ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN || 'your-app.railway.app'}`
+                : `http://localhost:${process.env.PORT || 9876}`,
+            description: process.env.NODE_ENV === 'production' ? "Railway Production Server" : "Development Server"
         }
     ],
     tags: [
@@ -1453,8 +1451,13 @@ const setupSwagger = (app) => {
         res.send(swaggerSpec);
     });
     
-    console.log(`📚 Swagger UI available at: http://localhost:${process.env.PORT || 5000}/api-docs`);
-    console.log(`📄 API Spec JSON at: http://localhost:${process.env.PORT || 5000}/api-docs.json`);
+    const port = process.env.PORT || 9876;
+    const baseUrl = process.env.NODE_ENV === 'production' 
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN || 'your-app.railway.app'}` 
+        : `http://localhost:${port}`;
+    
+    console.log(`📚 Swagger UI available at: ${baseUrl}/api-docs`);
+    console.log(`📄 API Spec JSON at: ${baseUrl}/api-docs.json`);
 };
 
 export default setupSwagger;
