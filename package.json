@@ -6,6 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
+    "start:debug": "node railway-debug.js",
+    "start:minimal": "node minimal-server.js",
     "dev": "nodemon server.js",
     "deploy-token": "node deploy-token.js",
     "upload-metadata": "node upload-metadata.js",
