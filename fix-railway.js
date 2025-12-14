@@ -39,6 +39,14 @@ switch (mode) {
     console.log('🔗 Debug: https://your-app.railway.app/env-check');
     break;
 
+  case 'emergency':
+    console.log('🚨 Switching to emergency server...');
+    updatePackageJson('emergency');
+    console.log('✅ Updated package.json to use emergency server');
+    console.log('🚀 Deploy with: railway up');
+    console.log('🔗 Test: https://your-app.railway.app/health');
+    break;
+
   case 'test':
     console.log('🧪 Testing current configuration...');
     testLocalServer();
@@ -56,10 +64,13 @@ function updatePackageJson(mode) {
     
     switch (mode) {
       case 'minimal':
-        packageJson.scripts.start = 'node server-minimal.js';
+        packageJson.scripts.start = 'node minimal-server.js';
         break;
       case 'debug':
         packageJson.scripts.start = 'node railway-debug.js';
+        break;
+      case 'emergency':
+        packageJson.scripts.start = 'node emergency-server.js';
         break;
       case 'full':
       default:
