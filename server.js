@@ -67,7 +67,7 @@ connectDB();
 
 // Configuration
 const isProduction = process.env.NODE_ENV === 'production';
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 9876;
 
 // Production Configuration
 
@@ -86,7 +86,7 @@ const enhancedLiveStreamSocket = new EnhancedLiveStreamSocket(server);
 app.use(cookieParser());
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, 'https://your-backend-domain.vercel.app']
+    ? [process.env.FRONTEND_URL, /\.railway\.app$/]
     : ['http://localhost:3000', 'http://localhost:5000', 'http://localhost:9876'],
   credentials: true
 }));
@@ -440,6 +440,3 @@ const startServer = async () => {
 if (process.env.NODE_ENV !== 'production') {
   startServer();
 }
-
-// Export for Vercel
-export default app;

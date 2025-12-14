@@ -32,7 +32,7 @@ Tech Stack
 
     Frontend: (To be added — React, Next.js or other)
 
-    Hosting: (To be added — AWS, Vercel, Render, etc.)
+    Hosting: Railway (Production-ready deployment)
 
 Getting Started
 Prerequisites
@@ -62,6 +62,32 @@ npm run migrate:post-privacy
 
 # Start the server
 npm run dev
+
+## 🚀 Railway Deployment
+
+Deploy your Aeko backend to Railway in minutes:
+
+### Quick Deploy
+```bash
+# Run the deployment script
+./deploy.sh
+```
+
+### Manual Deployment
+1. **Push to GitHub**: Ensure your code is in a GitHub repository
+2. **Create Railway Account**: Sign up at [railway.app](https://railway.app)
+3. **Deploy**: Connect your GitHub repo in Railway dashboard
+4. **Configure Environment Variables**: Add required variables (see RAILWAY_DEPLOYMENT.md)
+5. **Test**: Visit your Railway app URL to verify deployment
+
+### Required Environment Variables
+- `NODE_ENV=production`
+- `MONGO_URI=your_mongodb_atlas_connection_string`
+- `JWT_SECRET=your_jwt_secret`
+- `FRONTEND_URL=your_frontend_domain`
+
+📖 **Complete Deployment Guide**: See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)
+✅ **Deployment Checklist**: See [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
 
 API Overview
 Endpoint	Method	Description
