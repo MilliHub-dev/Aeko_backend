@@ -437,6 +437,4 @@ const startServer = async () => {
 };
 
 // Start the application
-if (process.env.NODE_ENV !== 'production') {
-  startServer();
-}
+startServer();
