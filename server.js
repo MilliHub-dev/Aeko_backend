@@ -408,18 +408,15 @@ const startServer = async () => {
     
     // Handle unhandled promise rejections
     process.on('unhandledRejection', (err) => {
-      console.error('UNHANDLED REJECTION! 💥 Shutting down...');
-      console.error(err);
-      server.close(() => {
-        process.exit(1);
-      });
+      console.error('UNHANDLED REJECTION! 💥', err);
+      // Keep server running in production to avoid platform 502
+      // Consider alerting/monitoring rather than exiting
     });
     
     // Handle uncaught exceptions
     process.on('uncaughtException', (err) => {
-      console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
-      console.error(err);
-      process.exit(1);
+      console.error('UNCAUGHT EXCEPTION! 💥', err);
+      // Avoid exiting to maintain uptime on managed platforms
     });
     
     // Handle SIGTERM (for Docker/Heroku)
@@ -432,7 +429,7 @@ const startServer = async () => {
     
   } catch (err) {
     console.error('Failed to start server:', err);
-    process.exit(1);
+    // Avoid exiting to allow platform to retry or for later readiness
   }
 };
 
