@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { editPhoto } from '../controllers/photoEditController.js';
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ storage: multer.memoryStorage() });
 const router = express.Router();
 
 router.post('/edit', upload.single('photo'), editPhoto);
