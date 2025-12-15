@@ -1,8 +1,15 @@
-import sharp from 'sharp';
 import path from 'path';
 
 export const editPhoto = async (req, res) => {
   try {
+    const sharpModule = await import('sharp').catch(() => null);
+    if (!sharpModule || !sharpModule.default) {
+      return res.status(503).json({
+        success: false,
+        message: 'Image processing unavailable'
+      });
+    }
+    const sharp = sharpModule.default;
     const { filter } = req.body;
     
     if (!req.file) {
