@@ -24,8 +24,8 @@ class EmailService {
     try {
       this.transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // true for 465, false for other ports
+        port: 465,
+        secure: true, // true for 465, false for other ports
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS
@@ -35,10 +35,10 @@ class EmailService {
         // Logging for debugging
         logger: true,
         debug: true,
-        // Timeouts to fail faster
-        connectionTimeout: 10000, 
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
+        // Timeouts
+        connectionTimeout: 15000, 
+        greetingTimeout: 15000,
+        socketTimeout: 20000,
         tls: {
           rejectUnauthorized: false
         }
@@ -48,6 +48,8 @@ class EmailService {
       this.transporter.verify((error, success) => {
         if (error) {
           console.error('❌ Email Service Verification Failed:', error);
+          console.error('⚠️  Tip: If using Gmail, ensure "App Password" is used, not your login password.');
+          console.error('⚠️  Tip: Check if your cloud provider allows outbound SMTP (Port 465).');
         } else {
           console.log('✅ Email Service is ready and connected');
         }
