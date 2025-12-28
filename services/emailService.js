@@ -14,13 +14,13 @@ class EmailService {
 
     try {
       this.transporter = nodemailer.createTransport({
-        service: 'Gmail',
         host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // Use TLS
-        connectionTimeout: 10000, // 10 seconds timeout for initial connection
+        port: 465,
+        secure: true, // Use SSL
+        family: 4, // Force IPv4 to avoid timeouts in some environments
+        connectionTimeout: 20000, // 20 seconds timeout for initial connection
         socketTimeout: 30000,     // 30 seconds timeout for socket
-        greetingTimeout: 10000,   // 10 seconds to wait for greeting
+        greetingTimeout: 20000,   // 20 seconds to wait for greeting
         debug: process.env.NODE_ENV === 'development', // Enable debug logging in development
         auth: {
           user: process.env.EMAIL_USER,
