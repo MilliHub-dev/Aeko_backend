@@ -21,6 +21,7 @@ import AekoTransaction from "./models/AekoTransaction.js";
 import NFTMarketplace from "./models/NFTMarketplace.js";
 import Interest from "./models/Interest.js";
 import Community from "./models/Community.js";
+import Transaction from "./models/Transaction.js";
 
 AdminJS.registerAdapter(AdminJSMongoose);
 
@@ -44,6 +45,20 @@ const admin = new AdminJS({
           edit: { isVisible: true },
           delete: { isVisible: true },
           bulkDelete: { isVisible: true }
+        }
+      }
+    },
+    {
+      resource: Transaction,
+      options: {
+        parent: {
+          name: 'Community Management',
+          icon: 'CreditCard'
+        },
+        properties: {
+          _id: { isVisible: { list: true, show: true, edit: false } },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
+          updatedAt: { isVisible: { list: false, show: true, edit: false } }
         }
       }
     },
