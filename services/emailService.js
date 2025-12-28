@@ -44,15 +44,16 @@ class EmailService {
         }
       });
 
-      // Verify connection immediately
+      // Verify connection asynchronously (don't block/wait)
+      // We don't want to spam logs or crash on startup if email is blocked.
+      // The sendVerificationCode method handles failover gracefully.
+      /* 
       this.transporter.verify((error, success) => {
         if (error) {
-          console.error('❌ Email Service Verification Failed:', error.message);
-          // In production, this is critical, but we don't want to crash the server
-        } else {
-          console.log('✅ Email Service is ready and connected');
+           // Verification failed - quiet failure to avoid log noise/timeouts
         }
       });
+      */
     } catch (error) {
       console.error('Failed to create email transporter:', error);
       this.transporter = null;
