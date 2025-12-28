@@ -23,7 +23,9 @@ class EmailService {
 
     try {
       this.transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false, // true for 465, false for other ports
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS
@@ -32,7 +34,23 @@ class EmailService {
         family: 4,
         // Logging for debugging
         logger: true,
-        debug: true
+        debug: true,
+        // Timeouts to fail faster
+        connectionTimeout: 10000, 
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+
+      // Verify connection immediately
+      this.transporter.verify((error, success) => {
+        if (error) {
+          console.error('❌ Email Service Verification Failed:', error);
+        } else {
+          console.log('✅ Email Service is ready and connected');
+        }
       });
     } catch (error) {
       console.error('Failed to create email transporter:', error);
