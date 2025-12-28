@@ -249,10 +249,10 @@ class EmailService {
 
     try {
       await this.apiInstance.sendTransacEmail(sendSmtpEmail);
-      return { success: true, message: 'Welcome email sent' };
+      return { success: true, message: 'Blue tick notification sent' };
     } catch (error) {
       console.error('Email sending error:', error);
-      return { success: false, message: 'Failed to send welcome email' };
+      return { success: false, message: 'Failed to send blue tick notification' };
     }
   }
 
