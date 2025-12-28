@@ -72,6 +72,10 @@ const PORT = process.env.PORT || 9876;
 // Production Configuration
 
 const app = express();
+
+// Trust Proxy for Railway/Heroku/Reverse Proxies
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 
 // Initialize Enhanced Chat Socket System
