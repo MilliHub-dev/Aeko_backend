@@ -20,11 +20,33 @@ import Message from "./models/Message.js";
 import AekoTransaction from "./models/AekoTransaction.js";
 import NFTMarketplace from "./models/NFTMarketplace.js";
 import Interest from "./models/Interest.js";
+import Community from "./models/Community.js";
 
 AdminJS.registerAdapter(AdminJSMongoose);
 
 const admin = new AdminJS({
   resources: [
+    // ===== COMMUNITY MANAGEMENT =====
+    {
+      resource: Community,
+      options: {
+        parent: {
+          name: 'Community Management',
+          icon: 'Users'
+        },
+        properties: {
+          _id: { isVisible: { list: true, show: true, edit: false } },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
+          updatedAt: { isVisible: { list: false, show: true, edit: false } }
+        },
+        actions: {
+          new: { isVisible: true },
+          edit: { isVisible: true },
+          delete: { isVisible: true },
+          bulkDelete: { isVisible: true }
+        }
+      }
+    },
     // ===== INTEREST MANAGEMENT =====
     {
       resource: Interest,
