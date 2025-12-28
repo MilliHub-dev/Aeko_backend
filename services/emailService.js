@@ -1,5 +1,11 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import dns from 'dns';
+
+// Force IPv4 for DNS resolution to avoid IPv6 issues in some environments
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 dotenv.config();
 
@@ -11,24 +17,22 @@ class EmailService {
       this.transporter = null;
       return;
     }
+    
+    // Log configuration status (without sensitive data)
+    console.log(`Configuring email service for user: ${process.env.EMAIL_USER}`);
 
     try {
       this.transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // Use TLS
-        family: 4, // Force IPv4 to avoid timeouts in some environments
-        connectionTimeout: 20000, // 20 seconds timeout for initial connection
-        socketTimeout: 30000,     // 30 seconds timeout for socket
-        greetingTimeout: 20000,   // 20 seconds to wait for greeting
-        debug: process.env.NODE_ENV === 'development', // Enable debug logging in development
+        service: 'gmail',
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS
         },
-        tls: {
-          rejectUnauthorized: false
-        }
+        // Force IPv4 family
+        family: 4,
+        // Logging for debugging
+        logger: true,
+        debug: true
       });
     } catch (error) {
       console.error('Failed to create email transporter:', error);
