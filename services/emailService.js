@@ -250,6 +250,118 @@ class EmailService {
     }
   }
 
+  // Send login notification
+  async sendLoginNotification(email, username, time, device) {
+    if (!this.isAvailable()) {
+       console.warn('Email service not available. Login notification not sent.');
+       return { success: false, message: 'Email service not configured' };
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>New Login Detected - Aeko</title>
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background-color: white; }
+            .header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 40px 20px; text-align: center; }
+            .content { padding: 40px 30px; }
+            .info-box { background-color: #fff5f5; border-left: 4px solid #f5576c; padding: 20px; margin: 20px 0; }
+            .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🛡️ New Login Detected</h1>
+          </div>
+          <div class="content">
+            <h2>Hello ${username},</h2>
+            <p>We detected a new login to your Aeko account.</p>
+            
+            <div class="info-box">
+              <p><strong>Time:</strong> ${time}</p>
+              <p><strong>Device:</strong> ${device}</p>
+            </div>
+            
+            <p>If this was you, you can safely ignore this email.</p>
+            <p><strong>If you did not authorize this login, please change your password immediately.</strong></p>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Aeko. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    try {
+      const emailParams = this.createEmailParams(email, username, "🛡️ New Login Alert - Aeko", htmlContent);
+      await this.mailerSend.email.send(emailParams);
+      return { success: true, message: 'Login notification sent' };
+    } catch (error) {
+      console.error('Email sending error:', error);
+      return { success: false, message: 'Failed to send login notification' };
+    }
+  }
+
+  // Send golden tick notification
+  async sendGoldenTickNotification(email, username) {
+    if (!this.isAvailable()) {
+       console.warn('Email service not available. Golden tick email not sent.');
+       return { success: false, message: 'Email service not configured' };
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>Golden Tick Awarded - Aeko</title>
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background-color: white; }
+            .header { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: white; padding: 40px 20px; text-align: center; }
+            .content { padding: 40px 30px; }
+            .tick-box { background-color: #fff9e6; border: 2px solid #fda085; border-radius: 10px; padding: 30px; text-align: center; margin: 30px 0; }
+            .golden-tick { font-size: 48px; color: #fda085; margin: 10px 0; }
+            .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🏆 Premium Status Unlocked!</h1>
+            <p>You've earned the Golden Tick!</p>
+          </div>
+          <div class="content">
+            <h2>Congratulations, ${username}! 🌟</h2>
+            <div class="tick-box">
+              <div class="golden-tick">✨ ✓ ✨</div>
+            </div>
+            <p>You are now a Premium Golden Member on Aeko!</p>
+            <p>Enjoy exclusive features, higher limits, and priority support.</p>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Aeko. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    try {
+      const emailParams = this.createEmailParams(email, username, "🏆 Congratulations! You are now a Golden Member!", htmlContent);
+      await this.mailerSend.email.send(emailParams);
+      return { success: true, message: 'Golden tick notification sent' };
+    } catch (error) {
+      console.error('Email sending error:', error);
+      return { success: false, message: 'Failed to send golden tick notification' };
+    }
+  }
+
   // Send welcome email after verification
   async sendWelcomeEmail(email, username) {
     if (!this.isAvailable()) {

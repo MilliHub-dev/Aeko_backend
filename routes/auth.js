@@ -894,6 +894,14 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
         }
 
         const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+        // Send login notification email
+        const userAgent = req.headers['user-agent'] || 'Unknown Device';
+        const time = new Date().toLocaleString();
+        
+        // Don't await this to avoid delaying the response
+        emailService.sendLoginNotification(user.email, user.name, time, userAgent)
+            .catch(err => console.error('Failed to send login notification:', err));
         
         res.json({ 
             success: true,

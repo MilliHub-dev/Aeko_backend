@@ -2,6 +2,7 @@ import express from "express";
 import User from "../models/User.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
+import emailService from "../services/emailService.js";
 
 const router = express.Router();
 
@@ -24,6 +25,10 @@ router.post("/subscribe", authMiddleware, twoFactorMiddleware.requireTwoFactor()
     user.subscriptionStatus = "active";
     user.subscriptionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // +30 days
     await user.save();
+
+    // Send golden tick notification
+    emailService.sendGoldenTickNotification(user.email, user.name)
+      .catch(err => console.error('Failed to send golden tick email:', err));
 
     res.status(200).json({ message: "Golden Tick activated! 🏆" });
   } catch (error) {

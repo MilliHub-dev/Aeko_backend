@@ -10,6 +10,7 @@ import BotSettings from '../models/BotSettings.js';
 import Debate from '../models/Debate.js';
 import Challenge from '../models/Challenge.js';
 import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
+import emailService from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -149,6 +150,15 @@ router.put('/users/:userId/verify', adminAuth, twoFactorMiddleware.requireTwoFac
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
+    // Send email notification
+    if (tickType === 'golden') {
+        emailService.sendGoldenTickNotification(user.email, user.name)
+            .catch(err => console.error('Failed to send golden tick email:', err));
+    } else if (tickType === 'blue') {
+        emailService.sendBlueTickNotification(user.email, user.name)
+            .catch(err => console.error('Failed to send blue tick email:', err));
+    }
+
     res.json({ success: true, message: `${tickType} tick granted to ${user.username}`, user });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to verify user', error: error.message });
