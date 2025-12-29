@@ -276,16 +276,16 @@ class EmailService {
         <body>
           <div class="container">
             <div class="header">
-              <h1>🎉 Welcome to Aeko, ${username}!</h1>
+              <h1> Welcome to Aeko, ${username}!</h1>
               <p>Your email has been successfully verified</p>
             </div>
             
             <div class="content">
-              <h2>Get Started with Aeko 🚀</h2>
+              <h2>Get Started with Aeko </h2>
               <p>You're now part of the next-generation social media platform! Here's how to make the most of your experience:</p>
               
               <div class="feature-box">
-                <h3>🎯 Complete Your Profile (Earn Blue Tick)</h3>
+                <h3> Complete Your Profile (Earn Blue Tick)</h3>
                 <p>Complete these steps to earn your verified status:</p>
                 <ul>
                   <li>📸 Add a profile picture</li>
@@ -299,9 +299,9 @@ class EmailService {
                 <h3>🪙 Explore Aeko Coin</h3>
                 <p>Our native cryptocurrency powers the entire platform. Use it for:</p>
                 <ul>
-                  <li>💰 NFT transactions</li>
-                  <li>💸 Stream donations</li>
-                  <li>🎁 Giveaways and tips</li>
+                  <li> NFT transactions</li>
+                  <li> Stream donations</li>
+                  <li> Giveaways and tips</li>
                 </ul>
               </div>
               
