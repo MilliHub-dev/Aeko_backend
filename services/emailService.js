@@ -1,29 +1,45 @@
-import SibApiV3Sdk from 'sib-api-v3-sdk';
+import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 class EmailService {
   constructor() {
-    // Check if Brevo API key is configured
-    if (!process.env.BREVO_API_KEY) {
-      console.warn('Brevo API key not configured. Email functionality will be disabled.');
-      this.apiInstance = null;
+    // Check if MailerSend API key is configured
+    if (!process.env.MAILERSEND_API_KEY) {
+      console.warn('MailerSend API key not configured. Email functionality will be disabled.');
+      this.mailerSend = null;
       return;
     }
     
-    // Configure API key authorization: api-key
-    const defaultClient = SibApiV3Sdk.ApiClient.instance;
-    const apiKey = defaultClient.authentications['api-key'];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
-
-    this.apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-    console.log('✅ Brevo Email Service Configured');
+    this.mailerSend = new MailerSend({
+      apiKey: process.env.MAILERSEND_API_KEY,
+    });
+    
+    console.log('✅ MailerSend Email Service Configured');
   }
 
   // Check if email service is available
   isAvailable() {
-    return this.apiInstance !== null;
+    return this.mailerSend !== null;
+  }
+
+  // Helper to create common email params
+  createEmailParams(toEmail, toName, subject, htmlContent) {
+    const sentFrom = new Sender(
+      process.env.EMAIL_SENDER_ADDRESS || "noreply@aeko.social",
+      process.env.EMAIL_SENDER_NAME || "Aeko"
+    );
+
+    const recipients = [
+      new Recipient(toEmail, toName)
+    ];
+
+    return new EmailParams()
+      .setFrom(sentFrom)
+      .setTo(recipients)
+      .setSubject(subject)
+      .setHtml(htmlContent);
   }
 
   // Send 4-digit verification code
@@ -35,10 +51,7 @@ class EmailService {
       return { success: true, message: 'Verification code generated (Email service unavailable)' };
     }
 
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-
-    sendSmtpEmail.subject = "🔐 Your Aeko Verification Code";
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -81,8 +94,6 @@ class EmailService {
             </div>
             
             <p>If you didn't create an account with Aeko, you can safely ignore this email.</p>
-            
-            <a href="#" class="button">Verify Now</a>
           </div>
           
           <div class="footer">
@@ -93,15 +104,11 @@ class EmailService {
       </body>
       </html>
     `;
-    sendSmtpEmail.sender = { 
-      name: process.env.EMAIL_SENDER_NAME || "Aeko", 
-      email: process.env.EMAIL_SENDER_ADDRESS || "noreply@aeko.social" 
-    };
-    sendSmtpEmail.to = [{ email: email, name: username }];
-    
+
     try {
-      const data = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
-      console.log('✅ Verification email sent successfully. MessageId:', data.messageId);
+      const emailParams = this.createEmailParams(email, username, "🔐 Your Aeko Verification Code", htmlContent);
+      const response = await this.mailerSend.email.send(emailParams);
+      console.log('✅ Verification email sent successfully. ID:', response); // MailerSend usually returns empty object or ID in header, SDK handles it
       return { success: true, message: 'Verification email sent successfully' };
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
@@ -119,10 +126,7 @@ class EmailService {
       return { success: false, message: 'Email service not configured' };
     }
 
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-
-    sendSmtpEmail.subject = "🔑 Reset Your Aeko Password";
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -176,15 +180,11 @@ class EmailService {
       </body>
       </html>
     `;
-    sendSmtpEmail.sender = { 
-      name: process.env.EMAIL_SENDER_NAME || "Aeko", 
-      email: process.env.EMAIL_SENDER_ADDRESS || "noreply@aeko.social" 
-    };
-    sendSmtpEmail.to = [{ email: email, name: username || 'User' }];
 
     try {
-      const data = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
-      console.log('✅ Password reset email sent successfully. MessageId:', data.messageId);
+      const emailParams = this.createEmailParams(email, username || 'User', "🔑 Reset Your Aeko Password", htmlContent);
+      await this.mailerSend.email.send(emailParams);
+      console.log('✅ Password reset email sent successfully.');
       return { success: true, message: 'Password reset email sent successfully' };
     } catch (error) {
       console.error('❌ Failed to send password reset email:', error);
@@ -203,9 +203,7 @@ class EmailService {
        return { success: false, message: 'Email service not configured' };
     }
 
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = "🎉 Congratulations! You earned your Blue Tick!";
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -241,14 +239,10 @@ class EmailService {
       </body>
       </html>
     `;
-    sendSmtpEmail.sender = { 
-      name: process.env.EMAIL_SENDER_NAME || "Aeko", 
-      email: process.env.EMAIL_SENDER_ADDRESS || "noreply@aeko.social" 
-    };
-    sendSmtpEmail.to = [{ email: email, name: username }];
 
     try {
-      await this.apiInstance.sendTransacEmail(sendSmtpEmail);
+      const emailParams = this.createEmailParams(email, username, "🎉 Congratulations! You earned your Blue Tick!", htmlContent);
+      await this.mailerSend.email.send(emailParams);
       return { success: true, message: 'Blue tick notification sent' };
     } catch (error) {
       console.error('Email sending error:', error);
@@ -256,16 +250,14 @@ class EmailService {
     }
   }
 
-    // Send welcome email after verification
+  // Send welcome email after verification
   async sendWelcomeEmail(email, username) {
     if (!this.isAvailable()) {
        console.warn('Email service not available. Welcome email not sent.');
        return { success: false, message: 'Email service not configured' };
     }
 
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = "🎉 Welcome to Aeko - Your Journey Begins!";
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -341,14 +333,10 @@ class EmailService {
         </body>
         </html>
     `;
-    sendSmtpEmail.sender = { 
-      name: process.env.EMAIL_SENDER_NAME || "Aeko", 
-      email: process.env.EMAIL_SENDER_ADDRESS || "noreply@aeko.social" 
-    };
-    sendSmtpEmail.to = [{ email: email, name: username }];
 
     try {
-      await this.apiInstance.sendTransacEmail(sendSmtpEmail);
+      const emailParams = this.createEmailParams(email, username, "🎉 Welcome to Aeko - Your Journey Begins!", htmlContent);
+      await this.mailerSend.email.send(emailParams);
       return { success: true, message: 'Welcome email sent' };
     } catch (error) {
       console.error('Email sending error:', error);
