@@ -6,7 +6,6 @@ import dotenv from "dotenv";
 import emailService from "../services/emailService.js";
 import User from "../models/User.js";
 import authMiddleware from "../middleware/authMiddleware.js";
-import nodemailer from 'nodemailer';
 import passport from "../config/passport.js";
 import TwoFactorService from "../services/twoFactorService.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";

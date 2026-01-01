@@ -1,45 +1,48 @@
-import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
+import { SendMailClient } from "zeptomail";
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 class EmailService {
   constructor() {
-    // Check if MailerSend API key is configured
-    if (!process.env.MAILERSEND_API_KEY) {
-      console.warn('MailerSend API key not configured. Email functionality will be disabled.');
-      this.mailerSend = null;
+    // Check if ZeptoMail API key is configured
+    if (!process.env.ZEPTOMAIL_API_KEY) {
+      console.warn('ZeptoMail API key not configured. Email functionality will be disabled.');
+      this.client = null;
       return;
     }
     
-    this.mailerSend = new MailerSend({
-      apiKey: process.env.MAILERSEND_API_KEY,
-    });
+    const url = process.env.ZEPTOMAIL_API_URL || "api.zeptomail.com/";
+    const token = process.env.ZEPTOMAIL_API_KEY;
+
+    this.client = new SendMailClient({ url, token });
     
-    console.log('✅ MailerSend Email Service Configured');
+    console.log('✅ ZeptoMail Email Service Configured');
   }
 
   // Check if email service is available
   isAvailable() {
-    return this.mailerSend !== null;
+    return this.client !== null;
   }
 
   // Helper to create common email params
   createEmailParams(toEmail, toName, subject, htmlContent) {
-    const sentFrom = new Sender(
-      process.env.EMAIL_SENDER_ADDRESS || "noreply@aeko.social",
-      process.env.EMAIL_SENDER_NAME || "Aeko"
-    );
-
-    const recipients = [
-      new Recipient(toEmail, toName)
-    ];
-
-    return new EmailParams()
-      .setFrom(sentFrom)
-      .setTo(recipients)
-      .setSubject(subject)
-      .setHtml(htmlContent);
+    return {
+      "from": {
+        "address": process.env.EMAIL_SENDER_ADDRESS || "noreply@aeko.social",
+        "name": process.env.EMAIL_SENDER_NAME || "Aeko"
+      },
+      "to": [
+        {
+          "email_address": {
+            "address": toEmail,
+            "name": toName
+          }
+        }
+      ],
+      "subject": subject,
+      "htmlbody": htmlContent
+    };
   }
 
   // Send 4-digit verification code
@@ -107,8 +110,8 @@ class EmailService {
 
     try {
       const emailParams = this.createEmailParams(email, username, "🔐 Your Aeko Verification Code", htmlContent);
-      const response = await this.mailerSend.email.send(emailParams);
-      console.log('✅ Verification email sent successfully. ID:', response); // MailerSend usually returns empty object or ID in header, SDK handles it
+      const response = await this.client.sendMail(emailParams);
+      console.log('✅ Verification email sent successfully. ID:', response);
       return { success: true, message: 'Verification email sent successfully' };
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
@@ -183,7 +186,7 @@ class EmailService {
 
     try {
       const emailParams = this.createEmailParams(email, username || 'User', "🔑 Reset Your Aeko Password", htmlContent);
-      await this.mailerSend.email.send(emailParams);
+      await this.client.sendMail(emailParams);
       console.log('✅ Password reset email sent successfully.');
       return { success: true, message: 'Password reset email sent successfully' };
     } catch (error) {
@@ -193,60 +196,6 @@ class EmailService {
         message: 'Failed to send password reset email',
         error: error.message 
       };
-    }
-  }
-
-  // Send blue tick notification
-  async sendBlueTickNotification(email, username) {
-    if (!this.isAvailable()) {
-       console.warn('Email service not available. Blue tick email not sent.');
-       return { success: false, message: 'Email service not configured' };
-    }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>Blue Tick Awarded - Aeko</title>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-            .container { max-width: 600px; margin: 0 auto; background-color: white; }
-            .header { background: linear-gradient(135deg, #1da1f2 0%, #1991db 100%); color: white; padding: 40px 20px; text-align: center; }
-            .content { padding: 40px 30px; }
-            .tick-box { background-color: #e8f5ff; border: 2px solid #1da1f2; border-radius: 10px; padding: 30px; text-align: center; margin: 30px 0; }
-            .blue-tick { font-size: 48px; color: #1da1f2; margin: 10px 0; }
-            .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🎉 Congratulations!</h1>
-            <p>You've earned your Blue Tick!</p>
-          </div>
-          <div class="content">
-            <h2>Amazing work, ${username}! 🌟</h2>
-            <div class="tick-box">
-              <div class="blue-tick">✓</div>
-            </div>
-            <p>You are now a verified creator on Aeko!</p>
-          </div>
-          <div class="footer">
-            <p>© ${new Date().getFullYear()} Aeko. All rights reserved.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    try {
-      const emailParams = this.createEmailParams(email, username, "🎉 Congratulations! You earned your Blue Tick!", htmlContent);
-      await this.mailerSend.email.send(emailParams);
-      return { success: true, message: 'Blue tick notification sent' };
-    } catch (error) {
-      console.error('Email sending error:', error);
-      return { success: false, message: 'Failed to send blue tick notification' };
     }
   }
 
@@ -299,7 +248,7 @@ class EmailService {
 
     try {
       const emailParams = this.createEmailParams(email, username, "🛡️ New Login Alert - Aeko", htmlContent);
-      await this.mailerSend.email.send(emailParams);
+      await this.client.sendMail(emailParams);
       return { success: true, message: 'Login notification sent' };
     } catch (error) {
       console.error('Email sending error:', error);
@@ -354,11 +303,65 @@ class EmailService {
 
     try {
       const emailParams = this.createEmailParams(email, username, "🏆 Congratulations! You are now a Golden Member!", htmlContent);
-      await this.mailerSend.email.send(emailParams);
+      await this.client.sendMail(emailParams);
       return { success: true, message: 'Golden tick notification sent' };
     } catch (error) {
       console.error('Email sending error:', error);
       return { success: false, message: 'Failed to send golden tick notification' };
+    }
+  }
+
+  // Send blue tick notification
+  async sendBlueTickNotification(email, username) {
+    if (!this.isAvailable()) {
+       console.warn('Email service not available. Blue tick email not sent.');
+       return { success: false, message: 'Email service not configured' };
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>Blue Tick Awarded - Aeko</title>
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background-color: white; }
+            .header { background: linear-gradient(135deg, #1da1f2 0%, #1991db 100%); color: white; padding: 40px 20px; text-align: center; }
+            .content { padding: 40px 30px; }
+            .tick-box { background-color: #e8f5ff; border: 2px solid #1da1f2; border-radius: 10px; padding: 30px; text-align: center; margin: 30px 0; }
+            .blue-tick { font-size: 48px; color: #1da1f2; margin: 10px 0; }
+            .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🎉 Congratulations!</h1>
+            <p>You've earned your Blue Tick!</p>
+          </div>
+          <div class="content">
+            <h2>Amazing work, ${username}! 🌟</h2>
+            <div class="tick-box">
+              <div class="blue-tick">✓</div>
+            </div>
+            <p>You are now a verified creator on Aeko!</p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Aeko. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    try {
+      const emailParams = this.createEmailParams(email, username, "🎉 Congratulations! You earned your Blue Tick!", htmlContent);
+      await this.client.sendMail(emailParams);
+      return { success: true, message: 'Blue tick notification sent' };
+    } catch (error) {
+      console.error('Email sending error:', error);
+      return { success: false, message: 'Failed to send blue tick notification' };
     }
   }
 
@@ -448,7 +451,7 @@ class EmailService {
 
     try {
       const emailParams = this.createEmailParams(email, username, "🎉 Welcome to Aeko - Your Journey Begins!", htmlContent);
-      await this.mailerSend.email.send(emailParams);
+      await this.client.sendMail(emailParams);
       return { success: true, message: 'Welcome email sent' };
     } catch (error) {
       console.error('Email sending error:', error);

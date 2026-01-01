@@ -61,13 +61,11 @@
     "google-auth-library": "^9.15.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mailersend": "^2.6.0",
     "mongodb": "^6.15.0",
     "mongoose": "^8.13.0",
     "multer": "^2.0.1",
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^4.2.1",
-    "nodemailer": "^6.10.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "qrcode": "^1.5.4",
@@ -81,7 +79,8 @@
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",
-    "web3": "^4.16.0"
+    "web3": "^4.16.0",
+    "zeptomail": "^7.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
