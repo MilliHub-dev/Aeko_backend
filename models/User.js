@@ -69,6 +69,11 @@ const UserSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Interest'
   }],
+  // Bookmarks
+  bookmarks: [{
+    post: { type: mongoose.Schema.Types.ObjectId, ref: 'Post' },
+    savedAt: { type: Date, default: Date.now }
+  }],
   // Community features
   communities: [{
     community: {

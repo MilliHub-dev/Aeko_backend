@@ -39,6 +39,7 @@ const PostSchema = new mongoose.Schema(
             totalShares: { type: Number, default: 0 },
             totalComments: { type: Number, default: 0 },
             totalLikes: { type: Number, default: 0 },
+            totalBookmarks: { type: Number, default: 0 },
             engagementRate: { type: Number, default: 0 }
         },
 

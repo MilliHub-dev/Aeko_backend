@@ -29,6 +29,207 @@ const transformCloudinaryUrl = (url, transformation) => {
   return url.slice(0, idx + marker.length) + transformation + '/' + url.slice(idx + marker.length);
 };
 
+// ============================================================================================
+// =================================== BOOKMARK FEATURES ======================================
+// ============================================================================================
+
+/**
+ * @swagger
+ * /api/posts/{postId}/bookmark:
+ *   post:
+ *     summary: Bookmark a post
+ *     description: Adds a post to the user's bookmarks
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the post to bookmark
+ *     responses:
+ *       200:
+ *         description: Post bookmarked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Post bookmarked successfully"
+ *                 bookmarked:
+ *                   type: boolean
+ *                   example: true
+ *       400:
+ *         description: Invalid Post ID
+ *       404:
+ *         description: Post not found
+ *       500:
+ *         description: Server error
+ */
+router.post(
+  "/:postId/bookmark",
+  authMiddleware,
+  BlockingMiddleware.checkBlockedUser,
+  async (req, res) => {
+    try {
+      const { postId } = req.params;
+      const userId = req.user._id;
+
+      if (!mongoose.Types.ObjectId.isValid(postId)) {
+        return res.status(400).json({ message: "Invalid Post ID" });
+      }
+
+      const post = await Post.findById(postId);
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+
+      const user = await import("../models/User.js").then(m => m.default.findById(userId));
+
+      // Check if already bookmarked
+      const isBookmarked = user.bookmarks.some(b => b.post.toString() === postId);
+
+      if (isBookmarked) {
+        // Unbookmark logic
+        user.bookmarks = user.bookmarks.filter(b => b.post.toString() !== postId);
+        
+        // Update post metrics
+        if (post.engagement.totalBookmarks > 0) {
+            post.engagement.totalBookmarks -= 1;
+        }
+        
+        await user.save();
+        await post.save();
+        
+        return res.status(200).json({ 
+            message: "Bookmark removed successfully", 
+            bookmarked: false,
+            totalBookmarks: post.engagement.totalBookmarks 
+        });
+      }
+
+      // Bookmark logic
+      user.bookmarks.push({ post: postId });
+      
+      // Update post metrics
+      post.engagement.totalBookmarks = (post.engagement.totalBookmarks || 0) + 1;
+
+      await user.save();
+      await post.save();
+
+      res.status(200).json({ 
+          message: "Post bookmarked successfully", 
+          bookmarked: true,
+          totalBookmarks: post.engagement.totalBookmarks
+      });
+
+    } catch (error) {
+      console.error("Bookmark Error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/posts/user/bookmarks:
+ *   get:
+ *     summary: Get bookmarked posts
+ *     description: Retrieve all posts bookmarked by the current user
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of posts per page
+ *     responses:
+ *       200:
+ *         description: List of bookmarked posts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 posts:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Post'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  "/user/bookmarks",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+
+      const user = await import("../models/User.js").then(m => m.default.findById(req.user._id));
+      
+      // Extract post IDs from bookmarks
+      const bookmarkedPostIds = user.bookmarks
+        .sort((a, b) => b.savedAt - a.savedAt) // Sort by saved date desc
+        .map(b => b.post);
+
+      const totalPosts = bookmarkedPostIds.length;
+      const totalPages = Math.ceil(totalPosts / limit);
+
+      // Get paginated post IDs
+      const paginatedIds = bookmarkedPostIds.slice(skip, skip + limit);
+
+      // Fetch full post details
+      const posts = await Post.find({ _id: { $in: paginatedIds } })
+        .populate("user", "username name profilePicture blueTick goldenTick")
+        .populate("originalOwner", "username name profilePicture")
+        .lean();
+        
+      // Reorder posts to match bookmark order (since $in doesn't guarantee order)
+      const orderedPosts = paginatedIds
+        .map(id => posts.find(p => p._id.toString() === id.toString()))
+        .filter(p => p !== undefined); // Filter out any deleted posts
+
+      res.status(200).json({
+        posts: orderedPosts,
+        pagination: {
+          total: totalPosts,
+          page,
+          pages: totalPages,
+          limit
+        }
+      });
+
+    } catch (error) {
+      console.error("Get Bookmarks Error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
 /**
  * @swagger
  * /api/posts/create:
