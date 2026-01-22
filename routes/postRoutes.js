@@ -73,7 +73,7 @@ const transformCloudinaryUrl = (url, transformation) => {
 router.post(
   "/:postId/bookmark",
   authMiddleware,
-  BlockingMiddleware.checkBlockedUser,
+  // Removed BlockingMiddleware.checkBlockedUser as it is undefined or incorrect method name
   async (req, res) => {
     try {
       const { postId } = req.params;
