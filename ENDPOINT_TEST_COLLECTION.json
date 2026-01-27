@@ -108,41 +108,7 @@
         "description": "Like or unlike a post"
       }
     ],
-    "blockchain": [
-      {
-        "name": "Connect Solana Wallet",
-        "method": "POST",
-        "url": "{{baseUrl}}/api/aeko/connect-wallet",
-        "headers": {
-          "Authorization": "Bearer {{authToken}}"
-        },
-        "body": {
-          "walletAddress": "11111111111111111111111111111112"
-        },
-        "expectedStatus": 200,
-        "description": "Connect Solana wallet to account"
-      },
-      {
-        "name": "Get Aeko Balance",
-        "method": "GET",
-        "url": "{{baseUrl}}/api/aeko/balance",
-        "headers": {
-          "Authorization": "Bearer {{authToken}}"
-        },
-        "expectedStatus": 200,
-        "description": "Get user's Aeko token balance"
-      },
-      {
-        "name": "Get Transaction History",
-        "method": "GET",
-        "url": "{{baseUrl}}/api/aeko/transactions",
-        "headers": {
-          "Authorization": "Bearer {{authToken}}"
-        },
-        "expectedStatus": 200,
-        "description": "Get user's transaction history"
-      }
-    ],
+
     "chat": [
       {
         "name": "Get Chat Rooms",
@@ -194,18 +160,7 @@
         "description": "Discover available livestreams"
       }
     ],
-    "nft": [
-      {
-        "name": "Get My NFTs",
-        "method": "GET",
-        "url": "{{baseUrl}}/api/nft/my-nfts",
-        "headers": {
-          "Authorization": "Bearer {{authToken}}"
-        },
-        "expectedStatus": 200,
-        "description": "Get user's NFT collection"
-      }
-    ],
+
     "ads": [
       {
         "name": "Get Targeted Ads",
@@ -250,11 +205,8 @@
     "authentication.profile-completion-status",
     "posts.create-text-post",
     "posts.get-feed",
-    "blockchain.connect-solana-wallet",
-    "blockchain.get-aeko-balance",
     "chat.get-chat-rooms",
     "livestream.discover-streams",
-    "nft.get-my-nfts",
     "ads.get-targeted-ads",
     "system.chat-system-info",
     "system.livestream-system-info"

@@ -1,7 +1,7 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { OAuth2Client } from 'google-auth-library';
-import User from '../models/User.js';
+import { prisma } from './db.js';
 
 // Initialize Google OAuth2 client for ID token verification (only if credentials exist)
 const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
@@ -38,7 +38,7 @@ async function generateUniqueUsername(baseUsername) {
   let counter = 1;
   
   // Check if username exists and append number if needed
-  while (await User.findOne({ username })) {
+  while (await prisma.user.findUnique({ where: { username } })) {
     username = `${baseUsername.replace(/\s+/g, '').toLowerCase()}${counter}`;
     counter++;
   }
@@ -69,48 +69,62 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     }
 
     // Try existing by provider id first
-    let user = await User.findOne({ oauthProvider: 'google', oauthId });
+    let user = await prisma.user.findFirst({
+        where: { oauthProvider: 'google', oauthId }
+    });
 
     if (!user) {
       // If not found, try by email to link
       if (email) {
-        user = await User.findOne({ email });
+        user = await prisma.user.findUnique({ where: { email } });
       }
 
       if (user) {
         // Link existing account to Google OAuth
-        user.oauthProvider = 'google';
-        user.oauthId = oauthId;
-        user.avatar = profile.photos?.[0]?.value || user.avatar || '';
-        user.emailVerification.isVerified = true;
-        await user.save();
+        const currentEmailVerification = user.emailVerification || {};
+        
+        user = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                oauthProvider: 'google',
+                oauthId: oauthId,
+                avatar: profile.photos?.[0]?.value || user.avatar || '',
+                emailVerification: { ...currentEmailVerification, isVerified: true }
+            }
+        });
         console.log(`Linked existing account ${email} to Google OAuth`);
       } else {
         // Create new user with unique username
         const usernameBase = profile.displayName || (email ? email.split('@')[0] : `user_${oauthId.slice(-6)}`);
         const username = await generateUniqueUsername(usernameBase);
         
-        user = await User.create({
-          name: profile.displayName || username,
-          username,
-          email: email || `${oauthId}@google-oauth.local`,
-          // Dummy password (not used for OAuth accounts)
-          password: oauthId,
-          oauthProvider: 'google',
-          oauthId,
-          avatar: profile.photos?.[0]?.value || '',
-          'emailVerification.isVerified': true,
+        user = await prisma.user.create({
+          data: {
+            name: profile.displayName || username,
+            username,
+            email: email || `${oauthId}@google-oauth.local`,
+            // Dummy password (not used for OAuth accounts)
+            password: oauthId,
+            oauthProvider: 'google',
+            oauthId,
+            avatar: profile.photos?.[0]?.value || '',
+            emailVerification: { isVerified: true },
+          }
         });
         console.log(`Created new user ${username} via Google OAuth`);
       }
     }
 
     // Update last login timestamp and avatar if changed
-    user.lastLoginAt = new Date();
+    const updateData = { lastLoginAt: new Date() };
     if (profile.photos?.[0]?.value && user.avatar !== profile.photos[0].value) {
-      user.avatar = profile.photos[0].value;
+      updateData.avatar = profile.photos[0].value;
     }
-    await user.save();
+    
+    user = await prisma.user.update({
+        where: { id: user.id },
+        data: updateData
+    });
 
     return done(null, user);
   } catch (err) {

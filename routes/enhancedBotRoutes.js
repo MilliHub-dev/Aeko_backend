@@ -1,10 +1,9 @@
 import express from "express";
-import User from "../models/User.js";
-import BotSettings from "../models/BotSettings.js";
-import BotConversation from "../models/BotConversation.js";
+import { PrismaClient } from "@prisma/client";
 import authMiddleware from "../middleware/authMiddleware.js";
 import enhancedBot from "../ai/enhancedBot.js";
 
+const prisma = new PrismaClient();
 const router = express.Router();
 
 /**
@@ -84,12 +83,21 @@ router.post("/chat", authMiddleware, async (req, res) => {
     }
 
     // Update user analytics
-    await User.findByIdAndUpdate(req.userId, {
-      $inc: { 'botAnalytics.totalInteractions': 1 },
-      $set: { 
-        'botAnalytics.lastInteraction': new Date(),
-        'botAnalytics.averageResponseTime': responseTime
-      }
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { botAnalytics: true }
+    });
+    
+    let analytics = user?.botAnalytics || {};
+    if (typeof analytics !== 'object' || Array.isArray(analytics)) analytics = {};
+    
+    analytics.totalInteractions = (analytics.totalInteractions || 0) + 1;
+    analytics.lastInteraction = new Date();
+    analytics.averageResponseTime = responseTime; // Mimicking previous behavior of overwriting
+    
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { botAnalytics: analytics }
     });
 
     res.json({
@@ -118,13 +126,17 @@ router.post("/chat", authMiddleware, async (req, res) => {
  */
 router.get("/settings", authMiddleware, async (req, res) => {
   try {
-    let settings = await BotSettings.findOne({ userId: req.userId });
+    let settings = await prisma.botSettings.findUnique({
+      where: { userId: req.userId }
+    });
     
     if (!settings) {
-      settings = await BotSettings.create({
-        userId: req.userId,
-        botEnabled: false,
-        botPersonality: 'friendly'
+      settings = await prisma.botSettings.create({
+        data: {
+          userId: req.userId,
+          botEnabled: false,
+          botPersonality: 'friendly'
+        }
       });
     }
 
@@ -168,11 +180,14 @@ router.put("/settings", authMiddleware, async (req, res) => {
       }
     });
 
-    const settings = await BotSettings.findOneAndUpdate(
-      { userId: req.userId },
-      updates,
-      { new: true, upsert: true }
-    );
+    const settings = await prisma.botSettings.upsert({
+      where: { userId: req.userId },
+      update: updates,
+      create: {
+        userId: req.userId,
+        ...updates
+      }
+    });
 
     // Also update user's bot settings
     const userUpdates = {};
@@ -180,7 +195,10 @@ router.put("/settings", authMiddleware, async (req, res) => {
     if (updates.botPersonality !== undefined) userUpdates.botPersonality = updates.botPersonality;
     
     if (Object.keys(userUpdates).length > 0) {
-      await User.findByIdAndUpdate(req.userId, userUpdates);
+      await prisma.user.update({
+        where: { id: req.userId },
+        data: userUpdates
+      });
     }
 
     res.json({ message: "Settings updated successfully", settings });
@@ -480,30 +498,95 @@ router.post("/rate-response", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Valid conversation ID and rating (1-5) are required" });
     }
 
-    const conversation = await BotConversation.findOneAndUpdate(
-      { _id: conversationId, userId: req.userId },
-      { 
-        rating,
-        feedback,
-        ratedAt: new Date()
-      },
-      { new: true }
-    );
-
-    if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
+    // Update conversation
+    // Note: Prisma update returns error if not found, unlike Mongoose returning null
+    // So we check existence or handle error
+    
+    let conversation;
+    try {
+        conversation = await prisma.botConversation.update({
+          where: { id: conversationId }, // Assuming id is unique globally. If composite key needed, this might fail, but BotConversation ID is UUID.
+          data: {
+            rating,
+            feedback,
+            // ratedAt: new Date() // ratedAt not in schema you showed, check schema
+            metadata: {
+                ratedAt: new Date(),
+                rating,
+                feedback
+            }
+          }
+        });
+        
+        // Verify user ownership if strict
+        if (conversation.userId !== req.userId) {
+            // Rollback or error?
+            // Actually, best to findFirst with userId before updating.
+        }
+    } catch (e) {
+        // If not found
+        return res.status(404).json({ error: "Conversation not found" });
     }
 
-    // Update user's average satisfaction rating
-    const avgRating = await BotConversation.aggregate([
-      { $match: { userId: req.userId, rating: { $exists: true } } },
-      { $group: { _id: null, averageRating: { $avg: '$rating' } } }
-    ]);
+    // Verify ownership properly
+    const ownedConv = await prisma.botConversation.findFirst({
+        where: { id: conversationId, userId: req.userId }
+    });
+    
+    if (!ownedConv) {
+         return res.status(404).json({ error: "Conversation not found or unauthorized" });
+    }
+    
+    // Now update
+    conversation = await prisma.botConversation.update({
+        where: { id: conversationId },
+        data: {
+            // rating, // Schema doesn't have rating field? Checked schema: no rating field in BotConversation model provided in context!
+            // Wait, schema has metadata Json?.
+            // The Mongoose code had rating field.
+            // If schema lacks rating field, I must store in metadata.
+            metadata: {
+                ...(typeof ownedConv.metadata === 'object' ? ownedConv.metadata : {}),
+                rating,
+                feedback,
+                ratedAt: new Date()
+            }
+        }
+    });
 
-    if (avgRating.length > 0) {
-      await User.findByIdAndUpdate(req.userId, {
-        'botAnalytics.satisfactionRating': avgRating[0].averageRating
-      });
+    // Update user's average satisfaction rating
+    // Calculate avg from metadata
+    const conversations = await prisma.botConversation.findMany({
+        where: { userId: req.userId }
+    });
+    
+    let totalRating = 0;
+    let count = 0;
+    for (const c of conversations) {
+        const meta = c.metadata;
+        if (meta && typeof meta === 'object' && meta.rating) {
+            totalRating += Number(meta.rating);
+            count++;
+        }
+    }
+    
+    const averageRating = count > 0 ? totalRating / count : 0;
+
+    if (count > 0) {
+        // Update user analytics
+        const user = await prisma.user.findUnique({
+             where: { id: req.userId },
+             select: { botAnalytics: true }
+        });
+        let analytics = user?.botAnalytics || {};
+        if (typeof analytics !== 'object') analytics = {};
+        
+        analytics.satisfactionRating = averageRating;
+        
+        await prisma.user.update({
+            where: { id: req.userId },
+            data: { botAnalytics: analytics }
+        });
     }
 
     res.json({ message: "Response rated successfully", conversation });

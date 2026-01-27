@@ -1,5 +1,18 @@
-import mongoose from "mongoose";
-import User from "../models/User.js";
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+/**
+ * Custom validator to check if value is a valid ID (UUID or MongoDB ObjectId)
+ */
+const isValidId = (value) => {
+  // Check for MongoDB ObjectId (24 hex characters)
+  const isObjectId = /^[0-9a-fA-F]{24}$/.test(value);
+  // Check for UUID (standard format)
+  const isUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
+  
+  return isObjectId || isUUID;
+};
 
 /**
  * Privacy validation utilities for post privacy management
@@ -36,9 +49,9 @@ const privacyUtils = {
           };
         }
 
-        // Validate that all selectedUsers are valid ObjectIds
+        // Validate that all selectedUsers are valid IDs
         for (const userId of selectedUsers) {
-          if (!mongoose.Types.ObjectId.isValid(userId)) {
+          if (!isValidId(userId)) {
             return {
               success: false,
               error: `Invalid user ID in selectedUsers: ${userId}`
@@ -130,7 +143,9 @@ const privacyUtils = {
       }
 
       // Only post creator can update privacy settings
-      const postCreatorId = post.user?._id?.toString() || post.user?.toString();
+      // Handle both Prisma object (userId) and potential legacy structure
+      const postCreatorId = post.userId || post.user?._id?.toString() || post.user?.toString();
+      
       if (postCreatorId !== userId.toString()) {
         return {
           success: false,
@@ -168,9 +183,9 @@ const privacyUtils = {
         };
       }
 
-      // Check if all user IDs are valid ObjectIds
+      // Check if all user IDs are valid
       for (const userId of selectedUserIds) {
-        if (!mongoose.Types.ObjectId.isValid(userId)) {
+        if (!isValidId(userId)) {
           return {
             success: false,
             error: `Invalid user ID: ${userId}`
@@ -179,11 +194,17 @@ const privacyUtils = {
       }
 
       // Check if all users exist in the database
-      const users = await User.find({
-        _id: { $in: selectedUserIds }
-      }).select('_id username');
+      const users = await prisma.user.findMany({
+        where: {
+          id: { in: selectedUserIds }
+        },
+        select: {
+          id: true,
+          username: true
+        }
+      });
 
-      const foundUserIds = users.map(user => user._id.toString());
+      const foundUserIds = users.map(user => user.id);
       const missingUsers = selectedUserIds.filter(id => 
         !foundUserIds.includes(id.toString())
       );
@@ -231,7 +252,11 @@ const privacyUtils = {
         };
       }
 
-      const followee = await User.findById(followeeId).select('followers');
+      const followee = await prisma.user.findUnique({
+        where: { id: followeeId },
+        select: { followers: true }
+      });
+
       if (!followee) {
         return {
           success: false,
@@ -240,7 +265,8 @@ const privacyUtils = {
         };
       }
 
-      const isFollowing = followee.followers.some(id => 
+      const followers = Array.isArray(followee.followers) ? followee.followers : [];
+      const isFollowing = followers.some(id => 
         id.toString() === followerId.toString()
       );
 
@@ -271,7 +297,14 @@ const privacyUtils = {
         };
       }
 
-      const user = await User.findById(userId).select('followers following');
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          followers: true,
+          following: true
+        }
+      });
+
       if (!user) {
         return {
           success: false,
@@ -279,13 +312,16 @@ const privacyUtils = {
         };
       }
 
+      const followers = Array.isArray(user.followers) ? user.followers : [];
+      const following = Array.isArray(user.following) ? user.following : [];
+
       return {
         success: true,
         relationships: {
-          followers: user.followers || [],
-          following: user.following || [],
-          followerCount: (user.followers || []).length,
-          followingCount: (user.following || []).length
+          followers: followers,
+          following: following,
+          followerCount: followers.length,
+          followingCount: following.length
         }
       };
     } catch (error) {
@@ -310,7 +346,7 @@ const privacyUtils = {
       newLevel: newLevel,
       updatedAt: new Date(),
       updatedBy: updatedBy,
-      postId: post._id
+      postId: post.id || post._id // Handle both
     };
   },
 

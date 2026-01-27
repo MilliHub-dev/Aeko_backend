@@ -2,8 +2,10 @@ import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
-import User from '../models/User.js';
+import { PrismaClient } from '@prisma/client';
 import SecurityLogger from './securityLogger.js';
+
+const prisma = new PrismaClient();
 
 class TwoFactorService {
   constructor() {
@@ -18,7 +20,7 @@ class TwoFactorService {
    */
   async generateSecret(userId) {
     try {
-      const user = await User.findById(userId);
+      const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
         throw new Error('User not found');
       }
@@ -48,7 +50,7 @@ class TwoFactorService {
    */
   async generateQRCode(userId, secret) {
     try {
-      const user = await User.findById(userId);
+      const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
         throw new Error('User not found');
       }
@@ -77,15 +79,17 @@ class TwoFactorService {
    */
   async verifyTOTP(userId, token, req = null) {
     try {
-      const user = await User.findById(userId);
-      if (!user || !user.twoFactorAuth.isEnabled || !user.twoFactorAuth.secret) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const twoFactorAuth = user?.twoFactorAuth || {};
+      
+      if (!user || !twoFactorAuth.isEnabled || !twoFactorAuth.secret) {
         const error = new Error('2FA not enabled for this user');
         await SecurityLogger.log2FAUsedEvent(userId, req, false, error.message);
         throw error;
       }
 
       // Decrypt the stored secret
-      const decryptedSecret = this.decryptSecret(user.twoFactorAuth.secret);
+      const decryptedSecret = this.decryptSecret(twoFactorAuth.secret);
 
       // Verify the token with a window of ±1 (30 seconds before/after)
       const verified = speakeasy.totp.verify({
@@ -97,8 +101,10 @@ class TwoFactorService {
 
       if (verified) {
         // Update last used timestamp
-        await User.findByIdAndUpdate(userId, {
-          'twoFactorAuth.lastUsed': new Date()
+        twoFactorAuth.lastUsed = new Date();
+        await prisma.user.update({
+          where: { id: userId },
+          data: { twoFactorAuth }
         });
 
         // Log successful 2FA usage
@@ -127,7 +133,7 @@ class TwoFactorService {
    */
   async generateBackupCodes(userId, count = 10, req = null) {
     try {
-      const user = await User.findById(userId);
+      const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
         const error = new Error('User not found');
         await SecurityLogger.logBackupCodesGeneratedEvent(userId, req, false, error.message);
@@ -153,14 +159,18 @@ class TwoFactorService {
       }
 
       // Update user with new backup codes
-      await User.findByIdAndUpdate(userId, {
-        'twoFactorAuth.backupCodes': hashedCodes
+      const twoFactorAuth = user.twoFactorAuth || {};
+      twoFactorAuth.backupCodes = hashedCodes;
+      
+      await prisma.user.update({
+        where: { id: userId },
+        data: { twoFactorAuth }
       });
 
       // Log successful backup code generation
       await SecurityLogger.logBackupCodesGeneratedEvent(userId, req, true, null, {
         codesCount: count,
-        regenerated: user.twoFactorAuth?.backupCodes?.length > 0
+        regenerated: (twoFactorAuth.backupCodes || []).length > 0
       });
 
       return backupCodes;
@@ -182,8 +192,10 @@ class TwoFactorService {
    */
   async verifyBackupCode(userId, code, req = null) {
     try {
-      const user = await User.findById(userId);
-      if (!user || !user.twoFactorAuth.isEnabled) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const twoFactorAuth = user?.twoFactorAuth || {};
+      
+      if (!user || !twoFactorAuth.isEnabled) {
         const error = new Error('2FA not enabled for this user');
         await SecurityLogger.logBackupCodeUsedEvent(userId, req, false, error.message);
         throw error;
@@ -191,8 +203,10 @@ class TwoFactorService {
 
       // Find matching unused backup code
       let backupCodeIndex = -1;
-      for (let i = 0; i < user.twoFactorAuth.backupCodes.length; i++) {
-        const storedCode = user.twoFactorAuth.backupCodes[i];
+      const backupCodes = twoFactorAuth.backupCodes || [];
+      
+      for (let i = 0; i < backupCodes.length; i++) {
+        const storedCode = backupCodes[i];
         if (!storedCode.used && await bcrypt.compare(code, storedCode.code)) {
           backupCodeIndex = i;
           break;
@@ -206,15 +220,18 @@ class TwoFactorService {
       }
 
       // Mark the backup code as used
-      const updatePath = `twoFactorAuth.backupCodes.${backupCodeIndex}`;
-      await User.findByIdAndUpdate(userId, {
-        [`${updatePath}.used`]: true,
-        [`${updatePath}.usedAt`]: new Date(),
-        'twoFactorAuth.lastUsed': new Date()
+      backupCodes[backupCodeIndex].used = true;
+      backupCodes[backupCodeIndex].usedAt = new Date();
+      twoFactorAuth.lastUsed = new Date();
+      twoFactorAuth.backupCodes = backupCodes;
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { twoFactorAuth }
       });
 
       // Calculate remaining codes
-      const remainingCodes = user.twoFactorAuth.backupCodes.filter(c => !c.used).length - 1;
+      const remainingCodes = backupCodes.filter(c => !c.used).length;
 
       // Log successful backup code usage
       await SecurityLogger.logBackupCodeUsedEvent(userId, req, true, null, {
@@ -289,8 +306,9 @@ class TwoFactorService {
    */
   async is2FAEnabled(userId) {
     try {
-      const user = await User.findById(userId);
-      return user && user.twoFactorAuth && user.twoFactorAuth.isEnabled;
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const twoFactorAuth = user?.twoFactorAuth || {};
+      return user && twoFactorAuth.isEnabled;
     } catch (error) {
       return false;
     }
@@ -306,14 +324,16 @@ class TwoFactorService {
    */
   async enableTwoFactor(userId, secret, verificationToken, req = null) {
     try {
-      const user = await User.findById(userId);
+      const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
         const error = new Error('User not found');
         await SecurityLogger.log2FAEnabledEvent(userId, req, false, error.message);
         throw error;
       }
 
-      if (user.twoFactorAuth?.isEnabled) {
+      const twoFactorAuth = user.twoFactorAuth || {};
+
+      if (twoFactorAuth.isEnabled) {
         const error = new Error('2FA is already enabled for this user');
         await SecurityLogger.log2FAEnabledEvent(userId, req, false, error.message);
         throw error;
@@ -353,12 +373,18 @@ class TwoFactorService {
       }
 
       // Update user with 2FA settings
-      await User.findByIdAndUpdate(userId, {
-        'twoFactorAuth.isEnabled': true,
-        'twoFactorAuth.secret': encryptedSecret,
-        'twoFactorAuth.backupCodes': hashedCodes,
-        'twoFactorAuth.enabledAt': new Date(),
-        'twoFactorAuth.lastUsed': new Date()
+      const updatedAuth = {
+        ...twoFactorAuth,
+        isEnabled: true,
+        secret: encryptedSecret,
+        backupCodes: hashedCodes,
+        enabledAt: new Date(),
+        lastUsed: new Date()
+      };
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { twoFactorAuth: updatedAuth }
       });
 
       // Log successful 2FA enablement
@@ -386,14 +412,16 @@ class TwoFactorService {
    */
   async disableTwoFactor(userId, password, totpToken, req = null) {
     try {
-      const user = await User.findById(userId);
+      const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
         const error = new Error('User not found');
         await SecurityLogger.log2FADisabledEvent(userId, req, false, error.message);
         throw error;
       }
 
-      if (!user.twoFactorAuth?.isEnabled) {
+      const twoFactorAuth = user.twoFactorAuth || {};
+
+      if (!twoFactorAuth.isEnabled) {
         const error = new Error('2FA is not enabled for this user');
         await SecurityLogger.log2FADisabledEvent(userId, req, false, error.message);
         throw error;
@@ -416,12 +444,18 @@ class TwoFactorService {
       }
 
       // Disable 2FA and clear all related data
-      await User.findByIdAndUpdate(userId, {
-        'twoFactorAuth.isEnabled': false,
-        'twoFactorAuth.secret': null,
-        'twoFactorAuth.backupCodes': [],
-        'twoFactorAuth.enabledAt': null,
-        'twoFactorAuth.lastUsed': null
+      const updatedAuth = {
+        ...twoFactorAuth,
+        isEnabled: false,
+        secret: null,
+        backupCodes: [],
+        enabledAt: null,
+        lastUsed: null
+      };
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { twoFactorAuth: updatedAuth }
       });
 
       // Log successful 2FA disablement
@@ -448,15 +482,19 @@ class TwoFactorService {
    */
   async verifyBackupCodeForLogin(userId, code) {
     try {
-      const user = await User.findById(userId);
-      if (!user || !user.twoFactorAuth.isEnabled) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const twoFactorAuth = user?.twoFactorAuth || {};
+
+      if (!user || !twoFactorAuth.isEnabled) {
         throw new Error('2FA not enabled for this user');
       }
 
+      const backupCodes = twoFactorAuth.backupCodes || [];
+
       // Find matching unused backup code
       let backupCodeIndex = -1;
-      for (let i = 0; i < user.twoFactorAuth.backupCodes.length; i++) {
-        const storedCode = user.twoFactorAuth.backupCodes[i];
+      for (let i = 0; i < backupCodes.length; i++) {
+        const storedCode = backupCodes[i];
         if (!storedCode.used && await bcrypt.compare(code, storedCode.code)) {
           backupCodeIndex = i;
           break;
@@ -468,11 +506,18 @@ class TwoFactorService {
       }
 
       // Mark the backup code as used
-      const updatePath = `twoFactorAuth.backupCodes.${backupCodeIndex}`;
-      await User.findByIdAndUpdate(userId, {
-        [`${updatePath}.used`]: true,
-        [`${updatePath}.usedAt`]: new Date(),
-        'twoFactorAuth.lastUsed': new Date()
+      backupCodes[backupCodeIndex].used = true;
+      backupCodes[backupCodeIndex].usedAt = new Date();
+
+      const updatedAuth = {
+        ...twoFactorAuth,
+        backupCodes: backupCodes,
+        lastUsed: new Date()
+      };
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { twoFactorAuth: updatedAuth }
       });
 
       return true;
@@ -489,8 +534,10 @@ class TwoFactorService {
    */
   async validateLoginWith2FA(userId, totpToken) {
     try {
-      const user = await User.findById(userId);
-      if (!user || !user.twoFactorAuth.isEnabled) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const twoFactorAuth = user?.twoFactorAuth || {};
+
+      if (!user || !twoFactorAuth.isEnabled) {
         throw new Error('2FA not enabled for this user');
       }
 
@@ -507,16 +554,18 @@ class TwoFactorService {
    */
   async get2FAStatus(userId) {
     try {
-      const user = await User.findById(userId);
+      const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
         throw new Error('User not found');
       }
 
+      const twoFactorAuth = user.twoFactorAuth || {};
+
       return {
-        isEnabled: user.twoFactorAuth?.isEnabled || false,
-        enabledAt: user.twoFactorAuth?.enabledAt || null,
-        lastUsed: user.twoFactorAuth?.lastUsed || null,
-        backupCodesCount: user.twoFactorAuth?.backupCodes?.filter(code => !code.used).length || 0
+        isEnabled: twoFactorAuth.isEnabled || false,
+        enabledAt: twoFactorAuth.enabledAt || null,
+        lastUsed: twoFactorAuth.lastUsed || null,
+        backupCodesCount: (twoFactorAuth.backupCodes || []).filter(code => !code.used).length
       };
     } catch (error) {
       throw new Error(`Failed to get 2FA status: ${error.message}`);

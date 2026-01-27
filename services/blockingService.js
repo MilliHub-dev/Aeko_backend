@@ -1,5 +1,5 @@
-import User from '../models/User.js';
-import mongoose from 'mongoose';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 import SecurityLogger from './securityLogger.js';
 
 /**
@@ -22,14 +22,22 @@ class BlockingService {
         throw error;
       }
 
-      const blocker = await User.findById(blockerId);
+      const blocker = await prisma.user.findUnique({
+        where: { id: blockerId },
+        select: { id: true, blockedUsers: true, username: true }
+      });
+
       if (!blocker) {
         const error = new Error('Blocker user not found');
         await SecurityLogger.logBlockEvent(blockerId, blockedId, req, false, error.message);
         throw error;
       }
 
-      const blocked = await User.findById(blockedId);
+      const blocked = await prisma.user.findUnique({
+        where: { id: blockedId },
+        select: { id: true, username: true }
+      });
+
       if (!blocked) {
         const error = new Error('User to block not found');
         await SecurityLogger.logBlockEvent(blockerId, blockedId, req, false, error.message);
@@ -37,8 +45,11 @@ class BlockingService {
       }
 
       // Check if already blocked
-      const existingBlock = blocker.blockedUsers?.find(
-        block => block.user.toString() === blockedId
+      // blockedUsers is a JSON array
+      const currentBlockedUsers = Array.isArray(blocker.blockedUsers) ? blocker.blockedUsers : [];
+      
+      const existingBlock = currentBlockedUsers.find(
+        block => (block.user === blockedId || block.user?.id === blockedId || block.userId === blockedId)
       );
 
       if (existingBlock) {
@@ -48,17 +59,18 @@ class BlockingService {
       }
 
       // Add to blocked users list
-      if (!blocker.blockedUsers) {
-        blocker.blockedUsers = [];
-      }
-
-      blocker.blockedUsers.push({
+      const newBlock = {
         user: blockedId,
         blockedAt: new Date(),
         reason: reason
-      });
+      };
 
-      await blocker.save();
+      const updatedBlockedUsers = [...currentBlockedUsers, newBlock];
+
+      await prisma.user.update({
+        where: { id: blockerId },
+        data: { blockedUsers: updatedBlockedUsers }
+      });
 
       // Log successful block event
       await SecurityLogger.logBlockEvent(blockerId, blockedId, req, true, null, { reason });
@@ -67,9 +79,9 @@ class BlockingService {
         success: true,
         message: 'User blocked successfully',
         blockedUser: {
-          id: blocked._id,
+          id: blocked.id,
           username: blocked.username,
-          blockedAt: new Date()
+          blockedAt: newBlock.blockedAt
         }
       };
     } catch (error) {
@@ -92,21 +104,27 @@ class BlockingService {
    */
   async unblockUser(blockerId, blockedId, req = null) {
     try {
-      const blocker = await User.findById(blockerId);
+      const blocker = await prisma.user.findUnique({
+        where: { id: blockerId },
+        select: { id: true, blockedUsers: true }
+      });
+
       if (!blocker) {
         const error = new Error('User not found');
         await SecurityLogger.logUnblockEvent(blockerId, blockedId, req, false, error.message);
         throw error;
       }
 
-      if (!blocker.blockedUsers || blocker.blockedUsers.length === 0) {
+      const currentBlockedUsers = Array.isArray(blocker.blockedUsers) ? blocker.blockedUsers : [];
+
+      if (currentBlockedUsers.length === 0) {
         const error = new Error('User is not blocked');
         await SecurityLogger.logUnblockEvent(blockerId, blockedId, req, false, error.message);
         throw error;
       }
 
-      const blockIndex = blocker.blockedUsers.findIndex(
-        block => block.user.toString() === blockedId
+      const blockIndex = currentBlockedUsers.findIndex(
+        block => (block.user === blockedId || block.user?.id === blockedId || block.userId === blockedId)
       );
 
       if (blockIndex === -1) {
@@ -115,8 +133,14 @@ class BlockingService {
         throw error;
       }
 
-      blocker.blockedUsers.splice(blockIndex, 1);
-      await blocker.save();
+      // Remove from blocked list
+      const updatedBlockedUsers = [...currentBlockedUsers];
+      updatedBlockedUsers.splice(blockIndex, 1);
+
+      await prisma.user.update({
+        where: { id: blockerId },
+        data: { blockedUsers: updatedBlockedUsers }
+      });
 
       // Log successful unblock event
       await SecurityLogger.logUnblockEvent(blockerId, blockedId, req, true);
@@ -141,13 +165,19 @@ class BlockingService {
    * @returns {Promise<boolean>} True if userId1 has blocked userId2
    */
   async isBlocked(userId1, userId2) {
-    const user = await User.findById(userId1);
-    if (!user || !user.blockedUsers) {
+    if (!userId1 || !userId2) return false;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId1 },
+      select: { blockedUsers: true }
+    });
+
+    if (!user || !user.blockedUsers || !Array.isArray(user.blockedUsers)) {
       return false;
     }
 
     return user.blockedUsers.some(
-      block => block.user.toString() === userId2
+      block => (block.user === userId2 || block.user?.id === userId2 || block.userId === userId2)
     );
   }
 
@@ -159,33 +189,66 @@ class BlockingService {
    * @returns {Promise<Object>} Paginated list of blocked users
    */
   async getBlockedUsers(userId, page = 1, limit = 20) {
-    const user = await User.findById(userId)
-      .populate('blockedUsers.user', 'username profilePicture')
-      .exec();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { blockedUsers: true }
+    });
 
     if (!user) {
       throw new Error('User not found');
     }
 
-    const blockedUsers = user.blockedUsers || [];
+    const blockedList = Array.isArray(user.blockedUsers) ? user.blockedUsers : [];
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
     
-    const paginatedBlocks = blockedUsers.slice(startIndex, endIndex);
+    // Slice the array of blocked user objects
+    const paginatedBlocks = blockedList.slice(startIndex, endIndex);
 
-    return {
-      blockedUsers: paginatedBlocks.map(block => ({
-        id: block.user._id,
-        username: block.user.username,
-        profilePicture: block.user.profilePicture,
+    // Fetch user details for the blocked users
+    // Extract IDs
+    const blockedUserIds = paginatedBlocks.map(block => block.user || block.userId || block.user?.id);
+    
+    const blockedUsersDetails = await prisma.user.findMany({
+      where: {
+        id: { in: blockedUserIds }
+      },
+      select: {
+        id: true,
+        username: true,
+        profilePicture: true
+      }
+    });
+
+    // Create a map for easy lookup
+    const userMap = blockedUsersDetails.reduce((acc, u) => {
+      acc[u.id] = u;
+      return acc;
+    }, {});
+
+    // Combine block info with user details
+    const result = paginatedBlocks.map(block => {
+      const id = block.user || block.userId || block.user?.id;
+      const userDetail = userMap[id];
+      
+      if (!userDetail) return null; // Should not happen if data integrity is good
+
+      return {
+        id: userDetail.id,
+        username: userDetail.username,
+        profilePicture: userDetail.profilePicture,
         blockedAt: block.blockedAt,
         reason: block.reason
-      })),
+      };
+    }).filter(Boolean);
+
+    return {
+      blockedUsers: result,
       pagination: {
         currentPage: page,
-        totalPages: Math.ceil(blockedUsers.length / limit),
-        totalCount: blockedUsers.length,
-        hasNext: endIndex < blockedUsers.length,
+        totalPages: Math.ceil(blockedList.length / limit),
+        totalCount: blockedList.length,
+        hasNext: endIndex < blockedList.length,
         hasPrev: page > 1
       }
     };

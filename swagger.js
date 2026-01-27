@@ -16,10 +16,10 @@ const swaggerConfig = {
         description: `
 # Aeko Backend API Documentation
 
-Welcome to the comprehensive API documentation for Aeko, the **Web3 Social Media Platform** featuring blockchain integration, NFT marketplace, and advanced real-time communication.
+Welcome to the comprehensive API documentation for Aeko, the **Social Media Platform** featuring advanced real-time communication.
 
-**Aeko** is a next-generation blockchain-based social media platform that merges the best features of short-form video sharing, microblogging, and photo-based networking, enhanced by AI capabilities and powered by Web3. It aims to provide a decentralized, immersive, and rewarding experience for content creators and consumers alike.
-Aeko combines the power of Solana blockchain for fast, secure transactions with a rich set of social features, including an enhanced chat system, AI bot personalities, and a unique NFT marketplace.
+**Aeko** is a next-generation social media platform that merges the best features of short-form video sharing, microblogging, and photo-based networking, enhanced by AI capabilities. It aims to provide a decentralized, immersive, and rewarding experience for content creators and consumers alike.
+Aeko combines a rich set of social features, including an enhanced chat system, AI bot personalities, and unique community tools.
 
 ## 🚀 Core Features
 
@@ -34,29 +34,11 @@ Aeko combines the power of Solana blockchain for fast, secure transactions with 
 - **Subscription-based content** and monetization
 - **Profile management** with status updates
 
-### 🔗 Blockchain Integration
-- **Aeko Coin (AEKO)** - Native Solana SPL token
-- **Post Transfer System** - Transfer post ownership between users
-- **NFT Marketplace** - Mint viral posts as NFTs (200k+ views required)
-- **Stream Donations** - Crypto donations for live streams
-- **Wallet Integration** - Phantom, Solflare, and other Solana wallets
-- **Transaction Tracking** - Complete on-chain transaction history
 
-### 🖼️ NFT Marketplace
-- **Three Listing Types**: Fixed price, Auction, Donation
-- **Creator Royalties**: 10% automatic royalty distribution
-- **Platform Fees**: 2.5% marketplace fee
-- **Auction System**: Time-based bidding with automatic settlement
-- **Donation NFTs**: Accept donations for your viral content
-- **Verification System**: Admin-verified NFTs for authenticity
 
-### � Aeko Coin Features
-- **Native Currency**: Primary platform token on Solana
-- **Transfers**: P2P token transfers between users
-- **Giveaways**: Bulk token distribution for community events
-- **Stream Tips**: Real-time donations during live streams
-- **NFT Purchases**: Primary currency for marketplace transactions
-- **Rewards**: Platform rewards and incentives
+
+
+
 
 ### 📱 Enhanced Chat System
 - **Real-time messaging** with Socket.IO
@@ -90,30 +72,7 @@ Authorization: Bearer <your_jwt_token>
 - **Development**: \`http://localhost:5000\`
 - **Production**: \`https://api.aeko.com\`
 
-## 🔗 Blockchain Integration
 
-The platform uses **Solana blockchain** for all crypto operations:
-- **Network**: Solana (Devnet/Mainnet)
-- **Token Standard**: SPL Token for Aeko Coin
-- **NFT Standard**: Metaplex for NFT minting
-- **Wallet Support**: Phantom, Solflare, and other Solana wallets
-- **Transaction Fees**: Paid in SOL (Solana's native token)
-
-## 💰 Aeko Coin Economics
-
-- **Token Name**: Aeko Coin (AEKO)
-- **Decimals**: 9 (like SOL)
-- **Total Supply**: 1,000,000,000 AEKO
-- **Use Cases**: NFT purchases, stream donations, giveaways, transfers
-- **Platform Fees**: 2.5% on NFT sales, 5% on stream donations
-
-## 🖼️ NFT Requirements
-
-To mint a post as NFT:
-- **Minimum Views**: 200,000 unique views
-- **Aeko Holdings**: Must hold any amount of Aeko coins
-- **Ownership**: Must own the post
-- **Status**: Post not previously minted
 
 ## 📡 Real-Time Communication
 
@@ -161,9 +120,7 @@ The enhanced chat system uses **Socket.IO** for real-time features:
         { name: "Payments", description: "Payment processing and billing" },
         { name: "Subscriptions", description: "Subscription management" },
         { name: "Admin", description: "Admin endpoints and analytics" },
-        { name: "Aeko Coin", description: "Native Solana SPL token operations" },
-        { name: "NFT Marketplace", description: "NFT minting and marketplace" },
-        { name: "Blockchain", description: "Blockchain integration and Web3" }
+
     ],
     'x-tagGroups': [
         {
@@ -182,10 +139,7 @@ The enhanced chat system uses **Socket.IO** for real-time features:
             name: 'Realtime',
             tags: ['Chat', 'Livestream']
         },
-        {
-            name: 'Web3',
-            tags: ['Aeko Coin', 'NFT Marketplace', 'Blockchain']
-        },
+
         {
             name: 'Admin & System',
             tags: ['Admin']
@@ -269,14 +223,7 @@ The enhanced chat system uses **Socket.IO** for real-time features:
                         enum: ["friendly", "professional", "sarcastic", "creative", "analytical", "mentor", "companion"],
                         description: "Preferred AI bot personality"
                     },
-                    solanaWalletAddress: {
-                        type: "string",
-                        description: "Connected Solana wallet address"
-                    },
-                    aekoBalance: {
-                        type: "number",
-                        description: "Current Aeko coin balance"
-                    },
+
                     isAdmin: {
                         type: "boolean",
                         description: "Whether user has admin privileges"
@@ -636,26 +583,6 @@ The enhanced chat system uses **Socket.IO** for real-time features:
                             }
                         }
                     },
-                    isEligibleForNFT: {
-                        type: "boolean",
-                        description: "Whether post is eligible for NFT minting"
-                    },
-                    nftMinted: {
-                        type: "boolean",
-                        description: "Whether post has been minted as NFT"
-                    },
-                    nftTokenId: {
-                        type: "string",
-                        description: "Solana token ID if minted as NFT"
-                    },
-                    isListedForSale: {
-                        type: "boolean",
-                        description: "Whether NFT is listed for sale"
-                    },
-                    salePrice: {
-                        type: "number",
-                        description: "Sale price in Aeko coins"
-                    },
                     engagement: {
                         type: "object",
                         properties: {
@@ -771,307 +698,6 @@ The enhanced chat system uses **Socket.IO** for real-time features:
                     updatedAt: {
                         type: "string",
                         format: "date-time"
-                    }
-                }
-            },
-            AekoTransaction: {
-                type: "object",
-                properties: {
-                    _id: {
-                        type: "string",
-                        description: "Transaction ID"
-                    },
-                    transactionId: {
-                        type: "string",
-                        description: "Unique transaction identifier"
-                    },
-                    solanaSignature: {
-                        type: "string",
-                        description: "Solana blockchain transaction signature"
-                    },
-                    fromUser: {
-                        $ref: "#/components/schemas/User"
-                    },
-                    toUser: {
-                        $ref: "#/components/schemas/User"
-                    },
-                    fromWallet: {
-                        type: "string",
-                        description: "Sender wallet address"
-                    },
-                    toWallet: {
-                        type: "string",
-                        description: "Recipient wallet address"
-                    },
-                    amount: {
-                        type: "number",
-                        description: "Transaction amount in Aeko coins"
-                    },
-                    type: {
-                        type: "string",
-                        enum: ["transfer", "donation", "giveaway", "nft_purchase", "nft_sale", "stream_donation", "reward", "mint", "burn"],
-                        description: "Transaction type"
-                    },
-                    status: {
-                        type: "string",
-                        enum: ["pending", "confirmed", "failed", "cancelled"],
-                        description: "Transaction status"
-                    },
-                    confirmations: {
-                        type: "integer",
-                        description: "Number of blockchain confirmations"
-                    },
-                    blockNumber: {
-                        type: "integer",
-                        description: "Block number on Solana"
-                    },
-                    description: {
-                        type: "string",
-                        description: "Transaction description"
-                    },
-                    gasFee: {
-                        type: "number",
-                        description: "Solana network fee"
-                    },
-                    platformFee: {
-                        type: "number",
-                        description: "Platform fee collected"
-                    },
-                    relatedPost: {
-                        type: "string",
-                        description: "Related post ID (if applicable)"
-                    },
-                    relatedStream: {
-                        type: "string",
-                        description: "Related livestream ID (if applicable)"
-                    },
-                    relatedNFT: {
-                        type: "string",
-                        description: "Related NFT ID (if applicable)"
-                    },
-                    createdAt: {
-                        type: "string",
-                        format: "date-time"
-                    },
-                    confirmedAt: {
-                        type: "string",
-                        format: "date-time"
-                    }
-                }
-            },
-            NFTMarketplace: {
-                type: "object",
-                properties: {
-                    _id: {
-                        type: "string",
-                        description: "NFT marketplace ID"
-                    },
-                    tokenId: {
-                        type: "string",
-                        description: "Solana token ID"
-                    },
-                    contractAddress: {
-                        type: "string",
-                        description: "Solana program address"
-                    },
-                    metadataUri: {
-                        type: "string",
-                        description: "IPFS metadata URI"
-                    },
-                    originalPost: {
-                        $ref: "#/components/schemas/Post"
-                    },
-                    creator: {
-                        $ref: "#/components/schemas/User"
-                    },
-                    currentOwner: {
-                        $ref: "#/components/schemas/User"
-                    },
-                    creatorRoyalty: {
-                        type: "number",
-                        description: "Creator royalty percentage (default 10%)"
-                    },
-                    isListed: {
-                        type: "boolean",
-                        description: "Whether NFT is listed for sale"
-                    },
-                    listingType: {
-                        type: "string",
-                        enum: ["fixed_price", "auction", "donation"],
-                        description: "Type of listing"
-                    },
-                    price: {
-                        type: "number",
-                        description: "Listing price in Aeko coins"
-                    },
-                    auction: {
-                        type: "object",
-                        properties: {
-                            startingBid: { type: "number" },
-                            currentBid: { type: "number" },
-                            highestBidder: { type: "string" },
-                            auctionEndTime: { type: "string", format: "date-time" },
-                            reservePrice: { type: "number" },
-                            bidHistory: {
-                                type: "array",
-                                items: {
-                                    type: "object",
-                                    properties: {
-                                        bidder: { type: "string" },
-                                        amount: { type: "number" },
-                                        timestamp: { type: "string", format: "date-time" }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    donations: {
-                        type: "object",
-                        properties: {
-                            enabled: { type: "boolean" },
-                            totalDonations: { type: "number" },
-                            donationHistory: {
-                                type: "array",
-                                items: {
-                                    type: "object",
-                                    properties: {
-                                        donor: { type: "string" },
-                                        amount: { type: "number" },
-                                        message: { type: "string" },
-                                        timestamp: { type: "string", format: "date-time" }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    saleHistory: {
-                        type: "array",
-                        items: {
-                            type: "object",
-                            properties: {
-                                seller: { type: "string" },
-                                buyer: { type: "string" },
-                                price: { type: "number" },
-                                transactionId: { type: "string" },
-                                saleDate: { type: "string", format: "date-time" },
-                                saleType: { type: "string", enum: ["direct_sale", "auction_win", "transfer"] }
-                            }
-                        }
-                    },
-                    metadata: {
-                        type: "object",
-                        properties: {
-                            name: { type: "string" },
-                            description: { type: "string" },
-                            image: { type: "string" },
-                            attributes: {
-                                type: "array",
-                                items: {
-                                    type: "object",
-                                    properties: {
-                                        trait_type: { type: "string" },
-                                        value: { type: "string" }
-                                    }
-                                }
-                            },
-                            postStats: {
-                                type: "object",
-                                properties: {
-                                    originalViews: { type: "integer" },
-                                    originalLikes: { type: "integer" },
-                                    originalShares: { type: "integer" },
-                                    mintDate: { type: "string", format: "date-time" }
-                                }
-                            }
-                        }
-                    },
-                    analytics: {
-                        type: "object",
-                        properties: {
-                            totalViews: { type: "integer" },
-                            totalLikes: { type: "integer" },
-                            listingViews: { type: "integer" },
-                            favoriteCount: { type: "integer" }
-                        }
-                    },
-                    status: {
-                        type: "string",
-                        enum: ["minting", "active", "sold", "transferred", "burned"],
-                        description: "NFT status"
-                    },
-                    verified: {
-                        type: "boolean",
-                        description: "Whether NFT is platform verified"
-                    },
-                    featured: {
-                        type: "boolean",
-                        description: "Whether NFT is featured on marketplace"
-                    },
-                    category: {
-                        type: "string",
-                        enum: ["art", "photography", "video", "meme", "viral", "trending", "other"],
-                        description: "NFT category"
-                    },
-                    tags: {
-                        type: "array",
-                        items: { type: "string" },
-                        description: "NFT tags"
-                    },
-                    createdAt: {
-                        type: "string",
-                        format: "date-time"
-                    },
-                    updatedAt: {
-                        type: "string",
-                        format: "date-time"
-                    }
-                }
-            },
-            WalletInfo: {
-                type: "object",
-                properties: {
-                    publicKey: {
-                        type: "string",
-                        description: "Solana wallet public key"
-                    },
-                    privateKey: {
-                        type: "string",
-                        description: "Solana wallet private key (keep secure!)"
-                    },
-                    aekoBalance: {
-                        type: "number",
-                        description: "Aeko coin balance"
-                    },
-                    solBalance: {
-                        type: "number",
-                        description: "SOL balance"
-                    }
-                }
-            },
-            BlockchainResponse: {
-                type: "object",
-                properties: {
-                    success: {
-                        type: "boolean",
-                        description: "Operation success"
-                    },
-                    message: {
-                        type: "string",
-                        description: "Response message"
-                    },
-                    data: {
-                        type: "object",
-                        description: "Response data"
-                    },
-                    transaction: {
-                        type: "object",
-                        properties: {
-                            signature: { type: "string" },
-                            amount: { type: "number" },
-                            fromWallet: { type: "string" },
-                            toWallet: { type: "string" },
-                            timestamp: { type: "string", format: "date-time" }
-                        }
                     }
                 }
             },

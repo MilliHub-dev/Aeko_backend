@@ -1,4 +1,6 @@
-import Community from '../models/Community.js';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 /**
  * Middleware to check if user is a community admin (owner only)
@@ -14,7 +16,9 @@ export const isCommunityAdmin = async (req, res, next) => {
       });
     }
 
-    const community = await Community.findById(communityId);
+    const community = await prisma.community.findUnique({
+      where: { id: communityId }
+    });
     
     if (!community) {
       return res.status(404).json({ 
@@ -24,7 +28,7 @@ export const isCommunityAdmin = async (req, res, next) => {
     }
 
     // Check if user is the community owner
-    if (community.owner.toString() !== req.user.id) {
+    if (community.ownerId !== req.user.id) {
       return res.status(403).json({ 
         success: false,
         message: 'Only community owner can perform this action' 
@@ -35,13 +39,6 @@ export const isCommunityAdmin = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Community middleware error:', error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
     
     res.status(500).json({ 
       success: false,
@@ -64,7 +61,9 @@ export const isCommunityAdminOrModerator = async (req, res, next) => {
       });
     }
 
-    const community = await Community.findById(communityId);
+    const community = await prisma.community.findUnique({
+      where: { id: communityId }
+    });
     
     if (!community) {
       return res.status(404).json({ 
@@ -73,9 +72,20 @@ export const isCommunityAdminOrModerator = async (req, res, next) => {
       });
     }
 
-    // Check if user is the community owner or moderator
-    const isOwner = community.owner.toString() === req.user.id;
-    const isModerator = community.moderators.some(modId => modId.toString() === req.user.id);
+    // Check if user is the community owner
+    const isOwner = community.ownerId === req.user.id;
+    
+    // Check if moderator
+    const member = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId: communityId,
+          userId: req.user.id
+        }
+      }
+    });
+    
+    const isModerator = member?.role === 'moderator';
     
     if (!isOwner && !isModerator) {
       return res.status(403).json({ 
@@ -90,13 +100,6 @@ export const isCommunityAdminOrModerator = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Community admin/moderator check error:', error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
     
     res.status(500).json({ 
       success: false,
@@ -119,7 +122,9 @@ export const isCommunityMember = async (req, res, next) => {
       });
     }
 
-    const community = await Community.findById(communityId);
+    const community = await prisma.community.findUnique({
+      where: { id: communityId }
+    });
     
     if (!community) {
       return res.status(404).json({ 
@@ -128,21 +133,26 @@ export const isCommunityMember = async (req, res, next) => {
       });
     }
 
-    // Owner and moderators are always considered members
-    const isOwner = community.owner.toString() === req.user.id;
-    const isModerator = community.moderators.some(modId => modId.toString() === req.user.id);
+    // Check membership
+    const member = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId: communityId,
+          userId: req.user.id
+        }
+      }
+    });
+
+    const isOwner = community.ownerId === req.user.id;
+    const isModerator = member?.role === 'moderator';
+    const isActiveMember = member?.status === 'active';
     
     if (isOwner || isModerator) {
       req.community = community;
       return next();
     }
 
-    // Check if user is an active member
-    const member = community.members.find(
-      m => m.user.toString() === req.user.id && m.status === 'active'
-    );
-    
-    if (!member) {
+    if (!isActiveMember) {
       return res.status(403).json({ 
         success: false,
         message: 'You are not a member of this community or your membership is inactive' 
@@ -154,13 +164,6 @@ export const isCommunityMember = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Community membership check error:', error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
     
     res.status(500).json({ 
       success: false,
@@ -183,7 +186,9 @@ export const checkPrivateCommunityAccess = async (req, res, next) => {
       });
     }
 
-    const community = await Community.findById(communityId);
+    const community = await prisma.community.findUnique({
+      where: { id: communityId }
+    });
     
     if (!community) {
       return res.status(404).json({ 
@@ -193,14 +198,27 @@ export const checkPrivateCommunityAccess = async (req, res, next) => {
     }
 
     // Skip check if community is not private
-    if (!community.settings?.isPrivate) {
+    // Note: check both top-level field and settings JSON
+    const settings = community.settings || {};
+    const isPrivate = community.isPrivate || settings.isPrivate;
+
+    if (!isPrivate) {
       req.community = community;
       return next();
     }
 
     // Owner and moderators always have access
-    const isOwner = community.owner.toString() === req.user.id;
-    const isModerator = community.moderators.some(modId => modId.toString() === req.user.id);
+    const member = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId: communityId,
+          userId: req.user.id
+        }
+      }
+    });
+
+    const isOwner = community.ownerId === req.user.id;
+    const isModerator = member?.role === 'moderator';
     
     if (isOwner || isModerator) {
       req.community = community;
@@ -208,11 +226,7 @@ export const checkPrivateCommunityAccess = async (req, res, next) => {
     }
 
     // Check if user is an active member
-    const member = community.members.find(
-      m => m.user.toString() === req.user.id && m.status === 'active'
-    );
-    
-    if (!member) {
+    if (!member || member.status !== 'active') {
       return res.status(403).json({ 
         success: false,
         message: 'This is a private community. You need to be a member to access it.' 
@@ -224,13 +238,6 @@ export const checkPrivateCommunityAccess = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Private community access check error:', error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
     
     res.status(500).json({ 
       success: false,
@@ -253,7 +260,9 @@ export const checkPaidCommunityAccess = async (req, res, next) => {
       });
     }
 
-    const community = await Community.findById(communityId);
+    const community = await prisma.community.findUnique({
+      where: { id: communityId }
+    });
     
     if (!community) {
       return res.status(404).json({ 
@@ -263,23 +272,32 @@ export const checkPaidCommunityAccess = async (req, res, next) => {
     }
 
     // Skip check if community is not paid
-    if (!community.settings?.payment?.isPaidCommunity) {
+    const settings = community.settings || {};
+    if (!settings.payment?.isPaidCommunity) {
       return next();
     }
 
     // Check if user is the owner
-    if (community.owner.toString() === req.user.id) {
+    if (community.ownerId === req.user.id) {
       return next();
     }
 
+    // Get member record
+    const member = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId: communityId,
+          userId: req.user.id
+        }
+      }
+    });
+
     // Check if user is a moderator
-    if (community.moderators.some(modId => modId.toString() === req.user.id)) {
+    if (member?.role === 'moderator') {
       return next();
     }
 
     // Check if user has active membership
-    const member = community.members.find(m => m.user.toString() === req.user.id);
-    
     if (!member || member.status !== 'active') {
       return res.status(403).json({ 
         success: false,
@@ -289,7 +307,8 @@ export const checkPaidCommunityAccess = async (req, res, next) => {
     }
 
     // Check if subscription exists
-    if (!member.subscription) {
+    const subscription = member.subscription;
+    if (!subscription) {
       return res.status(403).json({ 
         success: false,
         message: 'You need an active subscription to access this paid community',
@@ -299,15 +318,18 @@ export const checkPaidCommunityAccess = async (req, res, next) => {
 
     // Verify both isActive flag and endDate
     const currentDate = new Date();
-    const hasEndDate = member.subscription.endDate;
-    const isExpired = hasEndDate && currentDate > new Date(member.subscription.endDate);
+    const hasEndDate = subscription.endDate;
+    const isExpired = hasEndDate && currentDate > new Date(subscription.endDate);
 
     // Automatic expiration handling when endDate is past current date
-    if (isExpired && member.subscription.isActive) {
+    if (isExpired && subscription.isActive) {
       // Update member.subscription.isActive to false when expired
-      member.subscription.isActive = false;
-      // Save community after updating expired subscription
-      await community.save();
+      const updatedSubscription = { ...subscription, isActive: false };
+      
+      await prisma.communityMember.update({
+        where: { id: member.id },
+        data: { subscription: updatedSubscription }
+      });
       
       // Return appropriate error message with requiresRenewal flag
       return res.status(403).json({ 
@@ -315,38 +337,21 @@ export const checkPaidCommunityAccess = async (req, res, next) => {
         message: 'Your subscription has expired',
         requiresRenewal: true,
         subscriptionInfo: {
-          endDate: member.subscription.endDate,
-          type: member.subscription.type
+          endDate: subscription.endDate,
+          type: subscription.type
         }
       });
     }
 
     // Check if subscription is marked as inactive
-    if (!member.subscription.isActive) {
+    if (!subscription.isActive) {
       return res.status(403).json({ 
         success: false,
         message: 'Your subscription is not active',
         requiresRenewal: true,
         subscriptionInfo: {
-          endDate: member.subscription.endDate,
-          type: member.subscription.type
-        }
-      });
-    }
-
-    // Check if subscription has expired (even if still marked active)
-    if (isExpired) {
-      // Update subscription status to inactive
-      member.subscription.isActive = false;
-      await community.save();
-      
-      return res.status(403).json({ 
-        success: false,
-        message: 'Your subscription has expired',
-        requiresRenewal: true,
-        subscriptionInfo: {
-          endDate: member.subscription.endDate,
-          type: member.subscription.type
+          endDate: subscription.endDate,
+          type: subscription.type
         }
       });
     }

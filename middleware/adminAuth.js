@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import { prisma } from '../config/db.js';
+import bcrypt from 'bcrypt';
 
 // Admin Authentication Middleware
 export const adminAuth = async (req, res, next) => {
@@ -11,7 +12,9 @@ export const adminAuth = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id }
+    });
 
     if (!user) {
       return res.status(401).json({ message: 'Invalid admin token.' });
@@ -46,8 +49,11 @@ export const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) {
+    const user = await prisma.user.findFirst({
+      where: { email }
+    });
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -57,7 +63,7 @@ export const adminLogin = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, email: user.email, isAdmin: user.isAdmin },
+      { id: user.id, email: user.email, isAdmin: user.isAdmin },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -72,6 +78,7 @@ export const adminLogin = async (req, res) => {
     // Redirect to admin dashboard after successful login
     res.redirect('/admin/resources/User');
   } catch (error) {
+    console.error('Admin login error:', error);
     res.status(500).json({ message: 'Server error during admin login' });
   }
 };

@@ -1,9 +1,9 @@
 import express from 'express';
-import User from '../models/User.js';
-import Interest from '../models/Interest.js';
+import { PrismaClient } from '@prisma/client';
 import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+const prisma = new PrismaClient();
 
 /**
  * @swagger
@@ -32,7 +32,12 @@ const router = express.Router();
  */
 router.get('/', authMiddleware, async (req, res) => {
     try {
-        const user = await User.findById(req.user.id).populate('interests');
+        const userId = req.userId;
+        
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { interests: true }
+        });
         
         if (!user) {
             return res.status(404).json({
@@ -41,9 +46,21 @@ router.get('/', authMiddleware, async (req, res) => {
             });
         }
         
+        const interestIds = Array.isArray(user.interests) ? user.interests : [];
+
+        let interests = [];
+        if (interestIds.length > 0) {
+            interests = await prisma.interest.findMany({
+                where: {
+                    id: { in: interestIds },
+                    isActive: true
+                }
+            });
+        }
+        
         res.json({
             success: true,
-            data: user.interests || []
+            data: interests
         });
     } catch (error) {
         res.status(500).json({
@@ -86,9 +103,11 @@ router.post('/', authMiddleware, async (req, res) => {
         const { interestIds } = req.body;
         
         // Validate that all interest IDs exist
-        const interests = await Interest.find({ 
-            _id: { $in: interestIds },
-            isActive: true 
+        const interests = await prisma.interest.findMany({
+            where: {
+                id: { in: interestIds },
+                isActive: true
+            }
         });
         
         if (interests.length !== interestIds.length) {
@@ -98,20 +117,49 @@ router.post('/', authMiddleware, async (req, res) => {
             });
         }
         
-        // Update user's interests
-        const user = await User.findByIdAndUpdate(
-            req.user.id,
-            { 
-                $addToSet: { interests: { $each: interestIds } },
-                $set: { 'onboarding.interestsSelected': true }
-            },
-            { new: true }
-        ).populate('interests');
+        const userId = req.userId;
+
+        // Get existing interests for user
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                interests: true,
+                profileCompletion: true
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const existingInterests = Array.isArray(user.interests) ? user.interests : [];
+        const mergedInterests = Array.from(new Set([...existingInterests, ...interestIds]));
+
+        const profileCompletion = user.profileCompletion || {};
+        profileCompletion.interestsSelected = true;
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                interests: mergedInterests,
+                profileCompletion
+            }
+        });
+
+        const updatedInterests = await prisma.interest.findMany({
+            where: {
+                id: { in: mergedInterests },
+                isActive: true
+            }
+        });
         
         res.json({
             success: true,
             message: 'Interests updated successfully',
-            data: user.interests
+            data: updatedInterests
         });
     } catch (error) {
         res.status(500).json({
@@ -145,17 +193,51 @@ router.post('/', authMiddleware, async (req, res) => {
 router.delete('/:interestId', authMiddleware, async (req, res) => {
     try {
         const { interestId } = req.params;
-        
-        const user = await User.findByIdAndUpdate(
-            req.user.id,
-            { $pull: { interests: interestId } },
-            { new: true }
-        ).populate('interests');
+        const userId = req.userId;
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                interests: true,
+                profileCompletion: true
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const existingInterests = Array.isArray(user.interests) ? user.interests : [];
+
+        if (!existingInterests.includes(interestId)) {
+            return res.status(404).json({
+                success: false,
+                message: 'Interest not found in user interests'
+            });
+        }
+
+        const updatedInterestIds = existingInterests.filter(id => id !== interestId);
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                interests: updatedInterestIds
+            }
+        });
+
+        const updatedInterests = await prisma.interest.findMany({
+            where: {
+                id: { in: updatedInterestIds },
+                isActive: true
+            }
+        });
         
         res.json({
             success: true,
             message: 'Interest removed successfully',
-            data: user.interests
+            data: updatedInterests
         });
     } catch (error) {
         res.status(500).json({

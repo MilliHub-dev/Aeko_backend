@@ -3,15 +3,13 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
-import Chat from "../models/Chat.js";
-import EnhancedMessage from "../models/EnhancedMessage.js";
+import { PrismaClient } from "@prisma/client";
 import enhancedBot from "../ai/enhancedBot.js";
 import { generalUpload } from '../middleware/upload.js';
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
 const router = express.Router();
-
+const prisma = new PrismaClient();
 
 // Authentication middleware
 const authenticate = async (req, res, next) => {
@@ -23,7 +21,9 @@ const authenticate = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id || decoded.userId).select('-password');
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id || decoded.userId }
+    });
     
     if (!user) {
       return res.status(401).json({ error: 'Invalid token.' });
@@ -110,34 +110,66 @@ router.get('/conversations', authenticate, async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
 
-    const chats = await Chat.find({
-      members: req.user._id
-    })
-    .populate('members', 'username profilePicture lastSeen status')
-    .populate({
-      path: 'lastMessage',
-      model: 'EnhancedMessage',
-      populate: {
-        path: 'sender',
-        select: 'username profilePicture'
-      }
-    })
-    .sort({ updatedAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
+    const chats = await prisma.chat.findMany({
+      where: {
+        members: {
+          some: {
+            userId: req.user.id
+          }
+        }
+      },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                profilePicture: true,
+                lastLoginAt: true // approximating lastSeen
+              }
+            }
+          }
+        },
+        lastMessage: {
+          include: {
+            sender: {
+              select: {
+                username: true,
+                profilePicture: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { updatedAt: 'desc' },
+      skip: skip,
+      take: parseInt(limit)
+    });
 
-    // Get unread count for each chat
+    // Get unread count for each chat and format members
     const chatsWithUnread = await Promise.all(
       chats.map(async (chat) => {
-        const unreadCount = await EnhancedMessage.countDocuments({
-          chatId: chat._id,
-          receiver: req.user._id,
-          status: { $ne: 'read' },
-          deleted: false
+        const unreadCount = await prisma.enhancedMessage.count({
+          where: {
+            chatId: chat.id,
+            receiverId: req.user.id,
+            status: { not: 'read' },
+            deleted: false
+          }
         });
 
+        // Flatten members to match Mongoose structure (array of users)
+        const formattedMembers = chat.members.map(m => ({
+            ...m.user,
+            _id: m.user.id, // maintain backward compatibility
+            lastSeen: m.user.lastLoginAt
+        }));
+
         return {
-          ...chat.toObject(),
+          ...chat,
+          _id: chat.id, // maintain backward compatibility
+          members: formattedMembers,
           unreadCount
         };
       })
@@ -149,7 +181,7 @@ router.get('/conversations', authenticate, async (req, res) => {
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: chats.length
+        total: chats.length // This is just the fetched count, real total would require another count query
       }
     });
   } catch (error) {
@@ -198,37 +230,56 @@ router.get('/messages/:chatId', authenticate, async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Verify user is member of this chat
-    const chat = await Chat.findById(chatId);
-    if (!chat || !chat.members.includes(req.user._id)) {
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId },
+      include: {
+        members: true
+      }
+    });
+
+    if (!chat || !chat.members.some(m => m.userId === req.user.id)) {
       return res.status(403).json({ error: 'Access denied to this chat' });
     }
 
-    let query = {
+    let whereClause = {
       chatId,
       deleted: false
     };
 
     if (before) {
-      const beforeMessage = await EnhancedMessage.findById(before);
+      const beforeMessage = await prisma.enhancedMessage.findUnique({
+        where: { id: before }
+      });
       if (beforeMessage) {
-        query.createdAt = { $lt: beforeMessage.createdAt };
+        whereClause.createdAt = { lt: beforeMessage.createdAt };
       }
     }
 
-    const messages = await EnhancedMessage.find(query)
-      .populate('sender', 'username profilePicture')
-      .populate('receiver', 'username profilePicture')
-      .populate({
-        path: 'replyTo',
-        populate: {
-          path: 'sender',
-          select: 'username profilePicture'
+    const messages = await prisma.enhancedMessage.findMany({
+      where: whereClause,
+      include: {
+        sender: {
+          select: { username: true, profilePicture: true }
+        },
+        receiver: {
+          select: { username: true, profilePicture: true }
+        },
+        replyTo: {
+          include: {
+            sender: {
+              select: { username: true, profilePicture: true }
+            }
+          }
         }
-      })
-      .populate('reactions.userId', 'username profilePicture')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: skip,
+      take: parseInt(limit)
+    });
+
+    // Note: 'reactions.userId' population is not directly supported with JSON fields in Prisma.
+    // If reactions contain userIds, the frontend will receive them as is.
+    // If full user objects are needed, we would need to manually fetch and map them here.
 
     res.json({
       success: true,
@@ -284,37 +335,40 @@ router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAcce
     }
 
     const messageData = {
-      sender: req.user._id,
-      receiver: receiverId,
+      senderId: req.user.id,
+      receiverId: receiverId,
       chatId,
       content,
       messageType,
-      status: 'sent'
+      status: 'sent',
+      replyToId: replyToId || null
     };
 
-    if (replyToId) {
-      messageData.replyTo = replyToId;
-    }
-
-    const message = new EnhancedMessage(messageData);
-    await message.save();
-
-    // Populate sender info
-    await message.populate('sender', 'username profilePicture');
-    if (replyToId) {
-      await message.populate('replyTo', 'content sender');
-    }
+    const message = await prisma.enhancedMessage.create({
+      data: messageData,
+      include: {
+        sender: {
+          select: { username: true, profilePicture: true }
+        },
+        replyTo: {
+          select: { content: true, sender: true }
+        }
+      }
+    });
 
     // Update chat's last message
-    await Chat.findByIdAndUpdate(chatId, {
-      lastMessage: message._id,
-      updatedAt: new Date()
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: {
+        lastMessageId: message.id,
+        updatedAt: new Date()
+      }
     });
 
     res.json({
       success: true,
       message,
-      messageId: message._id
+      messageId: message.id
     });
   } catch (error) {
     console.error('Send message error:', error);
@@ -367,8 +421,8 @@ router.post('/upload-voice', authenticate, generalUpload.single('voice'), async 
     }
 
     const messageData = {
-      sender: req.user._id,
-      receiver: receiverId,
+      senderId: req.user.id,
+      receiverId: receiverId,
       chatId,
       messageType: 'voice',
       voiceMessage: {
@@ -379,14 +433,22 @@ router.post('/upload-voice', authenticate, generalUpload.single('voice'), async 
       status: 'sent'
     };
 
-    const message = new EnhancedMessage(messageData);
-    await message.save();
-    await message.populate('sender', 'username profilePicture');
+    const message = await prisma.enhancedMessage.create({
+      data: messageData,
+      include: {
+        sender: {
+          select: { username: true, profilePicture: true }
+        }
+      }
+    });
 
     // Update chat's last message
-    await Chat.findByIdAndUpdate(chatId, {
-      lastMessage: message._id,
-      updatedAt: new Date()
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: {
+        lastMessageId: message.id,
+        updatedAt: new Date()
+      }
     });
 
     res.json({
@@ -438,8 +500,8 @@ router.post('/upload-file', authenticate, generalUpload.single('file'), async (r
     }
 
     const messageData = {
-      sender: req.user._id,
-      receiver: receiverId,
+      senderId: req.user.id,
+      receiverId: receiverId,
       chatId,
       content: caption || '',
       messageType,
@@ -453,14 +515,22 @@ router.post('/upload-file', authenticate, generalUpload.single('file'), async (r
       status: 'sent'
     };
 
-    const message = new EnhancedMessage(messageData);
-    await message.save();
-    await message.populate('sender', 'username profilePicture');
+    const message = await prisma.enhancedMessage.create({
+      data: messageData,
+      include: {
+        sender: {
+          select: { username: true, profilePicture: true }
+        }
+      }
+    });
 
     // Update chat's last message
-    await Chat.findByIdAndUpdate(chatId, {
-      lastMessage: message._id,
-      updatedAt: new Date()
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: {
+        lastMessageId: message.id,
+        updatedAt: new Date()
+      }
     });
 
     res.json({
@@ -511,21 +581,36 @@ router.post('/emoji-reactions/:messageId', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Emoji is required' });
     }
 
-    const message = await EnhancedMessage.findById(messageId);
+    const message = await prisma.enhancedMessage.findUnique({
+      where: { id: messageId }
+    });
+
     if (!message) {
       return res.status(404).json({ error: 'Message not found' });
     }
 
-    const result = await message.addReaction(req.user._id, emoji);
-    
-    if (!result) {
+    const reactions = Array.isArray(message.reactions) ? message.reactions : [];
+    const exists = reactions.some(r => r.userId === req.user.id && r.emoji === emoji);
+
+    if (exists) {
       return res.status(400).json({ error: 'Already reacted with this emoji' });
     }
+
+    reactions.push({
+      userId: req.user.id,
+      emoji,
+      timestamp: new Date()
+    });
+
+    await prisma.enhancedMessage.update({
+      where: { id: messageId },
+      data: { reactions }
+    });
 
     res.json({
       success: true,
       message: 'Reaction added successfully',
-      reactions: message.reactions
+      reactions
     });
   } catch (error) {
     console.error('Add reaction error:', error);
@@ -565,17 +650,26 @@ router.delete('/emoji-reactions/:messageId', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Emoji is required' });
     }
 
-    const message = await EnhancedMessage.findById(messageId);
+    const message = await prisma.enhancedMessage.findUnique({
+      where: { id: messageId }
+    });
+
     if (!message) {
       return res.status(404).json({ error: 'Message not found' });
     }
 
-    await message.removeReaction(req.user._id, emoji);
+    const reactions = Array.isArray(message.reactions) ? message.reactions : [];
+    const updatedReactions = reactions.filter(r => !(r.userId === req.user.id && r.emoji === emoji));
+
+    await prisma.enhancedMessage.update({
+      where: { id: messageId },
+      data: { reactions: updatedReactions }
+    });
 
     res.json({
       success: true,
       message: 'Reaction removed successfully',
-      reactions: message.reactions
+      reactions: updatedReactions
     });
   } catch (error) {
     console.error('Remove reaction error:', error);
@@ -625,7 +719,7 @@ router.post('/bot-chat', authenticate, async (req, res) => {
     if (personality) options.personalityOverride = personality;
     if (instruction) options.instruction = instruction;
 
-    const botResponse = await enhancedBot.generateResponse(req.user._id, message, options);
+    const botResponse = await enhancedBot.generateResponse(req.user.id, message, options);
 
     if (botResponse.error) {
       return res.status(500).json({ error: botResponse.error });
@@ -634,20 +728,20 @@ router.post('/bot-chat', authenticate, async (req, res) => {
     // Save bot message if chatId provided
     let botMessage = null;
     if (chatId) {
-      botMessage = new EnhancedMessage({
-        sender: req.user._id,
-        receiver: req.user._id,
-        chatId,
-        content: botResponse.response,
-        messageType: 'ai_response',
-        isBot: true,
-        botPersonality: botResponse.personality,
-        aiProvider: botResponse.provider,
-        confidence: botResponse.confidence,
-        status: 'sent'
+      botMessage = await prisma.enhancedMessage.create({
+        data: {
+          senderId: req.user.id,
+          receiverId: req.user.id,
+          chatId,
+          content: botResponse.response,
+          messageType: 'ai_response',
+          isBot: true,
+          botPersonality: botResponse.personality,
+          aiProvider: botResponse.provider,
+          confidence: botResponse.confidence,
+          status: 'sent'
+        }
       });
-
-      await botMessage.save();
     }
 
     res.json({
@@ -703,14 +797,21 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
     }
 
     // Add current user to participants if not already included
-    const allParticipants = [...new Set([req.user._id.toString(), ...participants])];
+    const allParticipants = [...new Set([req.user.id.toString(), ...participants])];
 
     // For direct messages, check if chat already exists
     if (!isGroup && allParticipants.length === 2) {
-      const existingChat = await Chat.findOne({
-        members: { $all: allParticipants, $size: 2 },
-        isGroup: false
+      const existingChats = await prisma.chat.findMany({
+        where: {
+          isGroup: false,
+          AND: allParticipants.map(id => ({
+            members: { some: { userId: id } }
+          }))
+        },
+        include: { members: true }
       });
+
+      const existingChat = existingChats.find(c => c.members.length === 2);
 
       if (existingChat) {
         return res.json({
@@ -722,19 +823,41 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
     }
 
     const chatData = {
-      members: allParticipants,
       isGroup,
-      groupName: isGroup ? groupName : null
+      groupName: isGroup ? groupName : null,
+      members: {
+        create: allParticipants.map(id => ({ userId: id }))
+      }
     };
 
-    const chat = new Chat(chatData);
-    await chat.save();
+    const chat = await prisma.chat.create({
+      data: chatData,
+      include: {
+        members: {
+          include: {
+            user: {
+              select: { username: true, profilePicture: true, lastLoginAt: true }
+            }
+          }
+        }
+      }
+    });
 
-    await chat.populate('members', 'username profilePicture lastSeen status');
+    // Flatten members to match Mongoose structure
+    const formattedMembers = chat.members.map(m => ({
+        ...m.user,
+        _id: m.user.id || m.userId,
+        lastSeen: m.user.lastLoginAt
+    }));
+
+    const formattedChat = {
+        ...chat,
+        members: formattedMembers
+    };
 
     res.json({
       success: true,
-      chat,
+      chat: formattedChat,
       message: 'Chat created successfully'
     });
   } catch (error) {
@@ -766,27 +889,28 @@ router.post('/mark-read/:chatId', authenticate, async (req, res) => {
     const { chatId } = req.params;
 
     // Verify user is member of this chat
-    const chat = await Chat.findById(chatId);
-    if (!chat || !chat.members.includes(req.user._id)) {
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId },
+      include: { members: true }
+    });
+
+    if (!chat || !chat.members.some(m => m.userId === req.user.id)) {
       return res.status(403).json({ error: 'Access denied to this chat' });
     }
 
-    await EnhancedMessage.updateMany(
-      {
+    // Update status to read
+    // Note: Pushing to readBy array in updateMany is not supported in Prisma directly.
+    // We update the status to 'read'.
+    await prisma.enhancedMessage.updateMany({
+      where: {
         chatId,
-        receiver: req.user._id,
-        status: { $ne: 'read' }
+        receiverId: req.user.id,
+        status: { not: 'read' }
       },
-      {
-        $set: { status: 'read' },
-        $push: {
-          readBy: {
-            userId: req.user._id,
-            readAt: new Date()
-          }
-        }
+      data: {
+        status: 'read'
       }
-    );
+    });
 
     res.json({
       success: true,
@@ -837,29 +961,33 @@ router.get('/search', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Search query is required' });
     }
 
-    let query = {
-      $or: [
-        { sender: req.user._id },
-        { receiver: req.user._id }
+    let whereClause = {
+      OR: [
+        { senderId: req.user.id },
+        { receiverId: req.user.id }
       ],
       deleted: false,
-      content: { $regex: q.trim(), $options: 'i' }
+      content: { contains: q.trim(), mode: 'insensitive' }
     };
 
     if (chatId) {
-      query.chatId = chatId;
+      whereClause.chatId = chatId;
     }
 
     if (messageType) {
-      query.messageType = messageType;
+      whereClause.messageType = messageType;
     }
 
-    const messages = await EnhancedMessage.find(query)
-      .populate('sender', 'username profilePicture')
-      .populate('receiver', 'username profilePicture')
-      .populate('chatId', 'isGroup groupName')
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit));
+    const messages = await prisma.enhancedMessage.findMany({
+      where: whereClause,
+      include: {
+        sender: { select: { username: true, profilePicture: true } },
+        receiver: { select: { username: true, profilePicture: true } },
+        chat: { select: { isGroup: true, groupName: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit)
+    });
 
     res.json({
       success: true,

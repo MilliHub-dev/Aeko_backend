@@ -82,7 +82,7 @@ class EmailService {
           
           <div class="content">
             <h2>Hi ${username}! 👋</h2>
-            <p>Thank you for joining <strong>Aeko</strong> - the next-generation social media platform with Web3 integration!</p>
+            <p>Thank you for joining <strong>Aeko</strong> - the next-generation social media platform!</p>
             
             <p>To complete your registration and unlock all features, please verify your email address using the code below:</p>
             
@@ -407,22 +407,6 @@ class EmailService {
                   <li>📝 Write an engaging bio</li>
                   <li>👥 Get your first follower</li>
                 </ul>
-                <p><strong>Optional:</strong> Connect your Solana wallet for Web3 features</p>
-              </div>
-              
-              <div class="feature-box">
-                <h3>🪙 Explore Aeko Coin</h3>
-                <p>Our native cryptocurrency powers the entire platform. Use it for:</p>
-                <ul>
-                  <li> NFT transactions</li>
-                  <li> Stream donations</li>
-                  <li> Giveaways and tips</li>
-                </ul>
-              </div>
-              
-              <div class="feature-box">
-                <h3>🎨 NFT Marketplace</h3>
-                <p>When your posts hit 200k views, mint them as NFTs and earn royalties!</p>
               </div>
               
               <div class="feature-box">
@@ -433,8 +417,6 @@ class EmailService {
               <h3>🔗 Useful Links</h3>
               <ul>
                 <li><a href="${process.env.FRONTEND_URL}/profile">Complete Your Profile</a></li>
-                <li><a href="${process.env.FRONTEND_URL}/wallet">Connect Wallet</a></li>
-                <li><a href="${process.env.FRONTEND_URL}/nft">Explore NFT Marketplace</a></li>
                 <li><a href="${process.env.FRONTEND_URL}/help">Help Center</a></li>
               </ul>
             </div>

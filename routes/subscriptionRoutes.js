@@ -1,5 +1,5 @@
 import express from "express";
-import User from "../models/User.js";
+import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import emailService from "../services/emailService.js";
@@ -14,17 +14,21 @@ router.post("/subscribe", authMiddleware, twoFactorMiddleware.requireTwoFactor()
   const { userId, paymentSuccess } = req.body; // Payment must be verified
 
   try {
-    const user = await User.findById(userId);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ message: "User not found" });
 
     if (!paymentSuccess) {
       return res.status(400).json({ message: "Payment failed!" });
     }
 
-    user.goldenTick = true;
-    user.subscriptionStatus = "active";
-    user.subscriptionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // +30 days
-    await user.save();
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        goldenTick: true,
+        subscriptionStatus: "active",
+        subscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // +30 days
+      }
+    });
 
     // Send golden tick notification
     emailService.sendGoldenTickNotification(user.email, user.name)
@@ -32,7 +36,7 @@ router.post("/subscribe", authMiddleware, twoFactorMiddleware.requireTwoFactor()
 
     res.status(200).json({ message: "Golden Tick activated! 🏆" });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 });
 

@@ -1,9 +1,10 @@
 import express from "express";
-import User from "../models/User.js";
+import { PrismaClient } from "@prisma/client";
 import authMiddleware from "../middleware/authMiddleware.js";
-import BotSettings from "../models/BotSettings.js";
 
+const prisma = new PrismaClient();
 const router = express.Router();
+
 /**
  * @swagger
  * /api/bot-settings:
@@ -60,23 +61,28 @@ router.put("/bot-settings", authMiddleware, async (req, res) => {
     const { botEnabled, botPersonality } = req.body;
   
     try {
-      let botSettings = await BotSettings.findOne();
-      
-      if (!botSettings) {
-        botSettings = new BotSettings();
-      }
-  
-      botSettings.botEnabled = botEnabled;
-      botSettings.botPersonality = botPersonality;
-  
-      await botSettings.save();
+      // Upsert: Create if not exists, Update if exists
+      // Using userId as the unique key
+      const botSettings = await prisma.botSettings.upsert({
+        where: {
+            userId: req.userId
+        },
+        update: {
+            botEnabled,
+            botPersonality
+        },
+        create: {
+            userId: req.userId,
+            botEnabled,
+            botPersonality
+        }
+      });
   
       res.status(200).json({ message: "Smart Bot settings updated successfully", botSettings });
     } catch (error) {
-      res.status(400).json({ message: "Bad request", error });
+      console.error("Update bot settings error:", error);
+      res.status(400).json({ message: "Bad request", error: error.message });
     }
   });
-
-
 
 export default router;

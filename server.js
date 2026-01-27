@@ -1,4 +1,3 @@
-//require("dotenv").config();
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -23,9 +22,6 @@ import commentRoutes from "./routes/commentRoutes.js";
 import chatRoutes from "./routes/chat.js";
 import adRoutes from "./routes/adRoutes.js";
 import botRoutes from "./routes/bot.js";
-import aekoRoutes from "./routes/aekoRoutes.js";
-import aekoWalletRoutes from "./routes/aekoWalletRoutes.js";
-import nftRoutes from "./routes/nftRoutes.js";
 import videoEditRoutes from "./routes/videoEdit.js";
 import photoEditRoutes from "./routes/photoEdit.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
@@ -35,12 +31,9 @@ import swaggerDocs from "./swagger.js";
 import passport from "./config/passport.js";
 import AdminJS from "adminjs";
 import AdminJSExpress from "@adminjs/express";
-import { Database, Resource } from "@adminjs/mongoose";
-import User from "./models/User.js";
-import Post from "./models/Post.js";
+// import { Database, Resource } from "@adminjs/mongoose"; // REMOVED MONGO
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 import profileRoutes from './routes/profile.js';
-import postTransferRoutes from "./routes/postTransferRoutes.js";
 import enhancedBotRoutes from "./routes/enhancedBotRoutes.js";
 import enhancedChatRoutes from "./routes/enhancedChatRoutes.js";
 import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
@@ -51,7 +44,7 @@ import communityProfileRoutes from "./routes/communityProfileRoutes.js";
 import communityPaymentRoutes from "./routes/communityPaymentRoutes.js";
 import securityRoutes from "./routes/security.js";
 import exploreRoutes from "./routes/explore.js";
-import Transaction from "./models/Transaction.js";
+
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
 import cookieParser from "cookie-parser";
@@ -136,18 +129,15 @@ const apiRateLimit = rateLimit({
 // API Routes with security middleware
 app.use("/api/auth", apiRateLimit, authRoutes);
 app.use("/api/users", apiRateLimit, userRoutes);
-app.use("/api/posts", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), postRoutes);
+app.use("/api/posts", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts, postRoutes);
 app.use("/api/comments", apiRateLimit, blockingMiddleware.checkPostInteraction(), commentRoutes);
-app.use("/api/status", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), statusRoutes);
+app.use("/api/status", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts, statusRoutes);
 app.use("/api/debates", apiRateLimit, blockingMiddleware.checkPostInteraction(), debateRoutes);
 app.use("/api/challenges", apiRateLimit, blockingMiddleware.checkPostInteraction(), challengeRoutes);
 app.use("/api/spaces", apiRateLimit, blockingMiddleware.checkPostInteraction(), spaceRoutes);
 app.use("/api/chat", apiRateLimit, blockingMiddleware.checkMessagingAccess(), chatRoutes);
 app.use('/api/ads', apiRateLimit, adRoutes);
 app.use("/api/bot", apiRateLimit, botRoutes);
-app.use("/api/aeko", apiRateLimit, aekoRoutes);
-app.use("/api/aeko", apiRateLimit, aekoWalletRoutes);
-app.use("/api/nft", apiRateLimit, nftRoutes);
 app.use("/api/interests", apiRateLimit, interestRoutes);
 app.use("/api/user/interests", apiRateLimit, userInterestRoutes);
 app.use('/api/video', apiRateLimit, videoEditRoutes);
@@ -163,7 +153,7 @@ app.use("/api/livestream", apiRateLimit, blockingMiddleware.checkPostInteraction
 app.use("/api/security", securityRateLimit, securityRoutes);
 
 // Explore route
-app.use("/api/explore", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), exploreRoutes);
+app.use("/api/explore", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts, exploreRoutes);
 
 // Admin API Routes with 2FA protection for sensitive operations
 // Expose admin REST endpoints such as /api/admin/setup/first-admin
@@ -172,21 +162,19 @@ app.use('/api/admin', apiRateLimit, adminRoutes);
 // app.use('/api/admin', adminAuthRoutes);
 
 // Community routes
-app.use("/api/communities", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts(), communityRoutes);
-app.use("/api/community-profiles", apiRateLimit, blockingMiddleware.checkProfileAccess(), privacyMiddleware.checkProfileAccess(), communityProfileRoutes);
+app.use("/api/communities", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts, communityRoutes);
+app.use("/api/community-profiles", apiRateLimit, blockingMiddleware.checkProfileAccess(), privacyMiddleware.checkProfileAccess, communityProfileRoutes);
 app.use("/api/community/payment", apiRateLimit, communityPaymentRoutes); // Added route
-
-// Blockchain and NFT routes
-app.use("/api/posts", apiRateLimit, postTransferRoutes);
 
 swaggerDocs(app);
 
 
-// Register AdminJS with Mongoose
-AdminJS.registerAdapter({ Database, Resource });
+// Register AdminJS with Mongoose - DISABLED FOR PRISMA MIGRATION
+// AdminJS.registerAdapter({ Database, Resource });
 
 
-// Configure AdminJS
+// Configure AdminJS - DISABLED FOR PRISMA MIGRATION
+/*
 const adminOptions = {
   resources: [
     {
@@ -198,244 +186,28 @@ const adminOptions = {
           resetPasswordExpire: { isVisible: false }
         }
       }
-    },
-    {
-      resource: Post,
-      options: {
-        actions: {
-          delete: { isVisible: true } // Allow post deletion
-        }
-      }
     }
-  ],
-  branding: {
-    companyName: "Aeko Admin",
-    logo: "https://your-logo-url.com/logo.png"
-  }
+  ]
 };
+*/
 
-// Remove conflicting admin auth routes - AdminJS handles this
-// app.post('/admin/login', adminLogin);
-// app.post('/admin/logout', adminLogout);
-
-// Admin API Routes (Protected)
-app.get('/api/admin/stats', adminAuth, async (req, res) => {
-  try {
-    const userStats = await User.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalUsers: { $sum: 1 },
-          verifiedUsers: { $sum: { $cond: [{ $or: ["$blueTick", "$goldenTick"] }, 1, 0] } },
-          activeSubscriptions: { $sum: { $cond: [{ $eq: ["$subscriptionStatus", "active"] }, 1, 0] } },
-          bannedUsers: { $sum: { $cond: ["$banned", 1, 0] } },
-          botEnabledUsers: { $sum: { $cond: ["$botEnabled", 1, 0] } }
-        }
-      }
-    ]);
-
-    const postStats = await Post.aggregate([
-      {
-        $group: {
-          _id: "$type",
-          count: { $sum: 1 },
-          totalLikes: { $sum: { $size: "$likes" } }
-        }
-      }
-    ]);
-
-    const adStats = await Ad.aggregate([
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
-          totalBudget: { $sum: "$budget" }
-        }
-      }
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        users: userStats[0] || {},
-        posts: postStats,
-        ads: adStats,
-        timestamp: new Date()
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching admin statistics' });
-  }
-});
-
-// Setup AdminJS with Express (already mounted above body parsers)
-
-// Routes
-app.get("/", (req, res) => {
-  res.send("Welcome to Aeko Backend 🚀 - Enhanced with Real-time Chat!");
-});
-
-// Enhanced Chat System Info
-app.get("/api/chat-info", (req, res) => {
-  const connectedUsers = enhancedChatSocket.getConnectedUsers();
-  
-  res.json({
-    success: true,
-    chatSystem: {
-      name: 'Enhanced Real-time Chat System',
-      version: '2.0.0',
-      features: {
-        realTimeMessaging: true,
-        voiceMessages: true,
-        emojiReactions: true,
-        fileSharing: true,
-        aiBotIntegration: true,
-        typingIndicators: true,
-        readReceipts: true,
-        messageSearch: true,
-        groupChats: true,
-        messageHistory: true,
-        onlineStatus: true
-      },
-      statistics: {
-        connectedUsers: connectedUsers.length,
-        totalActiveConnections: enhancedChatSocket.io.sockets.sockets.size,
-        supportedFileTypes: ['image', 'video', 'audio', 'document'],
-        maxFileSize: '100MB',
-        supportedEmojis: 'Unicode Standard',
-        aiPersonalities: ['friendly', 'professional', 'sarcastic', 'creative', 'analytical', 'mentor', 'companion']
-      }
-    },
-    connectedUsers: connectedUsers.map(user => ({
-      userId: user.user._id,
-      username: user.user.username,
-      status: user.status,
-      lastSeen: user.lastSeen
-    }))
-  });
-});
-
-// Enhanced LiveStream System Info
-app.get("/api/livestream-info", (req, res) => {
-  const streamStats = enhancedLiveStreamSocket.getSystemStats();
-  
-  res.json({
-    success: true,
-    livestreamSystem: {
-      name: 'Enhanced LiveStream Platform',
-      version: '1.0.0',
-      features: {
-        webrtcStreaming: true,
-        realTimeChat: true,
-        emojiReactions: true,
-        donationsAndMonetization: true,
-        moderationTools: true,
-        streamRecording: true,
-        screenSharing: true,
-        coHosting: true,
-        guestInvites: true,
-        viewerAnalytics: true,
-        streamDiscovery: true,
-        categoryFiltering: true,
-        qualityControls: true,
-        streamScheduling: true
-      },
-      capabilities: {
-        maxStreamers: 'Unlimited',
-        maxViewersPerStream: '10,000+',
-        supportedProtocols: ['WebRTC', 'RTMP', 'HLS'],
-        supportedResolutions: ['360p', '480p', '720p', '1080p', '1440p', '4K'],
-        supportedFrameRates: [24, 30, 60],
-        supportedCategories: ['gaming', 'music', 'education', 'entertainment', 'sports', 'news', 'technology', 'lifestyle', 'cooking', 'art', 'other']
-      },
-      statistics: streamStats,
-      monetization: {
-        donationsEnabled: true,
-        subscriptionsEnabled: true,
-        ticketedStreamsEnabled: true,
-        supportedCurrencies: ['USD', 'EUR', 'GBP', 'JPY'],
-        paymentProcessors: ['Stripe', 'PayPal', 'Square']
-      }
-    }
-  });
-});
-
-// Health check with enhanced features
-app.get("/health", (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    services: {
-      mongodb: 'Connected',
-      socket: 'Active',
-      chat: 'Enhanced Chat System Ready',
-      livestream: 'Enhanced LiveStream Platform Ready',
-      ai: 'AI Bot Integrated'
-    },
-    features: [
-      'Real-time messaging',
-      'Voice messages',
-      'Emoji reactions', 
-      'File sharing',
-      'AI bot integration',
-      'Typing indicators',
-      'Read receipts',
-      'Message search',
-      'Live streaming',
-      'WebRTC broadcasting',
-      'Stream chat',
-      'Stream reactions',
-      'Stream monetization',
-      'Stream moderation',
-      'Stream analytics'
-    ]
+// Basic error handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ 
+    success: false, 
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
 // Start server
-const startServer = async () => {
-  try {
-    // Add any pre-start checks here (e.g., database connection)
-    
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Aeko Backend Server ${isProduction ? 'Production' : 'Development'} Mode`);
-      console.log(`📡 Server running on port ${PORT}`);
-      
-      if (!isProduction) {
-        console.log('🔗 API Documentation:');
-        console.log(`   - Swagger UI: http://localhost:${PORT}/api-docs`);
-        console.log(`   - API Spec: http://localhost:${PORT}/api-docs.json`);
-      }
-      
-      console.log('✨ All systems ready!');
-    });
-    
-    // Handle unhandled promise rejections
-    process.on('unhandledRejection', (err) => {
-      console.error('UNHANDLED REJECTION! 💥', err);
-      // Keep server running in production to avoid platform 502
-      // Consider alerting/monitoring rather than exiting
-    });
-    
-    // Handle uncaught exceptions
-    process.on('uncaughtException', (err) => {
-      console.error('UNCAUGHT EXCEPTION! 💥', err);
-      // Avoid exiting to maintain uptime on managed platforms
-    });
-    
-    // Handle SIGTERM (for Docker/Heroku)
-    process.on('SIGTERM', () => {
-      console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
-      server.close(() => {
-        console.log('💥 Process terminated!');
-      });
-    });
-    
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    // Avoid exiting to allow platform to retry or for later readiness
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`);
+  if (process.env.NODE_ENV !== 'production') {
+     console.log(`AdminJS available at http://localhost:${PORT}${admin.options.rootPath}`);
   }
-};
+});
 
-// Start the application
-startServer();
+export default app;

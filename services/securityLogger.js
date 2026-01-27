@@ -1,4 +1,4 @@
-import SecurityEvent from '../models/SecurityEvent.js';
+import { prisma } from '../config/db.js';
 
 /**
  * Service for logging security events and audit trails
@@ -47,20 +47,24 @@ class SecurityLogger {
         userAgent = userAgent || requestInfo.userAgent;
       }
       
-      const event = await SecurityEvent.logEvent({
-        user: eventData.user,
-        eventType: eventData.eventType,
-        targetUser: eventData.targetUser,
-        metadata: eventData.metadata || {},
-        ipAddress: ipAddress || 'unknown',
-        userAgent: userAgent || 'unknown',
-        success: eventData.success !== undefined ? eventData.success : true,
-        errorMessage: eventData.errorMessage
+      const event = await prisma.securityEvent.create({
+        data: {
+          userId: eventData.user,
+          eventType: eventData.eventType,
+          targetUserId: eventData.targetUser || null,
+          metadata: eventData.metadata || {},
+          ipAddress: ipAddress || 'unknown',
+          userAgent: userAgent || 'unknown',
+          success: eventData.success !== undefined ? eventData.success : true,
+          errorMessage: eventData.errorMessage || null,
+          timestamp: new Date()
+        }
       });
       
       return event;
     } catch (error) {
       console.error('SecurityLogger: Failed to log event:', error);
+      // Don't throw error to prevent breaking main functionality
       return null;
     }
   }
@@ -229,7 +233,55 @@ class SecurityLogger {
    * @returns {Promise<Object>} Security events with pagination
    */
   async getUserSecurityEvents(userId, options = {}) {
-    return SecurityEvent.getUserEvents(userId, options);
+    const {
+      eventType = null,
+      page = 1,
+      limit = 50,
+      startDate = null,
+      endDate = null
+    } = options;
+    
+    const where = { userId: userId };
+    
+    if (eventType) {
+      where.eventType = eventType;
+    }
+    
+    if (startDate || endDate) {
+      where.timestamp = {};
+      if (startDate) where.timestamp.gte = new Date(startDate);
+      if (endDate) where.timestamp.lte = new Date(endDate);
+    }
+    
+    const skip = (page - 1) * limit;
+    
+    const [events, total] = await Promise.all([
+      prisma.securityEvent.findMany({
+        where,
+        include: {
+          targetUser: {
+            select: {
+              username: true,
+              name: true
+            }
+          }
+        },
+        orderBy: { timestamp: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.securityEvent.count({ where })
+    ]);
+    
+    return {
+      events,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
   }
 
   /**
@@ -239,7 +291,43 @@ class SecurityLogger {
    * @returns {Promise<Array>} Security statistics
    */
   async getUserSecurityStats(userId, days = 30) {
-    return SecurityEvent.getSecurityStats(userId, days);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    try {
+      const stats = await prisma.securityEvent.groupBy({
+        by: ['eventType'],
+        where: {
+          userId: userId,
+          timestamp: {
+            gte: startDate
+          }
+        },
+        _count: {
+          _all: true
+        },
+        _max: {
+          timestamp: true
+        },
+        orderBy: {
+          _count: {
+            eventType: 'desc' // Note: Prisma sort by aggregate might differ by version, but often supports this
+          }
+        }
+      });
+      
+      // If orderBy _count fails in some Prisma versions, we can sort manually in JS
+      // But standard Prisma supports it.
+      
+      return stats.map(stat => ({
+        _id: stat.eventType,
+        count: stat._count._all,
+        lastOccurrence: stat._max.timestamp
+      }));
+    } catch (error) {
+      console.error('Error getting security stats:', error);
+      return [];
+    }
   }
 
   /**
@@ -256,29 +344,42 @@ class SecurityLogger {
       endDate = null
     } = options;
     
-    const query = {};
+    const where = {};
     
     if (eventType) {
-      query.eventType = eventType;
+      where.eventType = eventType;
     }
     
     if (startDate || endDate) {
-      query.timestamp = {};
-      if (startDate) query.timestamp.$gte = new Date(startDate);
-      if (endDate) query.timestamp.$lte = new Date(endDate);
+      where.timestamp = {};
+      if (startDate) where.timestamp.gte = new Date(startDate);
+      if (endDate) where.timestamp.lte = new Date(endDate);
     }
     
     const skip = (page - 1) * limit;
     
     const [events, total] = await Promise.all([
-      SecurityEvent.find(query)
-        .populate('user', 'username name')
-        .populate('targetUser', 'username name')
-        .sort({ timestamp: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      SecurityEvent.countDocuments(query)
+      prisma.securityEvent.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              username: true,
+              name: true
+            }
+          },
+          targetUser: {
+            select: {
+              username: true,
+              name: true
+            }
+          }
+        },
+        orderBy: { timestamp: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.securityEvent.count({ where })
     ]);
     
     return {

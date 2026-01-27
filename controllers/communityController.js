@@ -1,7 +1,7 @@
-import Community from "../models/Community.js";
-import User from "../models/User.js";
-import Chat from "../models/Chat.js";
 import { validationResult } from "express-validator";
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // @desc    Create a new community
 // @route   POST /api/communities
@@ -17,7 +17,10 @@ export const createCommunity = async (req, res) => {
     const userId = req.user.id;
 
     // Check if user has golden tick
-    const user = await User.findById(userId);
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
     if (!user.goldenTick) {
       return res.status(403).json({ 
         success: false,
@@ -25,61 +28,68 @@ export const createCommunity = async (req, res) => {
       });
     }
 
-    // Create community
-    const community = new Community({
-      name,
-      description,
-      owner: userId,
-      isPrivate: isPrivate || false,
-      tags: tags || []
+    // Check if community name already exists
+    const existingCommunity = await prisma.community.findFirst({
+      where: { name }
     });
 
-    // Create a chat for the community
-    const chat = new Chat({
-      isGroupChat: true,
-      groupAdmin: userId,
-      chatName: name,
-      isCommunityChat: true,
-      community: community._id
-    });
-
-    await chat.save();
-    
-    // Add chat reference to community
-    community.chat = chat._id;
-    await community.save();
-    
-    // Add creator as first member and owner (this synchronizes both models)
-    await community.addMember(userId, 'owner');
-    
-    // Update user's ownedCommunities
-    user.ownedCommunities.push(community._id);
-    await user.save();
-
-    res.status(201).json({
-      success: true,
-      data: community
-    });
-  } catch (error) {
-    console.error('Error creating community:', error);
-    
-    // Handle validation errors
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: Object.values(error.errors).map(e => e.message)
-      });
-    }
-    
-    // Handle duplicate key errors
-    if (error.code === 11000) {
+    if (existingCommunity) {
       return res.status(409).json({
         success: false,
         message: 'A community with this name already exists'
       });
     }
-    
+
+    // Transaction to create community, chat, and add owner as member
+    const result = await prisma.$transaction(async (prisma) => {
+      // 1. Create Community
+      const community = await prisma.community.create({
+        data: {
+          name,
+          description,
+          ownerId: userId,
+          isPrivate: isPrivate || false,
+          tags: tags || [],
+          memberCount: 1, // Owner is the first member
+          isActive: true
+        }
+      });
+
+      // 2. Create Community Chat
+      const chat = await prisma.chat.create({
+        data: {
+          isGroup: true,
+          groupName: name,
+          isCommunityChat: true,
+          communityId: community.id,
+          groupAdminId: userId,
+          members: {
+            create: {
+              userId: userId
+            }
+          }
+        }
+      });
+
+      // 3. Add owner as Community Member
+      await prisma.communityMember.create({
+        data: {
+          communityId: community.id,
+          userId: userId,
+          role: 'owner',
+          status: 'active'
+        }
+      });
+
+      return { community, chat };
+    });
+
+    res.status(201).json({
+      success: true,
+      data: result.community
+    });
+  } catch (error) {
+    console.error('Error creating community:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -94,24 +104,37 @@ export const createCommunity = async (req, res) => {
 export const getCommunities = async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '' } = req.query;
-    const skip = (page - 1) * limit;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const query = {
+    const where = {
       isActive: true,
-      $or: [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [search] } }
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { tags: { has: search } }
       ]
     };
 
     const [communities, total] = await Promise.all([
-      Community.find(query)
-        .populate('owner', 'name username profilePicture')
-        .sort({ memberCount: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit)),
-      Community.countDocuments(query)
+      prisma.community.findMany({
+        where,
+        include: {
+          owner: {
+            select: {
+              name: true,
+              username: true,
+              profilePicture: true
+            }
+          }
+        },
+        orderBy: [
+          { memberCount: 'desc' },
+          { createdAt: 'desc' }
+        ],
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.community.count({ where })
     ]);
 
     res.status(200).json({
@@ -120,13 +143,12 @@ export const getCommunities = async (req, res) => {
       pagination: {
         total,
         page: parseInt(page),
-        pages: Math.ceil(total / limit),
+        pages: Math.ceil(total / parseInt(limit)),
         limit: parseInt(limit)
       }
     });
   } catch (error) {
     console.error('Error fetching communities:', error);
-    
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -140,10 +162,33 @@ export const getCommunities = async (req, res) => {
 // @access  Public
 export const getCommunity = async (req, res) => {
   try {
-    const community = await Community.findById(req.params.id)
-      .populate('owner', 'name username profilePicture')
-      .populate('moderators', 'name username profilePicture')
-      .populate('members.user', 'name username profilePicture');
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const community = await prisma.community.findUnique({
+      where: { id },
+      include: {
+        owner: {
+          select: {
+            name: true,
+            username: true,
+            profilePicture: true
+          }
+        },
+        members: {
+          take: 5, // Limit displayed members for preview
+          include: {
+            user: {
+              select: {
+                name: true,
+                username: true,
+                profilePicture: true
+              }
+            }
+          }
+        }
+      }
+    });
 
     if (!community) {
       return res.status(404).json({
@@ -153,9 +198,18 @@ export const getCommunity = async (req, res) => {
     }
 
     // Check if user is member (for private communities)
-    const isMember = req.user ? 
-      community.members.some(member => member.user._id.toString() === req.user.id) :
-      false;
+    let isMember = false;
+    if (userId) {
+      const memberRecord = await prisma.communityMember.findUnique({
+        where: {
+          communityId_userId: {
+            communityId: id,
+            userId: userId
+          }
+        }
+      });
+      isMember = !!memberRecord;
+    }
 
     if (community.isPrivate && !isMember) {
       return res.status(403).json({
@@ -164,21 +218,32 @@ export const getCommunity = async (req, res) => {
       });
     }
 
+    // Fetch moderators separately
+    const moderators = await prisma.communityMember.findMany({
+      where: {
+        communityId: id,
+        role: 'moderator'
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            username: true,
+            profilePicture: true
+          }
+        }
+      }
+    });
+
     res.status(200).json({
       success: true,
-      data: community
+      data: {
+        ...community,
+        moderators: moderators.map(m => m.user)
+      }
     });
   } catch (error) {
     console.error('Error fetching community:', error);
-    
-    // Handle invalid ObjectId
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
-    
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -192,8 +257,15 @@ export const getCommunity = async (req, res) => {
 // @access  Private
 export const joinCommunity = async (req, res) => {
   try {
-    const community = await Community.findById(req.params.id);
+    const { id } = req.params;
     const userId = req.user.id;
+
+    const community = await prisma.community.findUnique({
+      where: { id },
+      include: {
+        chat: true
+      }
+    });
 
     if (!community) {
       return res.status(404).json({
@@ -203,9 +275,14 @@ export const joinCommunity = async (req, res) => {
     }
 
     // Check if already a member
-    const existingMember = community.members.find(member => 
-      member.user.toString() === userId
-    );
+    const existingMember = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId: id,
+          userId: userId
+        }
+      }
+    });
 
     if (existingMember) {
       if (existingMember.status === 'active') {
@@ -220,26 +297,48 @@ export const joinCommunity = async (req, res) => {
           message: 'You are banned from this community'
         });
       }
+      // If pending, just return status
+      if (existingMember.status === 'pending') {
+         return res.status(200).json({
+          success: true,
+          message: 'Join request already sent. Waiting for approval.',
+          requiresApproval: true
+        });
+      }
     }
 
     // Check if community is paid - require payment before joining
-    if (community.settings?.payment?.isPaidCommunity) {
+    // Access settings using type assertion or check if it exists
+    const settings = community.settings;
+    if (settings && typeof settings === 'object' && 'payment' in settings && settings.payment?.isPaidCommunity) {
       return res.status(402).json({
         success: false,
         message: 'This is a paid community. Please complete payment first.',
         requiresPayment: true,
         paymentInfo: {
-          price: community.settings.payment.price,
-          currency: community.settings.payment.currency,
-          subscriptionType: community.settings.payment.subscriptionType,
-          availableMethods: community.settings.payment.paymentMethods
+          price: settings.payment.price,
+          currency: settings.payment.currency,
+          subscriptionType: settings.payment.subscriptionType,
+          availableMethods: settings.payment.paymentMethods
         }
       });
     }
 
     // For private communities, add to pending requests
-    if (community.settings?.isPrivate) {
-      // In a real app, you would add to pending requests
+    // Note: settings might be null, so check safely
+    const isPrivate = community.isPrivate || (settings && settings.isPrivate);
+    
+    if (isPrivate) {
+      // Create pending member
+      await prisma.communityMember.create({
+        data: {
+          communityId: id,
+          userId: userId,
+          role: 'member',
+          status: 'pending'
+        }
+      });
+
       return res.status(200).json({
         success: true,
         message: 'Join request sent. Waiting for approval.',
@@ -248,24 +347,52 @@ export const joinCommunity = async (req, res) => {
     }
 
     // For free public communities, add directly
-    const status = community.settings?.requireApproval ? 'pending' : 'active';
+    const requireApproval = settings && settings.requireApproval;
+    const status = requireApproval ? 'pending' : 'active';
     
-    // Use addMember method which synchronizes both Community and User models
-    await community.addMember(userId, 'member');
-    
-    // Update member status if approval is required
-    if (status === 'pending') {
-      const member = community.members.find(m => m.user.toString() === userId);
-      member.status = status;
-      await community.save();
-    }
-
-    // Add user to community chat if active
-    if (status === 'active' && community.chat) {
-      await Chat.findByIdAndUpdate(community.chat, {
-        $addToSet: { users: userId }
+    await prisma.$transaction(async (prisma) => {
+      // Add member
+      await prisma.communityMember.create({
+        data: {
+          communityId: id,
+          userId: userId,
+          role: 'member',
+          status: status
+        }
       });
-    }
+
+      // Increment member count if active
+      if (status === 'active') {
+        await prisma.community.update({
+          where: { id },
+          data: {
+            memberCount: { increment: 1 }
+          }
+        });
+
+        // Add to chat if active
+        if (community.chat) {
+          // Check if already in chat to avoid unique constraint error
+          const inChat = await prisma.chatMember.findUnique({
+            where: {
+              chatId_userId: {
+                chatId: community.chat.id,
+                userId: userId
+              }
+            }
+          });
+          
+          if (!inChat) {
+            await prisma.chatMember.create({
+              data: {
+                chatId: community.chat.id,
+                userId: userId
+              }
+            });
+          }
+        }
+      }
+    });
 
     res.status(200).json({
       success: true,
@@ -276,15 +403,6 @@ export const joinCommunity = async (req, res) => {
     });
   } catch (error) {
     console.error('Error joining community:', error);
-    
-    // Handle invalid ObjectId
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
-    
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -298,8 +416,15 @@ export const joinCommunity = async (req, res) => {
 // @access  Private
 export const leaveCommunity = async (req, res) => {
   try {
-    const community = await Community.findById(req.params.id);
+    const { id } = req.params;
     const userId = req.user.id;
+
+    const community = await prisma.community.findUnique({
+      where: { id },
+      include: {
+        chat: true
+      }
+    });
 
     if (!community) {
       return res.status(404).json({
@@ -308,8 +433,8 @@ export const leaveCommunity = async (req, res) => {
       });
     }
 
-    // Check if owner (owners can't leave, must delete or transfer ownership)
-    if (community.owner.toString() === userId) {
+    // Check if owner
+    if (community.ownerId === userId) {
       return res.status(400).json({
         success: false,
         message: 'Community owner cannot leave. Transfer ownership or delete the community.'
@@ -317,33 +442,67 @@ export const leaveCommunity = async (req, res) => {
     }
 
     // Check if member
-    const isMember = community.members.some(member => 
-      member.user.toString() === userId
-    );
+    const member = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId: id,
+          userId: userId
+        }
+      }
+    });
 
-    if (!isMember) {
+    if (!member) {
       return res.status(400).json({
         success: false,
         message: 'You are not a member of this community'
       });
     }
 
-    // Remove from community (this also synchronizes with User.communities)
-    await community.removeMember(userId);
+    await prisma.$transaction(async (prisma) => {
+      // Remove member
+      await prisma.communityMember.delete({
+        where: {
+          communityId_userId: {
+            communityId: id,
+            userId: userId
+          }
+        }
+      });
 
-    // Remove from ownedCommunities if applicable (shouldn't happen since owners can't leave)
-    await User.findByIdAndUpdate(userId, {
-      $pull: { 
-        ownedCommunities: community._id
+      // Decrement member count if was active
+      if (member.status === 'active') {
+        await prisma.community.update({
+          where: { id },
+          data: {
+            memberCount: { decrement: 1 }
+          }
+        });
+
+        // Remove from chat
+        if (community.chat) {
+           // Check if in chat first
+           const inChat = await prisma.chatMember.findUnique({
+             where: {
+               chatId_userId: {
+                 chatId: community.chat.id,
+                 userId: userId
+               }
+             }
+           });
+           
+           if (inChat) {
+             await prisma.chatMember.delete({
+               where: {
+                 chatId_userId: {
+                   chatId: community.chat.id,
+                   userId: userId
+                 }
+               }
+             });
+           }
+        }
       }
     });
-
-    // Remove from community chat
-    if (community.chat) {
-      await Chat.findByIdAndUpdate(community.chat, {
-        $pull: { users: userId }
-      });
-    }
 
     res.status(200).json({
       success: true,
@@ -351,15 +510,6 @@ export const leaveCommunity = async (req, res) => {
     });
   } catch (error) {
     console.error('Error leaving community:', error);
-    
-    // Handle invalid ObjectId
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
-    
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -373,8 +523,13 @@ export const leaveCommunity = async (req, res) => {
 // @access  Private (Community owner/moderators)
 export const updateCommunity = async (req, res) => {
   try {
+    const { id } = req.params;
     const { name, description, isPrivate, tags, settings } = req.body;
-    const community = await Community.findById(req.params.id);
+    const userId = req.user.id;
+
+    const community = await prisma.community.findUnique({
+      where: { id }
+    });
 
     if (!community) {
       return res.status(404).json({
@@ -383,11 +538,18 @@ export const updateCommunity = async (req, res) => {
       });
     }
 
-    // Check if user is owner or moderator
-    const isOwner = community.owner.toString() === req.user.id;
-    const isModerator = community.moderators.some(
-      modId => modId.toString() === req.user.id
-    );
+    // Check permissions
+    const member = await prisma.communityMember.findUnique({
+      where: {
+        communityId_userId: {
+          communityId: id,
+          userId: userId
+        }
+      }
+    });
+
+    const isOwner = community.ownerId === userId;
+    const isModerator = member?.role === 'moderator';
 
     if (!isOwner && !isModerator) {
       return res.status(403).json({
@@ -396,39 +558,30 @@ export const updateCommunity = async (req, res) => {
       });
     }
 
-    // Update fields
-    if (name) community.name = name;
-    if (description) community.description = description;
-    if (typeof isPrivate !== 'undefined') community.isPrivate = isPrivate;
-    if (tags) community.tags = tags;
-    if (settings) community.settings = { ...community.settings, ...settings };
+    // Update data
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (description) updateData.description = description;
+    if (typeof isPrivate !== 'undefined') updateData.isPrivate = isPrivate;
+    if (tags) updateData.tags = tags;
+    
+    if (settings) {
+      // Merge settings if exists
+      const currentSettings = community.settings || {};
+      updateData.settings = { ...currentSettings, ...settings };
+    }
 
-    await community.save();
+    const updatedCommunity = await prisma.community.update({
+      where: { id },
+      data: updateData
+    });
 
     res.status(200).json({
       success: true,
-      data: community
+      data: updatedCommunity
     });
   } catch (error) {
     console.error('Error updating community:', error);
-    
-    // Handle validation errors
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: Object.values(error.errors).map(e => e.message)
-      });
-    }
-    
-    // Handle invalid ObjectId
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
-    
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -442,7 +595,15 @@ export const updateCommunity = async (req, res) => {
 // @access  Private (Community owner only)
 export const deleteCommunity = async (req, res) => {
   try {
-    const community = await Community.findById(req.params.id);
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const community = await prisma.community.findUnique({
+      where: { id },
+      include: {
+        chat: true
+      }
+    });
 
     if (!community) {
       return res.status(404).json({
@@ -451,32 +612,42 @@ export const deleteCommunity = async (req, res) => {
       });
     }
 
-    // Check if user is owner
-    if (community.owner.toString() !== req.user.id) {
+    // Check if owner
+    if (community.ownerId !== userId) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this community'
       });
     }
 
-    // Soft delete
-    community.isActive = false;
-    await community.save();
+    // Soft delete (mark inactive)
+    // Or we could perform actual deletion if desired, but code said "Soft delete"
+    // The previous code also removed members. 
+    // Let's mark inactive and remove members to clear up relations but keep history if needed?
+    // Actually, the previous code did: community.isActive = false; await community.save(); then removed members.
+    
+    await prisma.$transaction(async (prisma) => {
+      // 1. Mark inactive
+      await prisma.community.update({
+        where: { id },
+        data: { isActive: false }
+      });
 
-    // Remove all members from both Community and User models atomically
-    const memberIds = community.members.map(m => m.user);
-    for (const memberId of memberIds) {
-      await community.removeMember(memberId);
-    }
+      // 2. Remove all members (actually delete them from the join table)
+      await prisma.communityMember.deleteMany({
+        where: { communityId: id }
+      });
 
-    // Remove from owner's ownedCommunities
-    await User.findByIdAndUpdate(community.owner, {
-      $pull: { 
-        ownedCommunities: community._id
+      // 3. Handle chat (optional, maybe mark inactive too?)
+      // For now, let's leave chat but remove members from it?
+      if (community.chat) {
+        // Find all chat members that are in this community chat
+        // Actually, since we removed community members, we should probably clear chat members too
+        await prisma.chatMember.deleteMany({
+          where: { chatId: community.chat.id }
+        });
       }
     });
-
-    // Note: In a real app, you might want to handle the chat deletion/archiving here
 
     res.status(200).json({
       success: true,
@@ -484,15 +655,6 @@ export const deleteCommunity = async (req, res) => {
     });
   } catch (error) {
     console.error('Error deleting community:', error);
-    
-    // Handle invalid ObjectId
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid community ID format'
-      });
-    }
-    
     res.status(500).json({
       success: false,
       message: 'Server error',

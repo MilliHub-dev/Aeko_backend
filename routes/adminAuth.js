@@ -1,7 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import User from '../models/User.js';
+import { prisma } from '../config/db.js';
 
 const router = express.Router();
 
@@ -11,7 +11,10 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     // Find user and check if they're an admin
-    const user = await User.findOne({ email });
+    const user = await prisma.user.findFirst({
+      where: { email }
+    });
+
     if (!user || !user.isAdmin) {
       return res.status(401).json({ 
         success: false, 
@@ -31,7 +34,7 @@ router.post('/login', async (req, res) => {
     // Generate JWT token
     const token = jwt.sign(
       { 
-        userId: user._id, 
+        userId: user.id, 
         email: user.email,
         isAdmin: true 
       },
@@ -65,7 +68,9 @@ router.get('/verify', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId);
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId }
+    });
     
     if (!user || !user.isAdmin) {
       return res.status(401).json({ success: false, message: 'Invalid admin token' });
@@ -74,7 +79,7 @@ router.get('/verify', async (req, res) => {
     res.json({ 
       success: true, 
       user: {
-        id: user._id,
+        id: user.id,
         name: user.name,
         username: user.username,
         email: user.email,

@@ -1,11 +1,12 @@
 import express from 'express';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import { prisma } from '../config/db.js';
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
-import privacyFilterMiddleware from "../middleware/privacyMiddleware.js";
 import PrivacyManager from '../services/privacyManager.js';
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
+import BlockingService from '../services/blockingService.js';
 
 const router = express.Router();
 
@@ -136,6 +137,23 @@ const router = express.Router();
  *       200:
  *         description: List of following users retrieved successfully
  * 
+ * /api/profile/follow/{userId}:
+ *   put:
+ *     summary: Follow a user
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Successfully followed the user
+ * 
  * /api/profile/unfollow/{userId}:
  *   delete:
  *     summary: Unfollow a user
@@ -193,29 +211,22 @@ const router = express.Router();
  *         description: Golden Tick activated
  */
 
-import bcrypt from 'bcrypt';
-
-// Middleware for Authentication
-/* const authMiddleware = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
-    req.userId = decoded.userId;
-    next();
-  });
-}; */
-
 // ✅ Get Profile
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-    const user = await User.findById(userId).select('-password');
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
-    res.json({ success: true, user });
+    
+    // Remove password from response
+    const { password, ...userWithoutPassword } = user;
+    
+    res.json({ success: true, user: userWithoutPassword });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -226,12 +237,25 @@ router.put('/update', authMiddleware, twoFactorMiddleware.requireTwoFactor(), as
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { username, email, profilePic, bio } = req.body;
-    const user = await User.findByIdAndUpdate(userId, { username, email, profilePic, bio }, { new: true });
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-    res.json({ success: true, user });
+    
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { 
+        username, 
+        email, 
+        profilePicture: profilePic, // Map profilePic to profilePicture
+        bio 
+      }
+    });
+    
+    // Remove password from response
+    const { password, ...userWithoutPassword } = user;
+    
+    res.json({ success: true, user: userWithoutPassword });
   } catch (error) {
+    if (error.code === 'P2025') {
+        return res.status(404).json({ success: false, error: 'User not found' });
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -241,14 +265,25 @@ router.put('/change-password', authMiddleware, twoFactorMiddleware.requireTwoFac
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { currentPassword, newPassword } = req.body;
-    const user = await User.findById(userId);
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const isMatch = await user.comparePassword(currentPassword);
+    // Verify current password
+    // Note: Mongoose model had comparePassword method. With Prisma we use bcrypt directly.
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    
     if (!isMatch) return res.status(400).json({ error: 'Incorrect password' });
 
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword }
+    });
 
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
@@ -260,27 +295,53 @@ router.put('/change-password', authMiddleware, twoFactorMiddleware.requireTwoFac
 router.delete('/delete-account', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-    await User.findByIdAndDelete(userId);
+    await prisma.user.delete({
+      where: { id: userId }
+    });
     res.json({ success: true, message: 'User account deleted successfully' });
   } catch (error) {
+    if (error.code === 'P2025') {
+        // User already deleted or not found, which is technically a success for delete
+        return res.json({ success: true, message: 'User account deleted successfully' });
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
 // ✅ List Followers - Updated with privacy controls
-router.get('/followers', authMiddleware, BlockingMiddleware.filterBlockedContent('followers', '_id'), async (req, res) => {
+router.get('/followers', authMiddleware, async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-    const user = await User.findById(userId).populate('followers', 'username email profilePicture');
+    
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { followers: true }
+    });
     
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
     
-    // Filter followers based on privacy settings
+    const followerIds = Array.isArray(user.followers) ? user.followers : [];
+    
+    if (followerIds.length === 0) {
+        return res.json({ success: true, followers: [] });
+    }
+
+    const followers = await prisma.user.findMany({
+        where: { id: { in: followerIds } },
+        select: { id: true, username: true, email: true, profilePicture: true }
+    });
+    
+    // Filter followers based on privacy settings and blocking
     const filteredFollowers = [];
-    for (const follower of user.followers) {
-      const canView = await PrivacyManager.canViewProfile(userId, follower._id);
+    for (const follower of followers) {
+      // Check blocking
+      const canInteract = await BlockingService.enforceBlockingRules(userId, follower.id);
+      if (!canInteract) continue;
+
+      // Check privacy (as per original logic)
+      const canView = await PrivacyManager.canViewProfile(userId, follower.id);
       if (canView) {
         filteredFollowers.push(follower);
       }
@@ -288,24 +349,44 @@ router.get('/followers', authMiddleware, BlockingMiddleware.filterBlockedContent
     
     res.json({ success: true, followers: filteredFollowers });
   } catch (error) {
+    console.error('Get followers error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // ✅ List Following - Updated with privacy controls
-router.get('/following', authMiddleware, BlockingMiddleware.filterBlockedContent('following', '_id'), async (req, res) => {
+router.get('/following', authMiddleware, async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-    const user = await User.findById(userId).populate('following', 'username email profilePicture');
+    
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { following: true }
+    });
     
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
     
+    const followingIds = Array.isArray(user.following) ? user.following : [];
+    
+    if (followingIds.length === 0) {
+        return res.json({ success: true, following: [] });
+    }
+
+    const followingUsers = await prisma.user.findMany({
+        where: { id: { in: followingIds } },
+        select: { id: true, username: true, email: true, profilePicture: true }
+    });
+    
     // Filter following list based on privacy settings
     const filteredFollowing = [];
-    for (const followedUser of user.following) {
-      const canView = await PrivacyManager.canViewProfile(userId, followedUser._id);
+    for (const followedUser of followingUsers) {
+      // Check blocking
+      const canInteract = await BlockingService.enforceBlockingRules(userId, followedUser.id);
+      if (!canInteract) continue;
+
+      const canView = await PrivacyManager.canViewProfile(userId, followedUser.id);
       if (canView) {
         filteredFollowing.push(followedUser);
       }
@@ -313,6 +394,7 @@ router.get('/following', authMiddleware, BlockingMiddleware.filterBlockedContent
     
     res.json({ success: true, following: filteredFollowing });
   } catch (error) {
+    console.error('Get following error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -322,15 +404,88 @@ router.get('/followers/search', authMiddleware, async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { query } = req.query;
-    const user = await User.findById(userId).populate({
-      path: 'followers',
-      match: { username: new RegExp(query, 'i') },
-      select: 'username email profilePic'
+    
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { followers: true }
     });
+
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
-    res.json({ success: true, followers: user.followers });
+
+    const followerIds = Array.isArray(user.followers) ? user.followers : [];
+
+    if (followerIds.length === 0) {
+        return res.json({ success: true, followers: [] });
+    }
+
+    const matchedFollowers = await prisma.user.findMany({
+        where: {
+            id: { in: followerIds },
+            username: { contains: query, mode: 'insensitive' }
+        },
+        select: { id: true, username: true, email: true, profilePicture: true }
+    });
+
+    res.json({ success: true, followers: matchedFollowers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ Follow User - Updated with privacy controls
+router.put('/follow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess(), async (req, res) => {
+  try {
+    const userId = req.userId || req.user?.id || req.user?._id;
+    const targetId = req.params.id;
+
+    if (userId === targetId) {
+        return res.status(400).json({ error: "You cannot follow yourself" });
+    }
+    
+    // Check if user can interact with the target user
+    const canView = await PrivacyManager.canViewProfile(userId, targetId);
+    if (!canView) {
+      return res.status(403).json({ error: 'You cannot follow this user due to privacy settings' });
+    }
+
+    const [user, targetUser] = await Promise.all([
+        prisma.user.findUnique({ where: { id: userId }, select: { following: true } }),
+        prisma.user.findUnique({ where: { id: targetId }, select: { followers: true } })
+    ]);
+
+    if (!user) return res.status(404).json({ error: 'Your account not found' });
+    if (!targetUser) return res.status(404).json({ error: 'User not found' });
+
+    const currentFollowing = Array.isArray(user.following) ? user.following : [];
+    const currentFollowers = Array.isArray(targetUser.followers) ? targetUser.followers : [];
+
+    // Check if already following
+    if (currentFollowing.includes(targetId)) {
+        return res.status(400).json({ error: "You are already following this user" });
+    }
+
+    // Add to following
+    const updatedFollowing = [...currentFollowing, targetId];
+    
+    // Add to followers
+    const updatedFollowers = [...currentFollowers, userId];
+
+    await Promise.all([
+        prisma.user.update({
+            where: { id: userId },
+            data: { following: updatedFollowing }
+        }),
+        prisma.user.update({
+            where: { id: targetId },
+            data: { followers: updatedFollowers }
+        })
+    ]);
+
+    // TODO: Create notification for the target user
+
+    res.json({ success: true, message: 'Followed user successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -340,24 +495,41 @@ router.get('/followers/search', authMiddleware, async (req, res) => {
 router.put('/unfollow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess(), async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
+    const targetId = req.params.id;
     
     // Check if user can interact with the target user
-    const canView = await PrivacyManager.canViewProfile(userId, req.params.id);
+    const canView = await PrivacyManager.canViewProfile(userId, targetId);
     if (!canView) {
       return res.status(403).json({ error: 'You cannot unfollow this user' });
     }
 
-    const user = await User.findById(userId);
-    const unfollowUser = await User.findById(req.params.id);
+    const [user, unfollowUser] = await Promise.all([
+        prisma.user.findUnique({ where: { id: userId }, select: { following: true } }),
+        prisma.user.findUnique({ where: { id: targetId }, select: { followers: true } })
+    ]);
 
     if (!user) return res.status(404).json({ error: 'Your account not found' });
     if (!unfollowUser) return res.status(404).json({ error: 'User not found' });
 
-    user.following = user.following.filter(id => id.toString() !== req.params.id);
-    unfollowUser.followers = unfollowUser.followers.filter(id => id.toString() !== userId);
+    const currentFollowing = Array.isArray(user.following) ? user.following : [];
+    const currentFollowers = Array.isArray(unfollowUser.followers) ? unfollowUser.followers : [];
 
-    await user.save();
-    await unfollowUser.save();
+    // Remove from following
+    const updatedFollowing = currentFollowing.filter(id => id.toString() !== targetId);
+    
+    // Remove from followers
+    const updatedFollowers = currentFollowers.filter(id => id.toString() !== userId);
+
+    await Promise.all([
+        prisma.user.update({
+            where: { id: userId },
+            data: { following: updatedFollowing }
+        }),
+        prisma.user.update({
+            where: { id: targetId },
+            data: { followers: updatedFollowers }
+        })
+    ]);
 
     res.json({ success: true, message: 'Unfollowed user successfully' });
   } catch (error) {
@@ -370,15 +542,17 @@ router.post("/verify", authMiddleware, twoFactorMiddleware.requireTwoFactor(), a
     const { userId } = req.body;
   
     try {
-      const user = await User.findById(userId);
-      if (!user) return res.status(404).json({ message: "User not found" });
-  
-      user.blueTick = true;
-      await user.save();
+      const user = await prisma.user.update({
+          where: { id: userId },
+          data: { blueTick: true }
+      });
   
       res.status(200).json({ message: "User verified with Blue Tick ✅" });
     } catch (error) {
-      res.status(500).json({ message: "Server error", error });
+      if (error.code === 'P2025') {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.status(500).json({ message: "Server error", error: error.message });
     }
   });
 

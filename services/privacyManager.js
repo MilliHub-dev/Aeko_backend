@@ -1,5 +1,4 @@
-import User from '../models/User.js';
-import mongoose from 'mongoose';
+import prisma from '../config/db.js';
 import SecurityLogger from './securityLogger.js';
 
 /**
@@ -16,13 +15,11 @@ class PrivacyManager {
    */
   async updatePrivacySettings(userId, settings, req = null) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(userId)) {
-        const error = new Error('Invalid user ID');
-        await SecurityLogger.logPrivacyChangeEvent(userId, req, false, error.message);
-        throw error;
-      }
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { privacy: true }
+      });
 
-      const user = await User.findById(userId);
       if (!user) {
         const error = new Error('User not found');
         await SecurityLogger.logPrivacyChangeEvent(userId, req, false, error.message);
@@ -30,45 +27,45 @@ class PrivacyManager {
       }
 
       // Store previous settings for logging
-      const previousSettings = { ...user.privacy.toObject() };
+      const previousSettings = user.privacy || {};
 
-      // Validate privacy settings
-      const validSettings = {};
+      // Validate and merge privacy settings
+      const validSettings = { ...previousSettings };
       
       if (typeof settings.isPrivate === 'boolean') {
-        validSettings['privacy.isPrivate'] = settings.isPrivate;
+        validSettings.isPrivate = settings.isPrivate;
       }
       
       if (typeof settings.allowFollowRequests === 'boolean') {
-        validSettings['privacy.allowFollowRequests'] = settings.allowFollowRequests;
+        validSettings.allowFollowRequests = settings.allowFollowRequests;
       }
       
       if (typeof settings.showOnlineStatus === 'boolean') {
-        validSettings['privacy.showOnlineStatus'] = settings.showOnlineStatus;
+        validSettings.showOnlineStatus = settings.showOnlineStatus;
       }
       
       if (settings.allowDirectMessages && ['everyone', 'followers', 'none'].includes(settings.allowDirectMessages)) {
-        validSettings['privacy.allowDirectMessages'] = settings.allowDirectMessages;
+        validSettings.allowDirectMessages = settings.allowDirectMessages;
       }
 
       // Update user privacy settings
-      const updatedUser = await User.findByIdAndUpdate(
-        userId,
-        { $set: validSettings },
-        { new: true, select: 'privacy' }
-      );
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: { privacy: validSettings },
+        select: { privacy: true }
+      });
 
       // Log successful privacy change
       await SecurityLogger.logPrivacyChangeEvent(userId, req, true, null, {
-        changes: validSettings,
+        changes: settings,
         previousSettings,
-        newSettings: updatedUser.privacy.toObject()
+        newSettings: updatedUser.privacy
       });
 
       return updatedUser.privacy;
     } catch (error) {
       // Log failed privacy change if not already logged
-      if (!error.message.includes('Invalid user ID') && !error.message.includes('User not found')) {
+      if (!error.message.includes('User not found')) {
         await SecurityLogger.logPrivacyChangeEvent(userId, req, false, error.message);
       }
       throw new Error(`Failed to update privacy settings: ${error.message}`);
@@ -88,26 +85,33 @@ class PrivacyManager {
         return true;
       }
 
-      const profileUser = await User.findById(profileId).select('privacy followers blockedUsers');
+      const profileUser = await prisma.user.findUnique({
+        where: { id: profileId },
+        select: { privacy: true, followers: true, blockedUsers: true }
+      });
+
       if (!profileUser) {
         return false;
       }
 
       // Check if viewer is blocked by profile owner
-      const isBlocked = profileUser.blockedUsers.some(
-        blocked => blocked.user.toString() === viewerId
+      const blockedUsers = Array.isArray(profileUser.blockedUsers) ? profileUser.blockedUsers : [];
+      const isBlocked = blockedUsers.some(
+        blocked => blocked.user === viewerId
       );
       if (isBlocked) {
         return false;
       }
 
       // If account is not private, profile can be viewed
-      if (!profileUser.privacy.isPrivate) {
+      const privacy = profileUser.privacy || {};
+      if (!privacy.isPrivate) {
         return true;
       }
 
       // For private accounts, check if viewer is a follower
-      const isFollower = profileUser.followers.includes(viewerId);
+      const followers = Array.isArray(profileUser.followers) ? profileUser.followers : [];
+      const isFollower = followers.includes(viewerId);
       return isFollower;
     } catch (error) {
       console.error('Error checking profile view permission:', error);
@@ -128,26 +132,33 @@ class PrivacyManager {
         return true;
       }
 
-      const authorUser = await User.findById(authorId).select('privacy followers blockedUsers');
+      const authorUser = await prisma.user.findUnique({
+        where: { id: authorId },
+        select: { privacy: true, followers: true, blockedUsers: true }
+      });
+
       if (!authorUser) {
         return false;
       }
 
       // Check if viewer is blocked by author
-      const isBlocked = authorUser.blockedUsers.some(
-        blocked => blocked.user.toString() === viewerId
+      const blockedUsers = Array.isArray(authorUser.blockedUsers) ? authorUser.blockedUsers : [];
+      const isBlocked = blockedUsers.some(
+        blocked => blocked.user === viewerId
       );
       if (isBlocked) {
         return false;
       }
 
       // If account is not private, posts can be viewed
-      if (!authorUser.privacy.isPrivate) {
+      const privacy = authorUser.privacy || {};
+      if (!privacy.isPrivate) {
         return true;
       }
 
       // For private accounts, check if viewer is a follower
-      const isFollower = authorUser.followers.includes(viewerId);
+      const followers = Array.isArray(authorUser.followers) ? authorUser.followers : [];
+      const isFollower = followers.includes(viewerId);
       return isFollower;
     } catch (error) {
       console.error('Error checking post view permission:', error);
@@ -168,21 +179,27 @@ class PrivacyManager {
         return false;
       }
 
-      const recipientUser = await User.findById(recipientId).select('privacy followers blockedUsers');
+      const recipientUser = await prisma.user.findUnique({
+        where: { id: recipientId },
+        select: { privacy: true, followers: true, blockedUsers: true }
+      });
+
       if (!recipientUser) {
         return false;
       }
 
       // Check if sender is blocked by recipient
-      const isBlocked = recipientUser.blockedUsers.some(
-        blocked => blocked.user.toString() === senderId
+      const blockedUsers = Array.isArray(recipientUser.blockedUsers) ? recipientUser.blockedUsers : [];
+      const isBlocked = blockedUsers.some(
+        blocked => blocked.user === senderId
       );
       if (isBlocked) {
         return false;
       }
 
       // Check recipient's message settings
-      const messageSettings = recipientUser.privacy.allowDirectMessages;
+      const privacy = recipientUser.privacy || {};
+      const messageSettings = privacy.allowDirectMessages;
       
       switch (messageSettings) {
         case 'none':
@@ -191,7 +208,8 @@ class PrivacyManager {
           return true;
         case 'followers':
           // Check if sender is a follower
-          return recipientUser.followers.includes(senderId);
+          const followers = Array.isArray(recipientUser.followers) ? recipientUser.followers : [];
+          return followers.includes(senderId);
         default:
           return false;
       }
@@ -210,12 +228,6 @@ class PrivacyManager {
    */
   async sendFollowRequest(requesterId, targetId, req = null) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(requesterId) || !mongoose.Types.ObjectId.isValid(targetId)) {
-        const error = new Error('Invalid user ID');
-        await SecurityLogger.logFollowRequestSentEvent(requesterId, targetId, req, false, error.message);
-        throw error;
-      }
-
       // Users cannot follow themselves
       if (requesterId === targetId) {
         const error = new Error('Cannot send follow request to yourself');
@@ -224,8 +236,8 @@ class PrivacyManager {
       }
 
       const [requester, target] = await Promise.all([
-        User.findById(requesterId).select('username'),
-        User.findById(targetId).select('privacy followRequests followers blockedUsers')
+        prisma.user.findUnique({ where: { id: requesterId }, select: { username: true } }),
+        prisma.user.findUnique({ where: { id: targetId }, select: { privacy: true, followRequests: true, followers: true, blockedUsers: true } })
       ]);
 
       if (!requester || !target) {
@@ -235,8 +247,9 @@ class PrivacyManager {
       }
 
       // Check if requester is blocked by target
-      const isBlocked = target.blockedUsers.some(
-        blocked => blocked.user.toString() === requesterId
+      const blockedUsers = Array.isArray(target.blockedUsers) ? target.blockedUsers : [];
+      const isBlocked = blockedUsers.some(
+        blocked => blocked.user === requesterId
       );
       if (isBlocked) {
         const error = new Error('Cannot send follow request to this user');
@@ -245,22 +258,32 @@ class PrivacyManager {
       }
 
       // Check if already following
-      if (target.followers.includes(requesterId)) {
+      const followers = Array.isArray(target.followers) ? target.followers : [];
+      if (followers.includes(requesterId)) {
         const error = new Error('Already following this user');
         await SecurityLogger.logFollowRequestSentEvent(requesterId, targetId, req, false, error.message);
         throw error;
       }
 
+      const privacy = target.privacy || {};
+
       // If account is not private, follow directly
-      if (!target.privacy.isPrivate) {
+      if (!privacy.isPrivate) {
         // Add to followers
-        await User.findByIdAndUpdate(targetId, {
-          $addToSet: { followers: requesterId }
+        const updatedFollowers = [...followers, requesterId];
+        await prisma.user.update({
+          where: { id: targetId },
+          data: { followers: updatedFollowers }
         });
         
         // Add to following
-        await User.findByIdAndUpdate(requesterId, {
-          $addToSet: { following: targetId }
+        const requesterUser = await prisma.user.findUnique({ where: { id: requesterId }, select: { following: true } });
+        const following = Array.isArray(requesterUser.following) ? requesterUser.following : [];
+        const updatedFollowing = [...following, targetId];
+        
+        await prisma.user.update({
+          where: { id: requesterId },
+          data: { following: updatedFollowing }
         });
 
         // Log successful direct follow
@@ -274,15 +297,16 @@ class PrivacyManager {
       }
 
       // Check if follow requests are allowed
-      if (!target.privacy.allowFollowRequests) {
+      if (privacy.allowFollowRequests === false) { // Strict check for false, undefined assumes true
         const error = new Error('This user is not accepting follow requests');
         await SecurityLogger.logFollowRequestSentEvent(requesterId, targetId, req, false, error.message);
         throw error;
       }
 
       // Check if request already exists
-      const existingRequest = target.followRequests.find(
-        req => req.user.toString() === requesterId && req.status === 'pending'
+      const followRequests = Array.isArray(target.followRequests) ? target.followRequests : [];
+      const existingRequest = followRequests.find(
+        req => req.user === requesterId && req.status === 'pending'
       );
       if (existingRequest) {
         const error = new Error('Follow request already sent');
@@ -291,14 +315,17 @@ class PrivacyManager {
       }
 
       // Add follow request
-      await User.findByIdAndUpdate(targetId, {
-        $push: {
-          followRequests: {
-            user: requesterId,
-            requestedAt: new Date(),
-            status: 'pending'
-          }
-        }
+      const newRequest = {
+        user: requesterId,
+        requestedAt: new Date().toISOString(),
+        status: 'pending'
+      };
+      
+      const updatedFollowRequests = [...followRequests, newRequest];
+      
+      await prisma.user.update({
+        where: { id: targetId },
+        data: { followRequests: updatedFollowRequests }
       });
 
       // Log successful follow request
@@ -311,9 +338,8 @@ class PrivacyManager {
       };
     } catch (error) {
       // Log failed follow request if not already logged
-      if (!error.message.includes('Invalid user ID') && 
-          !error.message.includes('Cannot send follow request') && 
-          !error.message.includes('User not found') &&
+      if (!error.message.includes('User not found') &&
+          !error.message.includes('Cannot send follow request') &&
           !error.message.includes('Already following') &&
           !error.message.includes('not accepting') &&
           !error.message.includes('already sent')) {
@@ -333,13 +359,6 @@ class PrivacyManager {
    */
   async handleFollowRequest(targetId, requesterId, action, req = null) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(targetId) || !mongoose.Types.ObjectId.isValid(requesterId)) {
-        const error = new Error('Invalid user ID');
-        const logMethod = action === 'approve' ? 'logFollowRequestApprovedEvent' : 'logFollowRequestRejectedEvent';
-        await SecurityLogger[logMethod](targetId, requesterId, req, false, error.message);
-        throw error;
-      }
-
       if (!['approve', 'reject'].includes(action)) {
         const error = new Error('Invalid action. Must be "approve" or "reject"');
         const logMethod = action === 'approve' ? 'logFollowRequestApprovedEvent' : 'logFollowRequestRejectedEvent';
@@ -347,7 +366,11 @@ class PrivacyManager {
         throw error;
       }
 
-      const target = await User.findById(targetId).select('followRequests followers');
+      const target = await prisma.user.findUnique({
+        where: { id: targetId },
+        select: { followRequests: true, followers: true }
+      });
+
       if (!target) {
         const error = new Error('User not found');
         const logMethod = action === 'approve' ? 'logFollowRequestApprovedEvent' : 'logFollowRequestRejectedEvent';
@@ -356,8 +379,9 @@ class PrivacyManager {
       }
 
       // Find the follow request
-      const requestIndex = target.followRequests.findIndex(
-        req => req.user.toString() === requesterId && req.status === 'pending'
+      const followRequests = Array.isArray(target.followRequests) ? target.followRequests : [];
+      const requestIndex = followRequests.findIndex(
+        req => req.user === requesterId && req.status === 'pending'
       );
 
       if (requestIndex === -1) {
@@ -369,15 +393,32 @@ class PrivacyManager {
 
       if (action === 'approve') {
         // Add to followers
-        await User.findByIdAndUpdate(targetId, {
-          $addToSet: { followers: requesterId },
-          $pull: { followRequests: { user: requesterId } }
+        const followers = Array.isArray(target.followers) ? target.followers : [];
+        // Prevent duplicates
+        const updatedFollowers = followers.includes(requesterId) ? followers : [...followers, requesterId];
+        
+        // Remove from followRequests
+        const updatedFollowRequests = followRequests.filter(req => req.user !== requesterId);
+        
+        await prisma.user.update({
+          where: { id: targetId },
+          data: { 
+            followers: updatedFollowers,
+            followRequests: updatedFollowRequests
+          }
         });
         
-        // Add to following
-        await User.findByIdAndUpdate(requesterId, {
-          $addToSet: { following: targetId }
-        });
+        // Add to following of requester
+        const requester = await prisma.user.findUnique({ where: { id: requesterId }, select: { following: true } });
+        if (requester) {
+            const following = Array.isArray(requester.following) ? requester.following : [];
+            const updatedFollowing = following.includes(targetId) ? following : [...following, targetId];
+            
+            await prisma.user.update({
+                where: { id: requesterId },
+                data: { following: updatedFollowing }
+            });
+        }
 
         // Log successful approval
         await SecurityLogger.logFollowRequestApprovedEvent(targetId, requesterId, req, true);
@@ -389,8 +430,11 @@ class PrivacyManager {
         };
       } else {
         // Remove the request
-        await User.findByIdAndUpdate(targetId, {
-          $pull: { followRequests: { user: requesterId } }
+        const updatedFollowRequests = followRequests.filter(req => req.user !== requesterId);
+        
+        await prisma.user.update({
+          where: { id: targetId },
+          data: { followRequests: updatedFollowRequests }
         });
 
         // Log successful rejection
@@ -404,8 +448,7 @@ class PrivacyManager {
       }
     } catch (error) {
       // Log failed request handling if not already logged
-      if (!error.message.includes('Invalid user ID') && 
-          !error.message.includes('Invalid action') && 
+      if (!error.message.includes('Invalid action') && 
           !error.message.includes('User not found') &&
           !error.message.includes('not found')) {
         const logMethod = action === 'approve' ? 'logFollowRequestApprovedEvent' : 'logFollowRequestRejectedEvent';
@@ -425,16 +468,16 @@ class PrivacyManager {
    */
   async getFollowRequests(userId, status = 'pending', page = 1, limit = 20) {
     try {
-      if (!mongoose.Types.ObjectId.isValid(userId)) {
-        throw new Error('Invalid user ID');
-      }
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { followRequests: true }
+      });
 
-      const user = await User.findById(userId).select('followRequests');
       if (!user) {
         throw new Error('User not found');
       }
 
-      let requests = user.followRequests;
+      let requests = Array.isArray(user.followRequests) ? user.followRequests : [];
 
       // Filter by status if specified
       if (status !== 'all') {
@@ -450,10 +493,22 @@ class PrivacyManager {
       const paginatedRequests = requests.slice(startIndex, endIndex);
 
       // Populate user details
-      const populatedRequests = await User.populate(paginatedRequests, {
-        path: 'user',
-        select: 'username name profilePicture'
+      // In Prisma we need to fetch user details manually
+      const userIds = paginatedRequests.map(req => req.user);
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, username: true, name: true, profilePicture: true }
       });
+      
+      const userMap = users.reduce((acc, u) => {
+        acc[u.id] = u;
+        return acc;
+      }, {});
+      
+      const populatedRequests = paginatedRequests.map(req => ({
+        ...req,
+        user: userMap[req.user] || { id: req.user, username: 'Unknown' }
+      }));
 
       return {
         requests: populatedRequests,

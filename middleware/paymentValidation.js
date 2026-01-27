@@ -1,10 +1,10 @@
 import { body, query, param } from 'express-validator';
 
 // Payment method enum values
-const PAYMENT_METHODS = ['paystack', 'stripe', 'aeko_wallet'];
+const PAYMENT_METHODS = ['paystack', 'stripe'];
 
 // Withdrawal method enum values
-const WITHDRAWAL_METHODS = ['bank', 'aeko_wallet'];
+const WITHDRAWAL_METHODS = ['bank'];
 
 // Subscription type enum values
 const SUBSCRIPTION_TYPES = ['one_time', 'monthly', 'yearly'];

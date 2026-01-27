@@ -1,42 +1,32 @@
 import AdminJS from "adminjs";
 import AdminJSExpress from "@adminjs/express";
-import * as AdminJSMongoose from "@adminjs/mongoose";
+import { Database, Resource } from '@adminjs/prisma';
+import { PrismaClient } from '@prisma/client';
 import express from "express";
-import mongoose from "mongoose";
-import User from "./models/User.js";
-import Post from "./models/Post.js";
-import Status from "./models/Status.js";
-import Debate from "./models/Debate.js";
-import Ad from "./models/Ad.js";
-import LiveStream from "./models/LiveStream.js";
-import BotSettings from "./models/BotSettings.js";
-import BotConversation from "./models/BotConversation.js";
-import EnhancedMessage from "./models/EnhancedMessage.js";
-import Comment from "./models/Comment.js";
-import Challenge from "./models/Challenge.js";
-import Space from "./models/Space.js";
-import Chat from "./models/Chat.js";
-import Message from "./models/Message.js";
-import AekoTransaction from "./models/AekoTransaction.js";
-import NFTMarketplace from "./models/NFTMarketplace.js";
-import Interest from "./models/Interest.js";
-import Community from "./models/Community.js";
-import Transaction from "./models/Transaction.js";
+import { Prisma } from '@prisma/client';
+import bcrypt from 'bcrypt';
 
-AdminJS.registerAdapter(AdminJSMongoose);
+const prisma = new PrismaClient();
+const dmmf = Prisma.dmmf;
+const modelMap = dmmf.datamodel.models.reduce((acc, model) => {
+    acc[model.name] = model;
+    return acc;
+}, {});
+
+AdminJS.registerAdapter({ Database, Resource });
 
 const admin = new AdminJS({
   resources: [
     // ===== COMMUNITY MANAGEMENT =====
     {
-      resource: Community,
+      resource: { model: modelMap.Community, client: prisma },
       options: {
         parent: {
           name: 'Community Management',
           icon: 'Users'
         },
         properties: {
-          _id: { isVisible: { list: true, show: true, edit: false } },
+          id: { isVisible: { list: true, show: true, edit: false } },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
           updatedAt: { isVisible: { list: false, show: true, edit: false } }
         },
@@ -49,14 +39,14 @@ const admin = new AdminJS({
       }
     },
     {
-      resource: Transaction,
+      resource: { model: modelMap.Transaction, client: prisma },
       options: {
         parent: {
           name: 'Community Management',
           icon: 'CreditCard'
         },
         properties: {
-          _id: { isVisible: { list: true, show: true, edit: false } },
+          id: { isVisible: { list: true, show: true, edit: false } },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
           updatedAt: { isVisible: { list: false, show: true, edit: false } }
         }
@@ -64,14 +54,14 @@ const admin = new AdminJS({
     },
     // ===== INTEREST MANAGEMENT =====
     {
-      resource: Interest,
+      resource: { model: modelMap.Interest, client: prisma },
       options: {
         parent: {
           name: 'Content Management',
           icon: 'Tag'
         },
         properties: {
-          _id: { isVisible: { list: true, show: true, edit: false } },
+          id: { isVisible: { list: true, show: true, edit: false } },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
           updatedAt: { isVisible: { list: false, show: true, edit: false } }
         },
@@ -89,7 +79,7 @@ const admin = new AdminJS({
     
     // ===== USER MANAGEMENT =====
     {
-      resource: User,
+      resource: { model: modelMap.User, client: prisma },
       options: {
         parent: {
           name: "User Management",
@@ -97,7 +87,7 @@ const admin = new AdminJS({
         },
         properties: {
           password: { isVisible: false },
-          _id: { isVisible: { list: true, show: true, edit: false } },
+          id: { isVisible: { list: true, show: true, edit: false } },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
           updatedAt: { isVisible: { list: false, show: true, edit: false } },
           followers: { isVisible: { list: false, show: true, edit: false } },
@@ -106,15 +96,9 @@ const admin = new AdminJS({
           botResponses: { isVisible: { list: false, show: true, edit: true } }
         },
         actions: {
-          new: {
-            isVisible: true,
-          },
-          edit: {
-            isVisible: true,
-          },
-          delete: {
-            isVisible: true,
-          },
+          new: { isVisible: true },
+          edit: { isVisible: true },
+          delete: { isVisible: true },
           banUser: {
             actionType: "record",
             icon: "Ban",
@@ -122,7 +106,10 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ banned: true });
+              await prisma.user.update({
+                where: { id: record.params.id },
+                data: { banned: true }
+              });
               return {
                 record: record.toJSON(),
                 notice: {
@@ -139,7 +126,10 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ banned: false });
+              await prisma.user.update({
+                where: { id: record.params.id },
+                data: { banned: false }
+              });
               return {
                 record: record.toJSON(),
                 notice: {
@@ -156,7 +146,10 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ blueTick: true });
+              await prisma.user.update({
+                where: { id: record.params.id },
+                data: { blueTick: true }
+              });
               return {
                 record: record.toJSON(),
                 notice: {
@@ -173,7 +166,10 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ goldenTick: true });
+              await prisma.user.update({
+                where: { id: record.params.id },
+                data: { goldenTick: true }
+              });
               return {
                 record: record.toJSON(),
                 notice: {
@@ -192,9 +188,12 @@ const admin = new AdminJS({
               const { record } = context;
               const oneMonthFromNow = new Date();
               oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
-              await record.update({ 
-                subscriptionStatus: 'active',
-                subscriptionExpiry: oneMonthFromNow
+              await prisma.user.update({
+                where: { id: record.params.id },
+                data: { 
+                  subscriptionStatus: 'active',
+                  subscriptionExpiry: oneMonthFromNow
+                }
               });
               return {
                 record: record.toJSON(),
@@ -211,20 +210,14 @@ const admin = new AdminJS({
             label: "User Statistics",
             component: false,
             handler: async (request, response, context) => {
-              const stats = await User.aggregate([
-                {
-                  $group: {
-                    _id: null,
-                    totalUsers: { $sum: 1 },
-                    verifiedUsers: { $sum: { $cond: [{ $or: ["$blueTick", "$goldenTick"] }, 1, 0] } },
-                    activeSubscriptions: { $sum: { $cond: [{ $eq: ["$subscriptionStatus", "active"] }, 1, 0] } },
-                    botEnabledUsers: { $sum: { $cond: ["$botEnabled", 1, 0] } }
-                  }
-                }
-              ]);
+              const totalUsers = await prisma.user.count();
+              const verifiedUsers = await prisma.user.count({ where: { OR: [{ blueTick: true }, { goldenTick: true }] } });
+              const activeSubscriptions = await prisma.user.count({ where: { subscriptionStatus: 'active' } });
+              const botEnabledUsers = await prisma.user.count({ where: { botEnabled: true } });
+              
               return {
                 notice: {
-                  message: `Total Users: ${stats[0]?.totalUsers || 0}, Verified: ${stats[0]?.verifiedUsers || 0}, Active Subscriptions: ${stats[0]?.activeSubscriptions || 0}, Bot Enabled: ${stats[0]?.botEnabledUsers || 0}`,
+                  message: `Total Users: ${totalUsers}, Verified: ${verifiedUsers}, Active Subscriptions: ${activeSubscriptions}, Bot Enabled: ${botEnabledUsers}`,
                   type: 'info',
                 },
               };
@@ -239,14 +232,14 @@ const admin = new AdminJS({
     
     // ===== CONTENT MANAGEMENT =====
     {
-      resource: Post,
+      resource: { model: modelMap.Post, client: prisma },
       options: {
         parent: {
           name: "Content Management",
           icon: "FileText"
         },
         properties: {
-          _id: { isVisible: { list: true, show: true, edit: false } },
+          id: { isVisible: { list: true, show: true, edit: false } },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
           updatedAt: { isVisible: { list: false, show: true, edit: false } },
           likes: { isVisible: { list: false, show: true, edit: false } },
@@ -261,10 +254,9 @@ const admin = new AdminJS({
             label: "Flag as Inappropriate",
             component: false,
             handler: async (request, response, context) => {
-              const { record } = context;
-              // Here you could add a flagged field to the schema
+              // Implementation placeholder
               return {
-                record: record.toJSON(),
+                record: context.record.toJSON(),
                 notice: {
                   message: `Post has been flagged for review!`,
                   type: 'warning',
@@ -278,17 +270,11 @@ const admin = new AdminJS({
             label: "Content Statistics",
             component: false,
             handler: async (request, response, context) => {
-              const stats = await Post.aggregate([
-                {
-                  $group: {
-                    _id: "$type",
-                    count: { $sum: 1 },
-                    totalLikes: { $sum: { $size: "$likes" } },
-                    totalReposts: { $sum: { $size: "$reposts" } }
-                  }
-                }
-              ]);
-              const message = stats.map(s => `${s._id}: ${s.count} posts (${s.totalLikes} likes, ${s.totalReposts} reposts)`).join(', ');
+              const stats = await prisma.post.groupBy({
+                by: ['type'],
+                _count: { _all: true }
+              });
+              const message = stats.map(s => `${s.type}: ${s._count._all} posts`).join(', ');
               return {
                 notice: {
                   message: `Content Stats: ${message}`,
@@ -304,7 +290,7 @@ const admin = new AdminJS({
     },
 
     {
-      resource: Comment,
+      resource: { model: modelMap.Comment, client: prisma },
       options: {
         parent: {
           name: "Content Management",
@@ -318,9 +304,8 @@ const admin = new AdminJS({
             label: "Moderate",
             component: false,
             handler: async (request, response, context) => {
-              const { record } = context;
               return {
-                record: record.toJSON(),
+                record: context.record.toJSON(),
                 notice: {
                   message: `Comment moderated successfully!`,
                   type: 'success',
@@ -334,14 +319,14 @@ const admin = new AdminJS({
 
     // ===== LIVESTREAM MANAGEMENT =====
     {
-      resource: LiveStream,
+      resource: { model: modelMap.LiveStream, client: prisma },
       options: {
         parent: {
           name: "LiveStream Management",
           icon: "Video"
         },
         properties: {
-          _id: { isVisible: { list: true, show: true, edit: false } },
+          id: { isVisible: { list: true, show: true, edit: false } },
           streamKey: { isVisible: { list: false, show: true, edit: false } },
           rtmpUrl: { isVisible: { list: false, show: true, edit: false } },
           hlsUrl: { isVisible: { list: false, show: true, edit: false } },
@@ -362,9 +347,12 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ 
-                status: 'ended',
-                endedAt: new Date()
+              await prisma.liveStream.update({
+                where: { id: record.params.id },
+                data: { 
+                  status: 'ended',
+                  endedAt: new Date()
+                }
               });
               return {
                 record: record.toJSON(),
@@ -382,9 +370,12 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ 
-                status: 'ended',
-                endedAt: new Date()
+              await prisma.liveStream.update({
+                where: { id: record.params.id },
+                data: { 
+                  status: 'ended',
+                  endedAt: new Date()
+                }
               });
               return {
                 record: record.toJSON(),
@@ -401,17 +392,12 @@ const admin = new AdminJS({
             label: "Stream Analytics",
             component: false,
             handler: async (request, response, context) => {
-              const stats = await LiveStream.aggregate([
-                {
-                  $group: {
-                    _id: "$status",
-                    count: { $sum: 1 },
-                    totalViews: { $sum: "$totalViews" },
-                    totalRevenue: { $sum: "$monetization.totalEarnings" }
-                  }
-                }
-              ]);
-              const message = stats.map(s => `${s._id}: ${s.count} streams (${s.totalViews} views, $${s.totalRevenue} revenue)`).join(', ');
+              const stats = await prisma.liveStream.groupBy({
+                by: ['status'],
+                _count: { _all: true },
+                _sum: { totalViews: true }
+              });
+              const message = stats.map(s => `${s.status}: ${s._count._all} streams (${s._sum.totalViews || 0} views)`).join(', ');
               return {
                 notice: {
                   message: `Stream Stats: ${message}`,
@@ -429,14 +415,14 @@ const admin = new AdminJS({
 
     // ===== AI & BOT MANAGEMENT =====
     {
-      resource: BotSettings,
+      resource: { model: modelMap.BotSettings, client: prisma },
       options: {
         parent: {
           name: "AI & Bot Management",
           icon: "Bot"
         },
         properties: {
-          _id: { isVisible: { list: true, show: true, edit: false } },
+          id: { isVisible: { list: true, show: true, edit: false } },
         },
         listProperties: ['userId', 'botEnabled', 'botPersonality', 'aiProvider'],
         showProperties: ['userId', 'botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'customInstructions'],
@@ -445,7 +431,7 @@ const admin = new AdminJS({
     },
 
     {
-      resource: BotConversation,
+      resource: { model: modelMap.BotConversation, client: prisma },
       options: {
         parent: {
           name: "AI & Bot Management",
@@ -461,9 +447,12 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ 
-                messages: [],
-                totalMessages: 0
+              await prisma.botConversation.update({
+                where: { id: record.params.id },
+                data: { 
+                  messages: [],
+                  totalMessages: 0
+                }
               });
               return {
                 record: record.toJSON(),
@@ -480,7 +469,7 @@ const admin = new AdminJS({
 
     // ===== ADVERTISING =====
     {
-      resource: Ad,
+      resource: { model: modelMap.Ad, client: prisma },
       options: {
         parent: {
           name: "Advertising",
@@ -494,7 +483,10 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ status: 'approved' });
+              await prisma.ad.update({
+                where: { id: record.params.id },
+                data: { status: 'approved' }
+              });
               return {
                 record: record.toJSON(),
                 notice: {
@@ -511,7 +503,10 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const { record } = context;
-              await record.update({ status: 'rejected' });
+              await prisma.ad.update({
+                where: { id: record.params.id },
+                data: { status: 'rejected' }
+              });
               return {
                 record: record.toJSON(),
                 notice: {
@@ -527,16 +522,11 @@ const admin = new AdminJS({
             label: "Ad Performance",
             component: false,
             handler: async (request, response, context) => {
-              const stats = await Ad.aggregate([
-                {
-                  $group: {
-                    _id: "$status",
-                    count: { $sum: 1 },
-                    totalBudget: { $sum: "$budget.total" }
-                  }
-                }
-              ]);
-              const message = stats.map(s => `${s._id}: ${s.count} ads ($${s.totalBudget} budget)`).join(', ');
+              const stats = await prisma.ad.groupBy({
+                by: ['status'],
+                _count: { _all: true }
+              });
+              const message = stats.map(s => `${s.status}: ${s._count._all} ads`).join(', ');
               return {
                 notice: {
                   message: `Ad Stats: ${message}`,
@@ -546,13 +536,13 @@ const admin = new AdminJS({
             },
           }
         },
-        listProperties: ['title', 'mediaType', 'budget.total', 'status', 'advertiserId', 'createdAt'],
+        listProperties: ['title', 'mediaType', 'status', 'advertiserId', 'createdAt'],
       },
     },
 
     // ===== COMMUNITY FEATURES =====
     {
-      resource: Debate,
+      resource: { model: modelMap.Debate, client: prisma },
       options: {
         parent: {
           name: "Community Features",
@@ -562,7 +552,7 @@ const admin = new AdminJS({
     },
 
     {
-      resource: Challenge,
+      resource: { model: modelMap.Challenge, client: prisma },
       options: {
         parent: {
           name: "Community Features",
@@ -572,7 +562,7 @@ const admin = new AdminJS({
     },
 
     {
-      resource: Space,
+      resource: { model: modelMap.Space, client: prisma },
       options: {
         parent: {
           name: "Community Features",
@@ -583,7 +573,7 @@ const admin = new AdminJS({
 
     // ===== MESSAGING =====
     {
-      resource: EnhancedMessage,
+      resource: { model: modelMap.EnhancedMessage, client: prisma },
       options: {
         parent: {
           name: "Messaging",
@@ -602,9 +592,8 @@ const admin = new AdminJS({
             label: "Flag Message",
             component: false,
             handler: async (request, response, context) => {
-              const { record } = context;
               return {
-                record: record.toJSON(),
+                record: context.record.toJSON(),
                 notice: {
                   message: `Message has been flagged for review!`,
                   type: 'warning',
@@ -617,7 +606,7 @@ const admin = new AdminJS({
     },
 
     {
-      resource: Chat,
+      resource: { model: modelMap.Chat, client: prisma },
       options: {
         parent: {
           name: "Messaging",
@@ -627,7 +616,7 @@ const admin = new AdminJS({
     },
 
     {
-      resource: Message,
+      resource: { model: modelMap.Message, client: prisma },
       options: {
         parent: {
           name: "Messaging",
@@ -638,7 +627,7 @@ const admin = new AdminJS({
 
     // ===== USER ACTIVITY =====
     {
-      resource: Status,
+      resource: { model: modelMap.Status, client: prisma },
       options: {
         parent: {
           name: "User Activity",
@@ -648,144 +637,7 @@ const admin = new AdminJS({
       },
     },
 
-    // ===== BLOCKCHAIN & CRYPTO =====
-    {
-      resource: AekoTransaction,
-      options: {
-        parent: {
-          name: "Blockchain & Crypto",
-          icon: "Coins"
-        },
-        properties: {
-          _id: { isVisible: { list: true, show: true, edit: false } },
-          createdAt: { isVisible: { list: true, show: true, edit: false } },
-          solanaSignature: { isVisible: { list: false, show: true, edit: false } },
-          metadata: { isVisible: { list: false, show: true, edit: false } }
-        },
-        actions: {
-          delete: { isVisible: true },
-          verifyTransaction: {
-            actionType: "record",
-            icon: "Check",
-            label: "Verify Transaction",
-            component: false,
-            handler: async (request, response, context) => {
-              const { record } = context;
-              // Here you could add blockchain verification logic
-              return {
-                record: record.toJSON(),
-                notice: {
-                  message: `Transaction ${record.params.transactionId} verified!`,
-                  type: 'success',
-                },
-              };
-            },
-          },
-          transactionStats: {
-            actionType: "resource",
-            icon: "BarChart",
-            label: "Transaction Analytics",
-            component: false,
-            handler: async (request, response, context) => {
-              const stats = await AekoTransaction.aggregate([
-                {
-                  $group: {
-                    _id: "$type",
-                    count: { $sum: 1 },
-                    totalAmount: { $sum: "$amount" },
-                    totalFees: { $sum: "$platformFee" }
-                  }
-                }
-              ]);
-              const message = stats.map(s => `${s._id}: ${s.count} txns (${s.totalAmount} AEKO, ${s.totalFees} fees)`).join(', ');
-              return {
-                notice: {
-                  message: `Transaction Stats: ${message}`,
-                  type: 'info',
-                },
-              };
-            },
-          }
-        },
-        listProperties: ['transactionId', 'type', 'amount', 'status', 'fromUser', 'toUser', 'createdAt'],
-        showProperties: ['transactionId', 'solanaSignature', 'type', 'amount', 'status', 'fromUser', 'toUser', 'platformFee', 'description', 'createdAt'],
-        editProperties: ['status', 'description'],
-      },
-    },
 
-    {
-      resource: NFTMarketplace,
-      options: {
-        parent: {
-          name: "Blockchain & Crypto",
-          icon: "Image"
-        },
-        properties: {
-          _id: { isVisible: { list: true, show: true, edit: false } },
-          tokenId: { isVisible: { list: true, show: true, edit: false } },
-          metadataUri: { isVisible: { list: false, show: true, edit: false } },
-          'analytics.totalViews': { isVisible: { list: true, show: true, edit: false } },
-          'analytics.favoriteCount': { isVisible: { list: true, show: true, edit: false } },
-          'auction.currentBid': { isVisible: { list: true, show: true, edit: false } }
-        },
-        actions: {
-          delete: { isVisible: true },
-          verifyNFT: {
-            actionType: "record",
-            icon: "Shield",
-            label: "Verify NFT",
-            component: false,
-            handler: async (request, response, context) => {
-              const { record } = context;
-              await record.update({ verified: true });
-              return {
-                record: record.toJSON(),
-                notice: {
-                  message: `NFT "${record.params.metadata.name}" verified!`,
-                  type: 'success',
-                },
-              };
-            },
-          },
-          featureNFT: {
-            actionType: "record",
-            icon: "Star",
-            label: "Feature NFT",
-            component: false,
-            handler: async (request, response, context) => {
-              const { record } = context;
-              await record.update({ featured: true });
-              return {
-                record: record.toJSON(),
-                notice: {
-                  message: `NFT "${record.params.metadata.name}" featured!`,
-                  type: 'success',
-                },
-              };
-            },
-          },
-          nftStats: {
-            actionType: "resource",
-            icon: "TrendingUp",
-            label: "NFT Analytics",
-            component: false,
-            handler: async (request, response, context) => {
-              const stats = await NFTMarketplace.getMarketplaceStats();
-              const data = stats[0] || {};
-              return {
-                notice: {
-                  message: `NFT Stats: ${data.totalNFTs || 0} NFTs, ${data.totalVolume || 0} AEKO volume, ${data.listedNFTs || 0} listed`,
-                  type: 'info',
-                },
-              };
-            },
-          }
-        },
-        listProperties: ['metadata.name', 'creator', 'currentOwner', 'price', 'status', 'verified', 'createdAt'],
-        showProperties: ['tokenId', 'creator', 'currentOwner', 'price', 'isListed', 'verified', 'createdAt'],
-        editProperties: ['price', 'isListed', 'verified', 'featured', 'category'],
-      },
-    },
   ],
   
   // ===== BRANDING & UI CUSTOMIZATION =====
@@ -879,7 +731,7 @@ const authenticate = async (email, password) => {
       return false;
     }
 
-    const user = await User.findOne({ email });
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       console.log('User not found:', email);
       return false;
@@ -890,7 +742,6 @@ const authenticate = async (email, password) => {
       return false;
     }
 
-    const bcrypt = await import('bcrypt');
     const isValidPassword = await bcrypt.compare(password, user.password);
     
     if (!isValidPassword) {
@@ -898,26 +749,25 @@ const authenticate = async (email, password) => {
       return false;
     }
 
-    console.log('AdminJS Authentication successful for:', email);
-    return { email: user.email, id: user._id, isAdmin: user.isAdmin };
+    return user;
   } catch (error) {
-    console.error('AdminJS Authentication error:', error);
+    console.error('AdminJS Authentication Error:', error);
     return false;
   }
 };
 
-const adminRouter = AdminJSExpress.buildAuthenticatedRouter(admin, {
-  authenticate,
-  cookieName: 'adminjs',
-  cookiePassword: process.env.JWT_SECRET || 'some-secret-password-used-to-secure-cookie',
-}, null, {
-  resave: false,
-  saveUninitialized: true,
-  secret: process.env.JWT_SECRET || 'some-secret-password-used-to-secure-cookie',
-}, {
-  loginPath: '/admin/login',
-  logoutPath: '/admin/logout',
-  rootPath: '/admin',
-});
+const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
+  admin,
+  {
+    authenticate,
+    cookieName: 'adminjs',
+    cookiePassword: 'some-secret-password-used-to-secure-cookie',
+  },
+  null,
+  {
+    resave: false,
+    saveUninitialized: true,
+  }
+);
 
 export { admin, adminRouter };

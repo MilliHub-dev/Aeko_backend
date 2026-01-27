@@ -1,16 +1,13 @@
-import mongoose from 'mongoose';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
-import User from './models/User.js';
-import connectDB from './config/db.js';
 
 dotenv.config();
 
+const prisma = new PrismaClient();
+
 const createAdminUser = async () => {
   try {
-    // Connect to database
-    await connectDB();
-    
     console.log('🔐 Creating Admin User...');
     
     // Admin user details
@@ -18,9 +15,9 @@ const createAdminUser = async () => {
       name: 'Admin User',
       username: 'admin',
       email: 'admin@aeko.social',
-      password: 'admin123', // Change this to a secure password
+      password: 'admin123', // Will be hashed
       isAdmin: true,
-      goldenTick: true, // Give golden tick for super admin privileges
+      goldenTick: true,
       blueTick: true,
       subscriptionStatus: 'active',
       botEnabled: true,
@@ -28,11 +25,13 @@ const createAdminUser = async () => {
     };
     
     // Check if admin already exists
-    const existingAdmin = await User.findOne({ 
-      $or: [
-        { email: adminData.email },
-        { username: adminData.username }
-      ]
+    const existingAdmin = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: adminData.email },
+          { username: adminData.username }
+        ]
+      }
     });
     
     if (existingAdmin) {
@@ -42,18 +41,29 @@ const createAdminUser = async () => {
       console.log(`Is Admin: ${existingAdmin.isAdmin}`);
       
       // Update existing user to be admin
-      existingAdmin.isAdmin = true;
-      existingAdmin.goldenTick = true;
-      existingAdmin.blueTick = true;
-      await existingAdmin.save();
+      await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: {
+            isAdmin: true,
+            goldenTick: true,
+            blueTick: true
+        }
+      });
       
       console.log('✅ Updated existing user to admin privileges');
-      process.exit(0);
+      return;
     }
     
+    // Hash password
+    const hashedPassword = await bcrypt.hash(adminData.password, 10);
+    
     // Create new admin user
-    const adminUser = new User(adminData);
-    await adminUser.save();
+    const adminUser = await prisma.user.create({
+        data: {
+            ...adminData,
+            password: hashedPassword
+        }
+    });
     
     console.log('✅ Admin user created successfully!');
     console.log('📧 Email:', adminData.email);
@@ -69,7 +79,7 @@ const createAdminUser = async () => {
   } catch (error) {
     console.error('❌ Error creating admin user:', error.message);
   } finally {
-    mongoose.connection.close();
+    await prisma.$disconnect();
     process.exit(0);
   }
 };

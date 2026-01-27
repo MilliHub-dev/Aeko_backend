@@ -1,5 +1,5 @@
 import express from "express";
-import Space from "../models/Space.js";
+import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
@@ -9,9 +9,17 @@ const router = express.Router();
 router.post("/create", authMiddleware, async (req, res) => {
   try {
     const { title } = req.body;
-    const space = new Space({ title, host: req.user?._id || req.userId, participants: [] });
+    const userId = req.user.id || req.user._id;
 
-    await space.save();
+    const space = await prisma.space.create({
+      data: {
+        title,
+        hostId: userId,
+        participants: [],
+        isLive: true
+      }
+    });
+
     res.json({ success: true, space });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -21,13 +29,15 @@ router.post("/create", authMiddleware, async (req, res) => {
 // End a Space
 router.patch("/:spaceId/end", authMiddleware, async (req, res) => {
   try {
-    const space = await Space.findById(req.params.spaceId);
+    const { spaceId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    const space = await prisma.space.findUnique({ where: { id: spaceId } });
     if (!space) {
       return res.status(404).json({ success: false, error: "Space not found" });
     }
 
-    const requesterId = String(req.user?._id || req.userId);
-    if (String(space.host) !== requesterId) {
+    if (space.hostId !== userId) {
       return res.status(403).json({ success: false, error: "Only the host can end this space" });
     }
 
@@ -35,9 +45,12 @@ router.patch("/:spaceId/end", authMiddleware, async (req, res) => {
       return res.json({ success: true, space });
     }
 
-    space.isLive = false;
-    await space.save();
-    res.json({ success: true, space });
+    const updatedSpace = await prisma.space.update({
+      where: { id: spaceId },
+      data: { isLive: false }
+    });
+
+    res.json({ success: true, space: updatedSpace });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -47,13 +60,22 @@ router.patch("/:spaceId/end", authMiddleware, async (req, res) => {
 router.put("/:spaceId/highlight", authMiddleware, async (req, res) => {
   try {
     const { videoUrl } = req.body;
-    const space = await Space.findByIdAndUpdate(
-      req.params.spaceId,
-      { $push: { highlights: { videoUrl, timestamp: new Date() } } },
-      { new: true }
-    );
+    const { spaceId } = req.params;
 
-    res.json({ success: true, space });
+    const space = await prisma.space.findUnique({ where: { id: spaceId } });
+    if (!space) {
+      return res.status(404).json({ error: "Space not found" });
+    }
+
+    const highlights = Array.isArray(space.highlights) ? space.highlights : [];
+    highlights.push({ videoUrl, timestamp: new Date() });
+
+    const updatedSpace = await prisma.space.update({
+      where: { id: spaceId },
+      data: { highlights }
+    });
+
+    res.json({ success: true, space: updatedSpace });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -98,6 +120,29 @@ export default router;
  *         description: Bad request
  *
  * @swagger
+ * /api/spaces/{spaceId}/end:
+ *   patch:
+ *     summary: End a Live Audio Space
+ *     tags:
+ *       - Spaces
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spaceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Space ID
+ *     responses:
+ *       200:
+ *         description: Space ended successfully
+ *       403:
+ *         description: Only host can end space
+ *       404:
+ *         description: Space not found
+ *
+ * @swagger
  * /api/spaces/{spaceId}/highlight:
  *   put:
  *     summary: Add a video highlight to a space
@@ -111,7 +156,7 @@ export default router;
  *         required: true
  *         schema:
  *           type: string
- *         description: ID of the space
+ *         description: Space ID
  *     requestBody:
  *       required: true
  *       content:
@@ -123,67 +168,10 @@ export default router;
  *             properties:
  *               videoUrl:
  *                 type: string
- *                 format: uri
- *                 description: URL of the video highlight
+ *                 description: URL of the highlight video
  *     responses:
  *       200:
  *         description: Highlight added successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Space'
- *       404:
- *         description: Space not found
- *
- * @swagger
- * /api/spaces/{spaceId}:
- *   get:
- *     summary: Get details of a space
- *     tags:
- *       - Spaces
- *     parameters:
- *       - in: path
- *         name: spaceId
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the space to retrieve
- *     responses:
- *       200:
- *         description: Space details retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Space'
- *       404:
- *         description: Space not found
- *       500:
- *         description: Server error
- *
- * @swagger
- * /api/spaces/{spaceId}/end:
- *   patch:
- *     summary: End a space
- *     tags:
- *       - Spaces
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: spaceId
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the space to end
- *     responses:
- *       200:
- *         description: Space ended successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Space'
- *       403:
- *         description: Only the host can end this space
  *       404:
  *         description: Space not found
  */

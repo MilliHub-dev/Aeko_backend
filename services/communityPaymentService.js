@@ -1,9 +1,8 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
-import mongoose from 'mongoose';
-import User from '../models/User.js';
-import Community from '../models/Community.js';
-import Transaction from '../models/Transaction.js';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 dotenv.config();
 
@@ -66,13 +65,13 @@ async function callWithRetry(apiCall, maxRetries = 1) {
  * @param {Object} options - Payment options
  * @param {String} options.userId - User ID
  * @param {String} options.communityId - Community ID
- * @param {String} options.paymentMethod - Payment method (paystack, stripe, aeko_wallet)
+ * @param {String} options.paymentMethod - Payment method (paystack, stripe)
  * @returns {Promise<Object>} - Payment initialization response
  */
 export const initializePayment = async ({ userId, communityId, paymentMethod }) => {
   try {
     // Fetch user from database and validate existence
-    const user = await User.findById(userId);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new Error('User not found');
     }
@@ -82,17 +81,18 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
       throw new Error('User email is required for payment processing');
     }
 
-    const community = await Community.findById(communityId);
+    const community = await prisma.community.findUnique({ where: { id: communityId } });
     if (!community) {
       throw new Error('Community not found');
     }
 
-    if (!community.settings.payment.isPaidCommunity) {
+    const paymentSettings = community.settings?.payment || {};
+    if (!paymentSettings.isPaidCommunity) {
       throw new Error('This community is not a paid community');
     }
 
     // Validate payment method is supported by the community
-    const availablePaymentMethods = community.settings.payment.paymentMethods || [];
+    const availablePaymentMethods = paymentSettings.paymentMethods || [];
     
     if (!availablePaymentMethods.includes(paymentMethod)) {
       throw new Error(
@@ -103,7 +103,7 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
 
     // Validate payment method configuration
     if (paymentMethod === 'stripe') {
-      if (!community.settings.payment.stripeAccountId) {
+      if (!paymentSettings.stripeAccountId) {
         throw new Error(
           'Stripe payment method is not properly configured for this community. ' +
           'Missing Stripe account ID.'
@@ -112,7 +112,7 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
     }
 
     if (paymentMethod === 'paystack') {
-      if (!community.settings.payment.paystackSubaccount) {
+      if (!paymentSettings.paystackSubaccount) {
         throw new Error(
           'Paystack payment method is not properly configured for this community. ' +
           'Missing Paystack subaccount.'
@@ -121,8 +121,9 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
     }
 
     // Check if user already has active subscription
-    const existingMember = community.members.find(
-      m => m.user.toString() === userId && m.status === 'active'
+    const members = community.members || [];
+    const existingMember = members.find(
+      m => m.user === userId && m.status === 'active'
     );
 
     if (existingMember && existingMember.subscription?.isActive) {
@@ -133,22 +134,22 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
       }
     }
 
-    const amount = community.settings.payment.price;
-    const currency = community.settings.payment.currency || 'USD';
+    const amount = paymentSettings.price;
+    const currency = paymentSettings.currency || 'USD';
     const reference = `COMM-${Date.now()}-${userId.substring(0, 6)}`;
 
     // Create transaction record
-    const transaction = new Transaction({
-      user: userId,
-      community: communityId,
-      amount,
-      currency,
-      paymentMethod,
-      paymentReference: reference,
-      status: 'pending'
+    const transaction = await prisma.transaction.create({
+      data: {
+        userId,
+        communityId,
+        amount,
+        currency,
+        paymentMethod,
+        paymentReference: reference,
+        status: 'pending'
+      }
     });
-
-    await transaction.save();
 
     // Handle different payment methods
     switch (paymentMethod) {
@@ -160,7 +161,7 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
           metadata: {
             userId,
             communityId,
-            transactionId: transaction._id
+            transactionId: transaction.id
           }
         });
 
@@ -172,16 +173,8 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
           metadata: {
             userId,
             communityId,
-            transactionId: transaction._id.toString()
+            transactionId: transaction.id
           }
-        });
-
-      case 'aeko_wallet':
-        return await processAekoWalletPayment({
-          userId,
-          communityId,
-          amount,
-          transactionId: transaction._id
         });
 
       default:
@@ -202,21 +195,21 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
  */
 export const verifyPayment = async ({ reference, paymentMethod }) => {
   try {
-    const transaction = await Transaction.findOne({ paymentReference: reference });
+    const transaction = await prisma.transaction.findFirst({ where: { paymentReference: reference } });
     if (!transaction) {
       throw new Error('Transaction not found');
     }
 
     // Idempotency check: Return cached success response if already completed
     if (transaction.status === 'completed') {
-      console.log(`[Payment Verification] Duplicate verification attempt detected for reference: ${reference}. Transaction already completed at ${transaction.verifiedAt || transaction.updatedAt}`);
+      console.log(`[Payment Verification] Duplicate verification attempt detected for reference: ${reference}. Transaction already completed at ${transaction.updatedAt}`);
       
       return { 
         success: true, 
         message: 'Payment already verified',
         alreadyProcessed: true,
-        transactionId: transaction._id,
-        verifiedAt: transaction.verifiedAt || transaction.updatedAt
+        transactionId: transaction.id,
+        verifiedAt: transaction.updatedAt
       };
     }
 
@@ -231,31 +224,40 @@ export const verifyPayment = async ({ reference, paymentMethod }) => {
         verificationResult = await verifyStripePayment(reference);
         break;
 
-      case 'aeko_wallet':
-        // Aeko wallet payments are processed immediately
-        return { success: true, message: 'Payment processed successfully' };
-
       default:
         throw new Error('Unsupported payment method');
     }
 
     if (verificationResult.success) {
-      await updateCommunityMembership({
-        userId: transaction.user,
-        communityId: transaction.community,
-        transactionId: transaction._id,
-        paymentMethod
-      });
+      // Use a transaction to update both membership and earnings
+      await prisma.$transaction(async (tx) => {
+        await updateCommunityMembershipWithTx({
+          userId: transaction.userId,
+          communityId: transaction.communityId,
+          transactionId: transaction.id,
+          paymentMethod,
+          tx
+        });
 
-      transaction.status = 'completed';
-      await transaction.save();
+        await tx.transaction.update({
+          where: { id: transaction.id },
+          data: { status: 'completed' }
+        });
 
-      // Update community earnings
-      await Community.findByIdAndUpdate(transaction.community, {
-        $inc: {
-          'settings.payment.availableForWithdrawal': transaction.amount,
-          'settings.payment.totalEarnings': transaction.amount
-        }
+        // Update community earnings
+        const community = await tx.community.findUnique({ where: { id: transaction.communityId } });
+        const settings = community.settings || {};
+        const payment = settings.payment || {};
+
+        payment.availableForWithdrawal = (payment.availableForWithdrawal || 0) + transaction.amount;
+        payment.totalEarnings = (payment.totalEarnings || 0) + transaction.amount;
+        
+        settings.payment = payment;
+
+        await tx.community.update({
+          where: { id: transaction.communityId },
+          data: { settings }
+        });
       });
     }
 
@@ -277,104 +279,90 @@ export const verifyPayment = async ({ reference, paymentMethod }) => {
  * @returns {Promise<Object>} - Withdrawal request result
  */
 export const requestWithdrawal = async ({ communityId, adminId, amount, method, details }) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const community = await Community.findById(communityId).session(session);
-    
-    if (!community) {
-      throw new Error('Community not found');
-    }
-
-    if (community.owner.toString() !== adminId) {
-      throw new Error('Only community owner can request withdrawal');
-    }
-
-    // Calculate available balance as totalEarnings - pendingWithdrawals
-    const totalEarnings = community.settings.payment.totalEarnings || 0;
-    const pendingWithdrawals = community.settings.payment.pendingWithdrawals || 0;
-    const availableBalance = totalEarnings - pendingWithdrawals;
-
-    // Validate withdrawal amount against available balance
-    if (amount > availableBalance) {
-      throw new Error(
-        `Insufficient balance for withdrawal. Available: ${availableBalance}, Requested: ${amount}, Pending: ${pendingWithdrawals}`
-      );
-    }
-
-    if (amount <= 0) {
-      throw new Error('Withdrawal amount must be greater than zero');
-    }
-
-    // Create withdrawal record
-    const withdrawal = {
-      amount,
-      status: 'pending',
-      method,
-      reference: `WDR-${Date.now()}-${communityId.substring(0, 6)}`,
-      metadata: details,
-      processedAt: new Date()
-    };
-
-    // Increment pendingWithdrawals when withdrawal is initiated
-    community.settings.payment.pendingWithdrawals = pendingWithdrawals + amount;
-
-    // Process withdrawal based on method
-    let result;
+  return await prisma.$transaction(async (tx) => {
     try {
-      if (method === 'aeko_wallet') {
-        // Transfer to admin's Aeko wallet
-        result = await transferToAekoWallet({
-          communityId,
-          amount,
-          reference: withdrawal.reference,
-          details
-        });
-        withdrawal.status = 'completed';
-        
-        // Decrement pendingWithdrawals when withdrawal completes successfully
-        community.settings.payment.pendingWithdrawals -= amount;
-        // Also update availableForWithdrawal to reflect the completed withdrawal
-        community.settings.payment.availableForWithdrawal = 
-          (community.settings.payment.availableForWithdrawal || totalEarnings) - amount;
-      } else {
+      const community = await tx.community.findUnique({ where: { id: communityId } });
+      
+      if (!community) {
+        throw new Error('Community not found');
+      }
+
+      if (community.ownerId !== adminId) {
+        throw new Error('Only community owner can request withdrawal');
+      }
+
+      const settings = community.settings || {};
+      const payment = settings.payment || {};
+
+      // Calculate available balance as totalEarnings - pendingWithdrawals
+      const totalEarnings = payment.totalEarnings || 0;
+      const pendingWithdrawals = payment.pendingWithdrawals || 0;
+      const availableBalance = totalEarnings - pendingWithdrawals;
+
+      // Validate withdrawal amount against available balance
+      if (amount > availableBalance) {
+        throw new Error(
+          `Insufficient balance for withdrawal. Available: ${availableBalance}, Requested: ${amount}, Pending: ${pendingWithdrawals}`
+        );
+      }
+
+      if (amount <= 0) {
+        throw new Error('Withdrawal amount must be greater than zero');
+      }
+
+      // Create withdrawal record
+      const withdrawal = {
+        amount,
+        status: 'pending',
+        method,
+        reference: `WDR-${Date.now()}-${communityId.substring(0, 6)}`,
+        metadata: details,
+        processedAt: new Date()
+      };
+
+      // Increment pendingWithdrawals when withdrawal is initiated
+      payment.pendingWithdrawals = pendingWithdrawals + amount;
+
+      // Process withdrawal based on method
+      let result;
+      try {
         // For bank transfers, mark as pending and process in background
         result = { success: true, message: 'Withdrawal request received' };
         // pendingWithdrawals remains incremented until background processing completes
+      } catch (withdrawalError) {
+        // Decrement pendingWithdrawals when withdrawal fails
+        payment.pendingWithdrawals -= amount;
+        withdrawal.status = 'failed';
+        withdrawal.metadata = {
+          ...withdrawal.metadata,
+          error: withdrawalError.message
+        };
+        console.error('Withdrawal processing error:', withdrawalError);
+        throw withdrawalError;
       }
-    } catch (withdrawalError) {
-      // Decrement pendingWithdrawals when withdrawal fails
-      community.settings.payment.pendingWithdrawals -= amount;
-      withdrawal.status = 'failed';
-      withdrawal.metadata = {
-        ...withdrawal.metadata,
-        error: withdrawalError.message
+
+      // Add to withdrawal history
+      const withdrawalHistory = payment.withdrawalHistory || [];
+      withdrawalHistory.push(withdrawal);
+      payment.withdrawalHistory = withdrawalHistory;
+      settings.payment = payment;
+
+      await tx.community.update({
+        where: { id: communityId },
+        data: { settings }
+      });
+
+      return {
+        success: true,
+        message: 'Withdrawal request processed',
+        withdrawal,
+        availableBalance: totalEarnings - payment.pendingWithdrawals
       };
-      console.error('Withdrawal processing error:', withdrawalError);
-      throw withdrawalError;
+    } catch (error) {
+      console.error('Withdrawal error:', error);
+      throw error;
     }
-
-    // Add to withdrawal history atomically
-    community.settings.payment.withdrawalHistory.push(withdrawal);
-    await community.save({ session });
-
-    await session.commitTransaction();
-
-    return {
-      success: true,
-      message: 'Withdrawal request processed',
-      withdrawal,
-      availableBalance: totalEarnings - community.settings.payment.pendingWithdrawals
-    };
-  } catch (error) {
-    await session.abortTransaction();
-    console.error('Withdrawal error:', error);
-    throw error;
-  } finally {
-    // Always end session to prevent memory leaks
-    session.endSession();
-  }
+  });
 };
 
 // Helper functions for payment providers
@@ -392,9 +380,15 @@ async function initializePaystackPayment({ email, amount, reference, metadata })
 
     // Update transaction with retry count if retries occurred
     if (retryCount > 0 && metadata.transactionId) {
-      await Transaction.findByIdAndUpdate(metadata.transactionId, {
-        retryCount,
-        $set: { 'metadata.retryCount': retryCount }
+      await prisma.transaction.update({
+        where: { id: metadata.transactionId },
+        data: {
+          retryCount,
+          metadata: {
+             ...metadata,
+             retryCount
+          }
+        }
       });
     }
 
@@ -410,10 +404,16 @@ async function initializePaystackPayment({ email, amount, reference, metadata })
     // Update transaction with failure reason
     if (metadata.transactionId) {
       const failureReason = error.response?.data?.message || error.message || 'Failed to initialize Paystack payment';
-      await Transaction.findByIdAndUpdate(metadata.transactionId, {
-        status: 'failed',
-        failureReason,
-        $set: { 'metadata.failureReason': failureReason }
+      await prisma.transaction.update({
+        where: { id: metadata.transactionId },
+        data: {
+          status: 'failed',
+          failureReason,
+          metadata: {
+             ...metadata,
+             failureReason
+          }
+        }
       });
     }
     
@@ -437,9 +437,15 @@ async function initializeStripePayment({ amount, currency, description, metadata
 
     // Update transaction with retry count if retries occurred
     if (retryCount > 0 && metadata.transactionId) {
-      await Transaction.findByIdAndUpdate(metadata.transactionId, {
-        retryCount,
-        $set: { 'metadata.retryCount': retryCount }
+      await prisma.transaction.update({
+        where: { id: metadata.transactionId },
+        data: {
+          retryCount,
+          metadata: {
+             ...metadata,
+             retryCount
+          }
+        }
       });
     }
 
@@ -454,106 +460,20 @@ async function initializeStripePayment({ amount, currency, description, metadata
     // Update transaction with failure reason
     if (metadata.transactionId) {
       const failureReason = error.message || 'Failed to initialize Stripe payment';
-      await Transaction.findByIdAndUpdate(metadata.transactionId, {
-        status: 'failed',
-        failureReason,
-        $set: { 'metadata.failureReason': failureReason }
+      await prisma.transaction.update({
+        where: { id: metadata.transactionId },
+        data: {
+          status: 'failed',
+          failureReason,
+          metadata: {
+             ...metadata,
+             failureReason
+          }
+        }
       });
     }
     
     throw new Error('Failed to initialize Stripe payment');
-  }
-}
-
-async function processAekoWalletPayment({ userId, communityId, amount, transactionId }) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    // Fetch user and verify existence
-    const user = await User.findById(userId).session(session);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // Check if user has sufficient Aeko balance
-    const userBalance = user.aekoBalance || 0;
-    if (userBalance < amount) {
-      throw new Error(
-        `Insufficient Aeko wallet balance. Available: ${userBalance}, Required: ${amount}`
-      );
-    }
-
-    // Fetch transaction
-    const transaction = await Transaction.findById(transactionId).session(session);
-    if (!transaction) {
-      throw new Error('Transaction not found');
-    }
-
-    // Fetch community
-    const community = await Community.findById(communityId).session(session);
-    if (!community) {
-      throw new Error('Community not found');
-    }
-
-    // Atomically deduct from user's Aeko wallet
-    user.aekoBalance -= amount;
-    await user.save({ session });
-
-    // Update transaction status
-    transaction.status = 'completed';
-    transaction.metadata = {
-      ...transaction.metadata,
-      walletBalanceBefore: userBalance,
-      walletBalanceAfter: user.aekoBalance,
-      processedAt: new Date()
-    };
-    await transaction.save({ session });
-
-    // Update community membership
-    await updateCommunityMembershipWithSession({
-      userId,
-      communityId,
-      transactionId,
-      paymentMethod: 'aeko_wallet',
-      session
-    });
-
-    // Atomically update community earnings
-    community.settings.payment.availableForWithdrawal = 
-      (community.settings.payment.availableForWithdrawal || 0) + amount;
-    community.settings.payment.totalEarnings = 
-      (community.settings.payment.totalEarnings || 0) + amount;
-    await community.save({ session });
-
-    // Commit the transaction
-    await session.commitTransaction();
-
-    return { 
-      success: true, 
-      message: 'Payment processed successfully',
-      newBalance: user.aekoBalance
-    };
-  } catch (error) {
-    // Rollback on any error
-    await session.abortTransaction();
-    console.error('Aeko wallet payment error:', error);
-    
-    // Update transaction status to failed
-    try {
-      await Transaction.findByIdAndUpdate(transactionId, {
-        status: 'failed',
-        failureReason: error.message,
-        $set: { 'metadata.failureReason': error.message }
-      });
-    } catch (updateError) {
-      console.error('Failed to update transaction status:', updateError);
-    }
-    
-    throw error;
-  } finally {
-    // Always end session to prevent memory leaks
-    session.endSession();
   }
 }
 
@@ -565,13 +485,19 @@ async function verifyPaystackPayment(reference) {
 
     // Update transaction with retry count if retries occurred
     if (retryCount > 0) {
-      await Transaction.findOneAndUpdate(
-        { paymentReference: reference },
-        {
-          retryCount,
-          $set: { 'metadata.verificationRetryCount': retryCount }
-        }
-      );
+      const transaction = await prisma.transaction.findFirst({ where: { paymentReference: reference } });
+      if (transaction) {
+        await prisma.transaction.update({
+          where: { id: transaction.id },
+          data: {
+            retryCount,
+            metadata: {
+              ...(transaction.metadata || {}),
+              verificationRetryCount: retryCount
+            }
+          }
+        });
+      }
     }
     
     if (response.data.data.status === 'success') {
@@ -584,14 +510,21 @@ async function verifyPaystackPayment(reference) {
     
     // Update transaction with failure reason
     const failureReason = error.response?.data?.message || error.message || 'Failed to verify Paystack payment';
-    await Transaction.findOneAndUpdate(
-      { paymentReference: reference },
-      {
-        status: 'failed',
-        failureReason,
-        $set: { 'metadata.verificationFailureReason': failureReason }
-      }
-    );
+    const transaction = await prisma.transaction.findFirst({ where: { paymentReference: reference } });
+    
+    if (transaction) {
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          status: 'failed',
+          failureReason,
+          metadata: {
+            ...(transaction.metadata || {}),
+            verificationFailureReason: failureReason
+          }
+        }
+      });
+    }
     
     throw new Error('Failed to verify Paystack payment');
   }
@@ -605,13 +538,19 @@ async function verifyStripePayment(paymentIntentId) {
 
     // Update transaction with retry count if retries occurred
     if (retryCount > 0) {
-      await Transaction.findOneAndUpdate(
-        { paymentReference: paymentIntentId },
-        {
-          retryCount,
-          $set: { 'metadata.verificationRetryCount': retryCount }
-        }
-      );
+      const transaction = await prisma.transaction.findFirst({ where: { paymentReference: paymentIntentId } });
+      if (transaction) {
+        await prisma.transaction.update({
+          where: { id: transaction.id },
+          data: {
+            retryCount,
+            metadata: {
+              ...(transaction.metadata || {}),
+              verificationRetryCount: retryCount
+            }
+          }
+        });
+      }
     }
     
     if (paymentIntent.status === 'succeeded') {
@@ -624,26 +563,44 @@ async function verifyStripePayment(paymentIntentId) {
     
     // Update transaction with failure reason
     const failureReason = error.message || 'Failed to verify Stripe payment';
-    await Transaction.findOneAndUpdate(
-      { paymentReference: paymentIntentId },
-      {
-        status: 'failed',
-        failureReason,
-        $set: { 'metadata.verificationFailureReason': failureReason }
-      }
-    );
+    const transaction = await prisma.transaction.findFirst({ where: { paymentReference: paymentIntentId } });
+    
+    if (transaction) {
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          status: 'failed',
+          failureReason,
+          metadata: {
+            ...(transaction.metadata || {}),
+            verificationFailureReason: failureReason
+          }
+        }
+      });
+    }
     
     throw new Error('Failed to verify Stripe payment');
   }
 }
 
-async function updateCommunityMembership({ userId, communityId, transactionId, paymentMethod }) {
-  const community = await Community.findById(communityId);
-  const user = await User.findById(userId);
+/**
+ * Update community membership with transaction support
+ * @param {Object} options - Membership update options
+ * @param {String} options.userId - User ID
+ * @param {String} options.communityId - Community ID
+ * @param {String} options.transactionId - Transaction ID
+ * @param {String} options.paymentMethod - Payment method used
+ * @param {Object} options.tx - Prisma transaction client
+ */
+async function updateCommunityMembershipWithTx({ userId, communityId, transactionId, paymentMethod, tx }) {
+  const community = await tx.community.findUnique({ where: { id: communityId } });
+  const user = await tx.user.findUnique({ where: { id: userId } });
   const now = new Date();
   
   // Calculate subscription end date based on subscription type
-  const subscriptionType = community.settings.payment.subscriptionType || 'one_time';
+  const settings = community.settings || {};
+  const payment = settings.payment || {};
+  const subscriptionType = payment.subscriptionType || 'one_time';
   let endDate = new Date();
   
   switch (subscriptionType) {
@@ -668,37 +625,43 @@ async function updateCommunityMembership({ userId, communityId, transactionId, p
   };
 
   // Add or update membership in Community model
-  const memberIndex = community.members.findIndex(m => m.user.toString() === userId);
+  const members = community.members || [];
+  const memberIndex = members.findIndex(m => m.user === userId);
+  let memberCount = community.memberCount;
   
   if (memberIndex >= 0) {
     // Update existing membership
-    community.members[memberIndex].subscription = subscriptionData;
-    community.members[memberIndex].status = 'active';
+    members[memberIndex].subscription = subscriptionData;
+    members[memberIndex].status = 'active';
   } else {
     // Add new member
-    community.members.push({
+    members.push({
       user: userId,
       role: 'member',
       status: 'active',
       subscription: subscriptionData
     });
-    community.memberCount += 1;
+    memberCount += 1;
   }
 
-  await community.save();
+  await tx.community.update({
+    where: { id: communityId },
+    data: { members, memberCount }
+  });
 
   // Synchronize with User.communities array
-  const communityIndex = user.communities.findIndex(
-    c => c.community.toString() === communityId
+  const communities = user.communities || [];
+  const communityIndex = communities.findIndex(
+    c => c.community === communityId
   );
   
   if (communityIndex >= 0) {
     // Update existing community entry
-    user.communities[communityIndex].role = 'member';
-    user.communities[communityIndex].subscription = subscriptionData;
+    communities[communityIndex].role = 'member';
+    communities[communityIndex].subscription = subscriptionData;
   } else {
     // Add new community entry
-    user.communities.push({
+    communities.push({
       community: communityId,
       role: 'member',
       joinedAt: now,
@@ -707,117 +670,10 @@ async function updateCommunityMembership({ userId, communityId, transactionId, p
     });
   }
   
-  await user.save();
-}
-
-/**
- * Update community membership with session support for atomic transactions
- * @param {Object} options - Membership update options
- * @param {String} options.userId - User ID
- * @param {String} options.communityId - Community ID
- * @param {String} options.transactionId - Transaction ID
- * @param {String} options.paymentMethod - Payment method used
- * @param {Object} options.session - Mongoose session for transaction
- */
-async function updateCommunityMembershipWithSession({ userId, communityId, transactionId, paymentMethod, session }) {
-  const community = await Community.findById(communityId).session(session);
-  const now = new Date();
-  
-  // Calculate subscription end date based on subscription type
-  const subscriptionType = community.settings.payment.subscriptionType || 'one_time';
-  let endDate = new Date();
-  
-  switch (subscriptionType) {
-    case 'monthly':
-      endDate.setMonth(now.getMonth() + 1);
-      break;
-    case 'yearly':
-      endDate.setFullYear(now.getFullYear() + 1);
-      break;
-    // For one_time, no end date (lifetime access)
-    default:
-      endDate = null;
-  }
-
-  // Add or update membership
-  const memberIndex = community.members.findIndex(m => m.user.toString() === userId);
-  
-  if (memberIndex >= 0) {
-    // Update existing membership
-    community.members[memberIndex].subscription = {
-      type: subscriptionType,
-      startDate: now,
-      endDate,
-      isActive: true,
-      paymentMethod,
-      transactionId
-    };
-    community.members[memberIndex].status = 'active';
-  } else {
-    // Add new member
-    community.members.push({
-      user: userId,
-      status: 'active',
-      subscription: {
-        type: subscriptionType,
-        startDate: now,
-        endDate,
-        isActive: true,
-        paymentMethod,
-        transactionId
-      }
-    });
-    community.memberCount += 1;
-  }
-
-  await community.save({ session });
-  
-  // Also update User.communities array for consistency
-  const user = await User.findById(userId).session(session);
-  const communityIndex = user.communities.findIndex(
-    c => c.community.toString() === communityId
-  );
-  
-  if (communityIndex >= 0) {
-    // Update existing community entry
-    user.communities[communityIndex].role = 'member';
-    user.communities[communityIndex].subscription = {
-      type: subscriptionType,
-      startDate: now,
-      endDate,
-      isActive: true,
-      paymentMethod,
-      transactionId
-    };
-  } else {
-    // Add new community entry
-    user.communities.push({
-      community: communityId,
-      role: 'member',
-      joinedAt: now,
-      notifications: true,
-      subscription: {
-        type: subscriptionType,
-        startDate: now,
-        endDate,
-        isActive: true,
-        paymentMethod,
-        transactionId
-      }
-    });
-  }
-  
-  await user.save({ session });
-}
-
-async function transferToAekoWallet({ communityId, amount, reference, details }) {
-  // In a real implementation, this would transfer to the admin's Aeko wallet
-  // For now, we'll just simulate a successful transfer
-  console.log(`Transferring ${amount} to admin's Aeko wallet for community ${communityId}`);
-  console.log('Reference:', reference);
-  console.log('Details:', details);
-  
-  return { success: true, message: 'Transfer successful' };
+  await tx.user.update({
+    where: { id: userId },
+    data: { communities }
+  });
 }
 
 /**
@@ -830,69 +686,78 @@ async function transferToAekoWallet({ communityId, amount, reference, details })
  * @returns {Promise<Object>} - Completion result
  */
 export const completeWithdrawal = async ({ communityId, reference, success, errorMessage }) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const community = await Community.findById(communityId).session(session);
-    
-    if (!community) {
-      throw new Error('Community not found');
-    }
-
-    // Find the withdrawal in history
-    const withdrawal = community.settings.payment.withdrawalHistory.find(
-      w => w.reference === reference
-    );
-
-    if (!withdrawal) {
-      throw new Error('Withdrawal not found');
-    }
-
-    if (withdrawal.status !== 'pending') {
-      throw new Error(`Withdrawal already ${withdrawal.status}`);
-    }
-
-    const amount = withdrawal.amount;
-
-    if (success) {
-      // Mark withdrawal as completed
-      withdrawal.status = 'completed';
-      withdrawal.processedAt = new Date();
+  return await prisma.$transaction(async (tx) => {
+    try {
+      const community = await tx.community.findUnique({ where: { id: communityId } });
       
-      // Decrement pendingWithdrawals when withdrawal completes
-      community.settings.payment.pendingWithdrawals = 
-        Math.max(0, (community.settings.payment.pendingWithdrawals || 0) - amount);
-      
-      // Update availableForWithdrawal to reflect the completed withdrawal
-      community.settings.payment.availableForWithdrawal = 
-        Math.max(0, (community.settings.payment.availableForWithdrawal || 0) - amount);
-    } else {
-      // Mark withdrawal as failed
-      withdrawal.status = 'failed';
-      withdrawal.metadata = {
-        ...withdrawal.metadata,
-        error: errorMessage
+      if (!community) {
+        throw new Error('Community not found');
+      }
+
+      const settings = community.settings || {};
+      const payment = settings.payment || {};
+      const withdrawalHistory = payment.withdrawalHistory || [];
+
+      // Find the withdrawal in history
+      const withdrawalIndex = withdrawalHistory.findIndex(
+        w => w.reference === reference
+      );
+
+      if (withdrawalIndex === -1) {
+        throw new Error('Withdrawal not found');
+      }
+
+      const withdrawal = withdrawalHistory[withdrawalIndex];
+
+      if (withdrawal.status !== 'pending') {
+        throw new Error(`Withdrawal already ${withdrawal.status}`);
+      }
+
+      const amount = withdrawal.amount;
+
+      if (success) {
+        // Mark withdrawal as completed
+        withdrawal.status = 'completed';
+        withdrawal.processedAt = new Date();
+        
+        // Decrement pendingWithdrawals when withdrawal completes
+        payment.pendingWithdrawals = 
+          Math.max(0, (payment.pendingWithdrawals || 0) - amount);
+        
+        // Update availableForWithdrawal to reflect the completed withdrawal
+        payment.availableForWithdrawal = 
+          Math.max(0, (payment.availableForWithdrawal || 0) - amount);
+      } else {
+        // Mark withdrawal as failed
+        withdrawal.status = 'failed';
+        withdrawal.metadata = {
+          ...withdrawal.metadata,
+          error: errorMessage
+        };
+        
+        // Decrement pendingWithdrawals when withdrawal fails (restore available balance)
+        payment.pendingWithdrawals = 
+          Math.max(0, (payment.pendingWithdrawals || 0) - amount);
+      }
+
+      // Update the withdrawal in the array
+      withdrawalHistory[withdrawalIndex] = withdrawal;
+      payment.withdrawalHistory = withdrawalHistory;
+      settings.payment = payment;
+
+      await tx.community.update({
+        where: { id: communityId },
+        data: { settings }
+      });
+
+      return {
+        success: true,
+        message: `Withdrawal ${success ? 'completed' : 'failed'}`,
+        withdrawal
       };
-      
-      // Decrement pendingWithdrawals when withdrawal fails (restore available balance)
-      community.settings.payment.pendingWithdrawals = 
-        Math.max(0, (community.settings.payment.pendingWithdrawals || 0) - amount);
+    } catch (error) {
+      console.error('Withdrawal completion error:', error);
+      throw error;
     }
-
-    await community.save({ session });
-    await session.commitTransaction();
-
-    return {
-      success: true,
-      message: `Withdrawal ${success ? 'completed' : 'failed'}`,
-      withdrawal
-    };
-  } catch (error) {
-    await session.abortTransaction();
-    console.error('Withdrawal completion error:', error);
-    throw error;
-  } finally {
-    session.endSession();
-  }
+  });
 };

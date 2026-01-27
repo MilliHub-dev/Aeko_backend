@@ -1,4 +1,6 @@
 import BlockingService from '../services/blockingService.js';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 /**
  * Middleware to enforce blocking relationships across all endpoints
@@ -68,14 +70,33 @@ class BlockingMiddleware {
         const filteredContent = [];
         
         for (const item of content) {
-          const authorId = this.getNestedValue(item, authorField);
+          // Handle Prisma objects where user is an object or a direct relation ID
+          let authorId = null;
           
+          if (authorField.includes('.')) {
+            const parts = authorField.split('.');
+            // Handle simple nesting like 'user.id'
+            if (parts.length === 2 && item[parts[0]]) {
+               authorId = item[parts[0]][parts[1]];
+            }
+          } else {
+            authorId = item[authorField];
+          }
+          
+          // Fallback for Mongoose style 'user._id' if we passed 'user.id' but it's not there
+          if (!authorId && item.user && item.user.id) {
+             authorId = item.user.id;
+          }
+          if (!authorId && item.userId) {
+             authorId = item.userId;
+          }
+
           if (!authorId) {
             filteredContent.push(item);
             continue;
           }
 
-          const canInteract = await BlockingService.enforceBlockingRules(currentUserId, authorId);
+          const canInteract = await BlockingService.enforceBlockingRules(currentUserId, authorId.toString());
           if (canInteract) {
             filteredContent.push(item);
           }
@@ -182,9 +203,11 @@ class BlockingMiddleware {
           return next();
         }
 
-        // Get post to find author
-        const Post = (await import('../models/Post.js')).default;
-        const post = await Post.findById(postId).select('user');
+        // Get post to find author using Prisma
+        const post = await prisma.post.findUnique({
+          where: { id: postId },
+          select: { userId: true }
+        });
         
         if (!post) {
           return res.status(404).json({
@@ -193,7 +216,7 @@ class BlockingMiddleware {
           });
         }
 
-        const postAuthorId = post.user.toString();
+        const postAuthorId = post.userId;
 
         // Allow interaction with own posts
         if (currentUserId.toString() === postAuthorId) {
@@ -263,7 +286,7 @@ class BlockingMiddleware {
   /**
    * Helper method to get nested object values using dot notation
    * @param {Object} obj - Object to get value from
-   * @param {string} path - Dot notation path (e.g., 'user._id')
+   * @param {string} path - Dot notation path (e.g., 'user.id')
    * @returns {*} Value at the specified path
    */
   static getNestedValue(obj, path) {

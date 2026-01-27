@@ -1,6 +1,5 @@
 import { body, query, param } from 'express-validator';
 import { validationResult } from 'express-validator';
-import mongoose from 'mongoose';
 import { SecurityErrorHandler, BlockingError, PrivacyError, TwoFactorError } from '../utils/securityErrors.js';
 
 // Privacy setting enum values
@@ -22,7 +21,7 @@ export const handleValidationErrors = (req, res, next) => {
     }));
     
     return SecurityErrorHandler.handleError(
-      new SecurityError('Validation failed', 'VALIDATION_ERROR', errorDetails),
+      new Error('Validation failed'), // Generic error, details are passed
       res
     );
   }
@@ -30,17 +29,22 @@ export const handleValidationErrors = (req, res, next) => {
 };
 
 /**
- * Custom validator to check if value is a valid MongoDB ObjectId
+ * Custom validator to check if value is a valid ID (UUID or MongoDB ObjectId)
  */
-const isValidObjectId = (value) => {
-  return mongoose.Types.ObjectId.isValid(value);
+const isValidId = (value) => {
+  // Check for MongoDB ObjectId (24 hex characters)
+  const isObjectId = /^[0-9a-fA-F]{24}$/.test(value);
+  // Check for UUID (standard format)
+  const isUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
+  
+  return isObjectId || isUUID;
 };
 
 /**
  * Custom validator to check if user ID is not the same as current user
  */
 const isNotSameUser = (value, { req }) => {
-  if (value === req.user?.id || value === req.user?._id?.toString()) {
+  if (value === req.user?.id || value === req.userId) {
     throw new Error('Cannot perform this action on yourself');
   }
   return true;
@@ -53,7 +57,7 @@ export const validateBlockUser = [
   param('userId')
     .notEmpty()
     .withMessage('User ID is required')
-    .custom(isValidObjectId)
+    .custom(isValidId)
     .withMessage('Invalid user ID format')
     .custom(isNotSameUser)
     .withMessage('Cannot block yourself'),
@@ -72,7 +76,7 @@ export const validateUnblockUser = [
   param('userId')
     .notEmpty()
     .withMessage('User ID is required')
-    .custom(isValidObjectId)
+    .custom(isValidId)
     .withMessage('Invalid user ID format')
     .custom(isNotSameUser)
     .withMessage('Cannot unblock yourself')
@@ -85,7 +89,7 @@ export const validateBlockStatus = [
   param('userId')
     .notEmpty()
     .withMessage('User ID is required')
-    .custom(isValidObjectId)
+    .custom(isValidId)
     .withMessage('Invalid user ID format')
 ];
 
@@ -149,7 +153,7 @@ export const validateFollowRequest = [
   param('userId')
     .notEmpty()
     .withMessage('User ID is required')
-    .custom(isValidObjectId)
+    .custom(isValidId)
     .withMessage('Invalid user ID format')
     .custom(isNotSameUser)
     .withMessage('Cannot send follow request to yourself')
@@ -162,7 +166,7 @@ export const validateHandleFollowRequest = [
   param('requestId')
     .notEmpty()
     .withMessage('Request ID is required')
-    .custom(isValidObjectId)
+    .custom(isValidId)
     .withMessage('Invalid request ID format'),
   
   body('action')

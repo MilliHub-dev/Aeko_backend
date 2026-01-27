@@ -1,17 +1,13 @@
-import  express from "express";
+import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import User from"../models/User.js";
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient();
 const router = express.Router();
-import Web3  from "web3"; // Correct way to import in Web3 v4
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 import privacyFilterMiddleware from "../middleware/privacyMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
-
-const web3 = new Web3(new Web3.providers.HttpProvider("https://sepolia.infura.io/")); // Use Polygon zkEVM
-
-
 
 /**
  * @swagger
@@ -43,11 +39,33 @@ const web3 = new Web3(new Web3.providers.HttpProvider("https://sepolia.infura.io
 router.post("/register", async (req, res) => {
     try {
         const { username, email, password } = req.body;
+        
+        // Check if user exists
+        const existingUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: email },
+                    { username: username }
+                ]
+            }
+        });
+
+        if (existingUser) {
+            return res.status(400).json({ error: "User already exists" });
+        }
+
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        const user = new User({ username, email, password: hashedPassword });
-        await user.save();
+        await prisma.user.create({
+            data: {
+                username,
+                email,
+                password: hashedPassword,
+                name: username // Default name to username
+            }
+        });
+
         res.status(201).json({ message: "User registered successfully" });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -83,60 +101,27 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
     try {
         const { email, password } = req.body;
-        const user = await User.findOne({ email });
+        const user = await prisma.user.findUnique({ where: { email } });
+        
         if (!user) return res.status(400).json({ error: "User not found" });
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" });
+        // Update last login
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() }
+        });
+
+        const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "1d" });
         res.json({ token, user });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-/**
- * @swagger
- * /api/users/wallet-login:
- *   post:
- *     summary: Login by verifying a wallet signature
- *     tags:
- *       - Authentication
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [address, message, signature]
- *             properties:
- *               address: { type: string }
- *               message: { type: string }
- *               signature: { type: string }
- *     responses:
- *       200:
- *         description: Login successful
- *       401:
- *         description: Invalid signature
- *       500:
- *         description: Server error
- */
-// User login with wallet signature verification
-router.post("/wallet-login", async (req, res) => {
-  const { address, message, signature } = req.body;
 
-  try {
-    const recoveredAddress = web3.eth.accounts.recover(message, signature);
-    if (recoveredAddress.toLowerCase() === address.toLowerCase()) {
-      const token = jwt.sign({ address }, process.env.JWT_SECRET, { expiresIn: "24h" });
-      return res.json({ message: "Login successful", token });
-    }
-    res.status(401).json({ message: "Invalid signature" });
-  } catch (error) {
-    res.status(500).json({ message: "Error verifying signature", error });
-  }
-});
 
 /**
  * @swagger
@@ -162,9 +147,14 @@ router.post("/wallet-login", async (req, res) => {
  *         description: Server error
  */
 // Get User Profile - Updated with privacy controls
-router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), privacyFilterMiddleware.checkProfileAccess(), async (req, res) => {
+router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), privacyFilterMiddleware.checkProfileAccess, async (req, res) => {
     try {
-        const user = await User.findById(req.params.id).select("-password -twoFactorAuth.secret -twoFactorAuth.backupCodes");
+        const user = await prisma.user.findUnique({
+            where: { id: req.params.id },
+            include: {
+                posts: { take: 5, orderBy: { createdAt: 'desc' } }, // Limit posts for efficiency
+            }
+        });
         
         if (!user) {
             return res.status(404).json({ error: "User not found" });
@@ -174,14 +164,17 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
         const viewerId = req.userId || req.user?.id || req.user?._id;
         const profileId = req.params.id;
         
-        // If viewing own profile, return full information
+        // Exclude sensitive fields manually since we can't use .select() like Mongoose
+        const { password, twoFactorAuth, ...safeUser } = user;
+
+        // If viewing own profile, return full information (except password/secrets)
         if (viewerId === profileId) {
-            return res.json(user);
+            return res.json(safeUser);
         }
 
         // For other users, filter based on privacy settings
         const filteredUser = {
-            _id: user._id,
+            id: user.id,
             username: user.username,
             name: user.name,
             profilePicture: user.profilePicture,
@@ -191,22 +184,34 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
             createdAt: user.createdAt
         };
 
+        const privacy = user.privacy || {};
+        const isPrivate = privacy.isPrivate || false;
+
+        // Get actual followers/following from Json fields
+        const followers = Array.isArray(user.followers) ? user.followers : []; 
+        const following = Array.isArray(user.following) ? user.following : [];
+
         // Show follower counts and following status based on privacy
-        if (!user.privacy?.isPrivate) {
-            filteredUser.followers = user.followers;
-            filteredUser.following = user.following;
+        if (!isPrivate) {
+            filteredUser.followers = followers;
+            filteredUser.following = following;
+            filteredUser.followersCount = followers.length;
+            filteredUser.followingCount = following.length;
             filteredUser.posts = user.posts;
         } else {
             // For private accounts, only show if viewer is a follower
-            const isFollower = user.followers.includes(viewerId);
+            const isFollower = followers.includes(viewerId);
             if (isFollower) {
-                filteredUser.followers = user.followers;
-                filteredUser.following = user.following;
+                filteredUser.followers = followers;
+                filteredUser.following = following;
+                filteredUser.followersCount = followers.length;
+                filteredUser.followingCount = following.length;
                 filteredUser.posts = user.posts;
             } else {
                 filteredUser.isPrivate = true;
-                filteredUser.followersCount = user.followers?.length || 0;
-                filteredUser.followingCount = user.following?.length || 0;
+                filteredUser.followersCount = followers.length; // Usually visible even if private? Or 0? 
+                // Instagram shows counts for private profiles. Let's show counts.
+                filteredUser.followingCount = following.length;
                 filteredUser.postsCount = user.posts?.length || 0;
             }
         }
@@ -290,50 +295,55 @@ router.get("/", authMiddleware, async (req, res) => {
         const skip = (page - 1) * limit;
 
         // Build search query
-        let query = {};
+        let where = {};
         if (search) {
-            query = {
-                $or: [
-                    { name: { $regex: search, $options: 'i' } },
-                    { username: { $regex: search, $options: 'i' } }
+            where = {
+                OR: [
+                    { name: { contains: search, mode: 'insensitive' } },
+                    { username: { contains: search, mode: 'insensitive' } }
                 ]
             };
         }
 
         // Get total count for pagination
-        const totalUsers = await User.countDocuments(query);
+        const totalUsers = await prisma.user.count({ where });
         const totalPages = Math.ceil(totalUsers / limit);
 
         // Get users with pagination
-        const users = await User.find(query)
-            .select("-password -twoFactorAuth.secret -twoFactorAuth.backupCodes -emailVerification.code -emailVerification.codeAttempts")
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit);
+        const users = await prisma.user.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: limit
+        });
 
         // Filter users based on privacy settings
         const filteredUsers = users.map(user => {
-            const userObj = user.toObject();
-            
             // Remove sensitive fields and apply privacy filters
             const publicUser = {
-                _id: userObj._id,
-                name: userObj.name,
-                username: userObj.username,
-                profilePicture: userObj.profilePicture,
-                avatar: userObj.avatar,
-                bio: userObj.bio,
-                blueTick: userObj.blueTick,
-                goldenTick: userObj.goldenTick,
-                createdAt: userObj.createdAt,
-                emailVerification: { isVerified: userObj.emailVerification?.isVerified || false }
+                id: user.id,
+                name: user.name,
+                username: user.username,
+                profilePicture: user.profilePicture,
+                avatar: user.avatar,
+                bio: user.bio,
+                blueTick: user.blueTick,
+                goldenTick: user.goldenTick,
+                createdAt: user.createdAt,
+                emailVerification: { isVerified: user.emailVerification?.isVerified || false }
             };
 
+            const privacy = user.privacy || {};
+            const isPrivate = privacy.isPrivate || false;
+
             // Add follower counts if profile is not private
-            if (!userObj.privacy?.isPrivate) {
-                publicUser.followersCount = userObj.followers?.length || 0;
-                publicUser.followingCount = userObj.following?.length || 0;
-                publicUser.postsCount = userObj.posts?.length || 0;
+            if (!isPrivate) {
+                const followerIds = Array.isArray(user.followers) ? user.followers : [];
+                const followingIds = Array.isArray(user.following) ? user.following : [];
+                
+                publicUser.followersCount = followerIds.length;
+                publicUser.followingCount = followingIds.length;
+                publicUser.postsCount = 0; // Placeholder, would need to fetch or store count
             } else {
                 publicUser.isPrivate = true;
             }
@@ -399,7 +409,11 @@ router.get("/", authMiddleware, async (req, res) => {
 router.put("/profile-picture", authMiddleware, twoFactorMiddleware.requireTwoFactor(), upload.single("image"), async (req, res) => {
     try {
         const userId = req.userId || req.user?.id || req.user?._id;
-        const user = await User.findByIdAndUpdate(userId, { profilePicture: req.file.path }, { new: true });
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: { profilePicture: req.file.path }
+        });
+        
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -408,8 +422,6 @@ router.put("/profile-picture", authMiddleware, twoFactorMiddleware.requireTwoFac
         res.status(500).json({ error: error.message });
     }
 });
-
-
 
 export default router;
 

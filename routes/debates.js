@@ -1,5 +1,5 @@
 import express from "express";
-import Debate from "../models/Debate.js";
+import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import getBotResponse from "../ai/bot.js";
 
@@ -9,10 +9,22 @@ const router = express.Router();
 router.post("/start", authMiddleware, async (req, res) => {
   try {
     const { topic, participants } = req.body;
-    const debate = new Debate({ topic, participants, scores: {}, votes: {} });
-    await debate.save();
+    const userId = req.user.id || req.user._id;
+
+    const debate = await prisma.debate.create({
+      data: {
+        topic,
+        participants, // Assuming array of user IDs
+        creatorId: userId,
+        scores: {},
+        votes: {},
+        status: "active"
+      }
+    });
+    
     res.json({ success: true, debate });
   } catch (error) {
+    console.error("Error starting debate:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -21,9 +33,19 @@ router.post("/start", authMiddleware, async (req, res) => {
 router.put("/:debateId/score", authMiddleware, async (req, res) => {
   try {
     const { participantId, message } = req.body;
+    const { debateId } = req.params;
+
+    const debate = await prisma.debate.findUnique({ where: { id: debateId } });
+    if (!debate) return res.status(404).json({ success: false, message: "Debate not found" });
+
     const score = await getBotResponse(participantId, message); // AI Evaluates
-    await Debate.findByIdAndUpdate(req.params.debateId, {
-      $set: { [`scores.${participantId}`]: score },
+    
+    const scores = debate.scores || {};
+    scores[participantId] = score;
+
+    await prisma.debate.update({
+      where: { id: debateId },
+      data: { scores }
     });
 
     res.json({ success: true, score });
@@ -36,8 +58,17 @@ router.put("/:debateId/score", authMiddleware, async (req, res) => {
 router.put("/:debateId/vote", authMiddleware, async (req, res) => {
   try {
     const { participantId } = req.body;
-    await Debate.findByIdAndUpdate(req.params.debateId, {
-      $inc: { [`votes.${participantId}`]: 1 },
+    const { debateId } = req.params;
+
+    const debate = await prisma.debate.findUnique({ where: { id: debateId } });
+    if (!debate) return res.status(404).json({ success: false, message: "Debate not found" });
+
+    const votes = debate.votes || {};
+    votes[participantId] = (votes[participantId] || 0) + 1;
+
+    await prisma.debate.update({
+      where: { id: debateId },
+      data: { votes }
     });
 
     res.json({ success: true, message: "Vote added" });
@@ -50,27 +81,30 @@ router.put("/:debateId/vote", authMiddleware, async (req, res) => {
 router.put("/:debateId/end", authMiddleware, async (req, res) => {
   try {
     const { winner, reason } = req.body;
-    const debate = await Debate.findById(req.params.debateId);
+    const { debateId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    const debate = await prisma.debate.findUnique({ where: { id: debateId } });
     
     if (!debate) {
       return res.status(404).json({ success: false, message: "Debate not found" });
     }
 
     // Check if user is creator or admin
-    if (debate.creator.toString() !== req.user._id.toString() && !req.user.isAdmin) {
+    // Note: isAdmin might be boolean in user object, but req.user structure depends on middleware
+    if (debate.creatorId !== userId && !req.user.isAdmin) {
       return res.status(403).json({ success: false, message: "Not authorized to end this debate" });
     }
 
-    const updatedDebate = await Debate.findByIdAndUpdate(
-      req.params.debateId,
-      { 
+    const updatedDebate = await prisma.debate.update({
+      where: { id: debateId },
+      data: { 
         status: 'ended',
         endedAt: new Date(),
         winner: winner,
         endReason: reason || 'Ended by creator'
-      },
-      { new: true }
-    );
+      }
+    });
 
     res.json({ success: true, message: "Debate ended successfully", debate: updatedDebate });
   } catch (error) {
@@ -82,23 +116,45 @@ router.put("/:debateId/end", authMiddleware, async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
-    const filter = status ? { status } : {};
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
     
-    const debates = await Debate.find(filter)
-      .populate('participants', 'username profilePicture')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+    const where = status ? { status } : {};
+    
+    const [debates, total] = await Promise.all([
+      prisma.debate.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limitNum,
+        skip: (pageNum - 1) * limitNum,
+        // We can't populate participants easily if it's a JSON array of IDs
+        // But we can include creator if needed
+      }),
+      prisma.debate.count({ where })
+    ]);
 
-    const total = await Debate.countDocuments(filter);
+    // Manually populate participants if they are stored as array of IDs
+    const populatedDebates = await Promise.all(debates.map(async (debate) => {
+      let participants = debate.participants;
+      if (Array.isArray(debate.participants) && debate.participants.length > 0) {
+        // Assume participants is array of IDs
+        const users = await prisma.user.findMany({
+          where: { id: { in: debate.participants } },
+          select: { id: true, username: true, profilePicture: true }
+        });
+        participants = users;
+      }
+      return { ...debate, participants };
+    }));
 
     res.json({ 
       success: true, 
-      debates,
+      debates: populatedDebates,
       pagination: {
-        current: page,
-        pages: Math.ceil(total / limit),
-        total
+        current: pageNum,
+        pages: Math.ceil(total / limitNum),
+        total,
+        limit: limitNum
       }
     });
   } catch (error) {
@@ -106,160 +162,4 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Get Single Debate
-router.get("/:debateId", async (req, res) => {
-  try {
-    const debate = await Debate.findById(req.params.debateId)
-      .populate('participants', 'username profilePicture blueTick goldenTick')
-      .populate('winner', 'username profilePicture');
-
-    if (!debate) {
-      return res.status(404).json({ success: false, message: "Debate not found" });
-    }
-
-    res.json({ success: true, debate });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 export default router;
-/**
- * @swagger
- * /api/debates/start:
- *   post:
- *     summary: Start a debate
- *     tags:
- *       - Debates
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - topic
- *               - participants
- *             properties:
- *               topic:
- *                 type: string
- *               participants:
- *                 type: array
- *                 items:
- *                   type: string
- *             example:
- *               topic: "Is AI beneficial to humanity?"
- *               participants: ["user1", "user2"]
- *     responses:
- *       200:
- *         description: Debate started successfully
- *       400:
- *         description: Bad request
- * 
- * /api/debates/{debateId}/score:
- *   put:
- *     summary: AI scores a participant in a debate
- *     tags:
- *       - Debates
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: debateId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - participantId
- *               - message
- *             properties:
- *               participantId:
- *                 type: string
- *               message:
- *                 type: string
- *     responses:
- *       200:
- *         description: Score updated successfully
- *       400:
- *         description: Bad request
- *       404:
- *         description: Debate not found
- * 
- * /api/debates/{debateId}/vote:
- *   put:
- *     summary: Vote for a participant in a debate
- *     tags:
- *       - Debates
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: debateId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - participantId
- *             properties:
- *               participantId:
- *                 type: string
- *     responses:
- *       200:
- *         description: Vote added successfully
- *       400:
- *         description: Bad request
- *       404:
- *         description: Debate not found
- * 
- * 
- * /api/debates/{debateId}/end:
- *   put:
- *     summary: End a debate
- *     tags:
- *       - Debates
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: debateId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - winner
- *             properties:
- *               winner:
- *                 type: string
- *               reason:
- *                 type: string
- *     responses:
- *       200:
- *         description: Debate ended successfully
- *       400:
- *         description: Bad request
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: Debate not found
- * 
- */

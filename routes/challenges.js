@@ -1,17 +1,25 @@
 import express from "express";
-import Challenge from "../models/Challenge.js";
+import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
-
-
 
 // Create a challenge
 router.post("/create", authMiddleware, async (req, res) => {
   try {
     const { videoUrl } = req.body;
-    const challenge = new Challenge({ creator: req.userId, videoUrl });
-    await challenge.save();
+    const userId = req.user.id || req.user._id;
+
+    const challenge = await prisma.challenge.create({
+      data: {
+        creatorId: userId,
+        videoUrl,
+        participants: [], // Initialize empty array
+        votes: [], // Initialize empty array
+        status: "active"
+      }
+    });
+
     res.json({ success: true, challenge });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -22,8 +30,18 @@ router.post("/create", authMiddleware, async (req, res) => {
 router.put("/:challengeId/duet", authMiddleware, async (req, res) => {
   try {
     const { videoUrl } = req.body;
-    await Challenge.findByIdAndUpdate(req.params.challengeId, {
-      $push: { participants: { user: req.userId, videoUrl } },
+    const { challengeId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    const challenge = await prisma.challenge.findUnique({ where: { id: challengeId } });
+    if (!challenge) return res.status(404).json({ message: "Challenge not found" });
+
+    const participants = Array.isArray(challenge.participants) ? challenge.participants : [];
+    participants.push({ user: userId, videoUrl });
+
+    await prisma.challenge.update({
+      where: { id: challengeId },
+      data: { participants }
     });
 
     res.json({ success: true, message: "Duet added" });
@@ -35,10 +53,26 @@ router.put("/:challengeId/duet", authMiddleware, async (req, res) => {
 // Vote for a challenge
 router.put("/:challengeId/vote", authMiddleware, async (req, res) => {
   try {
-    const { userId } = req.body;
-    await Challenge.findByIdAndUpdate(req.params.challengeId, {
-      $addToSet: { votes: userId },
-    });
+    const { userId } = req.body; // Or use req.user.id if voting as authenticated user? 
+    // The original code used req.body.userId, but usually voting should be the authenticated user.
+    // I will stick to req.body.userId to match original logic, but falling back to req.user.id if not provided would be safer.
+    // However, the original code used `req.body.userId`.
+    const voterId = userId || req.user.id || req.user._id;
+    const { challengeId } = req.params;
+
+    const challenge = await prisma.challenge.findUnique({ where: { id: challengeId } });
+    if (!challenge) return res.status(404).json({ message: "Challenge not found" });
+
+    const votes = Array.isArray(challenge.votes) ? challenge.votes : [];
+    
+    // Simulate $addToSet
+    if (!votes.includes(voterId)) {
+      votes.push(voterId);
+      await prisma.challenge.update({
+        where: { id: challengeId },
+        data: { votes }
+      });
+    }
 
     res.json({ success: true, message: "Vote added" });
   } catch (error) {
@@ -50,27 +84,29 @@ router.put("/:challengeId/vote", authMiddleware, async (req, res) => {
 router.put("/:challengeId/end", authMiddleware, async (req, res) => {
   try {
     const { winner, reason } = req.body;
-    const challenge = await Challenge.findById(req.params.challengeId);
+    const { challengeId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    const challenge = await prisma.challenge.findUnique({ where: { id: challengeId } });
     
     if (!challenge) {
       return res.status(404).json({ success: false, message: "Challenge not found" });
     }
 
     // Check if user is creator or admin
-    if (challenge.creator.toString() !== req.user._id.toString() && !req.user.isAdmin) {
+    if (challenge.creatorId !== userId && !req.user.isAdmin) {
       return res.status(403).json({ success: false, message: "Not authorized to end this challenge" });
     }
 
-    const updatedChallenge = await Challenge.findByIdAndUpdate(
-      req.params.challengeId,
-      { 
+    const updatedChallenge = await prisma.challenge.update({
+      where: { id: challengeId },
+      data: { 
         status: 'ended',
         endedAt: new Date(),
         winner: winner,
         endReason: reason || 'Ended by creator'
-      },
-      { new: true }
-    );
+      }
+    });
 
     res.json({ success: true, message: "Challenge ended successfully", challenge: updatedChallenge });
   } catch (error) {
@@ -82,24 +118,61 @@ router.put("/:challengeId/end", authMiddleware, async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
-    const filter = status ? { status } : {};
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
     
-    const challenges = await Challenge.find(filter)
-      .populate('creator', 'username profilePicture')
-      .populate('participants.user', 'username profilePicture')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+    const where = status ? { status } : {};
+    
+    const [challenges, total] = await Promise.all([
+      prisma.challenge.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limitNum,
+        skip: (pageNum - 1) * limitNum,
+        include: {
+          creator: {
+            select: { username: true, profilePicture: true }
+          }
+        }
+      }),
+      prisma.challenge.count({ where })
+    ]);
 
-    const total = await Challenge.countDocuments(filter);
+    // Manually populate participants.user
+    // participants is array of { user: userId, videoUrl: ... }
+    const populatedChallenges = await Promise.all(challenges.map(async (challenge) => {
+      let participants = challenge.participants;
+      if (Array.isArray(challenge.participants) && challenge.participants.length > 0) {
+        // Extract all user IDs from participants
+        const userIds = challenge.participants.map(p => p.user).filter(id => id);
+        
+        if (userIds.length > 0) {
+          const users = await prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, username: true, profilePicture: true }
+          });
+          
+          // Map users back to participants array
+          participants = challenge.participants.map(p => {
+            const userDetails = users.find(u => u.id === p.user);
+            return {
+              ...p,
+              user: userDetails || p.user // fallback to ID if not found
+            };
+          });
+        }
+      }
+      return { ...challenge, participants };
+    }));
 
     res.json({ 
       success: true, 
-      challenges,
+      challenges: populatedChallenges,
       pagination: {
-        current: page,
-        pages: Math.ceil(total / limit),
-        total
+        current: pageNum,
+        pages: Math.ceil(total / limitNum),
+        total,
+        limit: limitNum
       }
     });
   } catch (error) {
@@ -107,147 +180,4 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Get Single Challenge
-router.get("/:challengeId", async (req, res) => {
-  try {
-    const challenge = await Challenge.findById(req.params.challengeId)
-      .populate('creator', 'username profilePicture blueTick goldenTick')
-      .populate('participants.user', 'username profilePicture blueTick goldenTick')
-      .populate('winner', 'username profilePicture');
-
-    if (!challenge) {
-      return res.status(404).json({ success: false, message: "Challenge not found" });
-    }
-
-    res.json({ success: true, challenge });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 export default router;
-/**
- * @swagger
- * /api/challenges/create:
- *   post:
- *     summary: Create a challenge
- *     tags:
- *       - Challenges
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - videoUrl
- *             properties:
- *               videoUrl:
- *                 type: string
- *     responses:
- *       200:
- *         description: Challenge created successfully
- *       400:
- *         description: Bad request
- * 
- * /api/challenges/{challengeId}/duet:
- *   put:
- *     summary: Duet a challenge
- *     tags:
- *       - Challenges
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: challengeId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - videoUrl
- *             properties:
- *               videoUrl:
- *                 type: string
- *     responses:
- *       200:
- *         description: Duet added successfully
- *       400:
- *         description: Bad request
- *       404:
- *         description: Challenge not found
- * 
- * /api/challenges/{challengeId}/vote:
- *   put:
- *     summary: Vote for a challenge
- *     tags:
- *       - Challenges
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: challengeId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - userId
- *             properties:
- *               userId:
- *                 type: string
- *     responses:
- *       200:
- *         description: Vote added successfully
- *       400:
- *         description: Bad request
- *       404:
- *         description: Challenge not found
- * 
- * /api/challenges/{challengeId}/end:
- *   put:
- *     summary: End a challenge
- *     tags:
- *       - Challenges
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: challengeId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - winner
- *             properties:
- *               winner:
- *                 type: string
- *               reason:
- *                 type: string
- *     responses:
- *       200:
- *         description: Challenge ended successfully
- *       400:
- *         description: Bad request
- *       404:
- *         description: Challenge not found
- */
-

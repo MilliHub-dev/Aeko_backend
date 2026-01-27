@@ -1,13 +1,42 @@
 import express from "express";
-import Chat from "../models/Chat.js";
+import { PrismaClient } from "@prisma/client";
 import authMiddleware from "../middleware/authMiddleware.js";
 import getBotResponse from "../ai/bot.js";
 import enhancedBot from "../ai/enhancedBot.js";
-import { botResponseMiddleware} from "../middleware/botMiddleware.js";
+import { botResponseMiddleware } from "../middleware/botMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
-
+const prisma = new PrismaClient();
 const router = express.Router();
+
+// Helper to get or create conversation
+const getConversation = async (userId1, userId2) => {
+  // Try to find direct chat
+  let chat = await prisma.chat.findFirst({
+      where: {
+          isGroup: false,
+          AND: [
+              { members: { some: { userId: userId1 } } },
+              { members: { some: { userId: userId2 } } }
+          ]
+      }
+  });
+  
+  if (!chat) {
+      chat = await prisma.chat.create({
+          data: {
+              isGroup: false,
+              members: {
+                  create: [
+                      { userId: userId1 },
+                      { userId: userId2 }
+                  ]
+              }
+          }
+      });
+  }
+  return chat;
+};
 
 // Send message
 router.post("/send-message", authMiddleware, BlockingMiddleware.checkMessagingAccess(), async (req, res) => {
@@ -15,55 +44,104 @@ router.post("/send-message", authMiddleware, BlockingMiddleware.checkMessagingAc
 
   // Additional privacy check for messaging
   try {
-    const PrivacyManager = (await import('../services/privacyManager.js')).default;
-    const canSendMessage = await PrivacyManager.canSendMessage(req.userId, recipientId);
+    const privacyModule = await import('../services/privacyManager.js');
+    const PrivacyManager = privacyModule.default;
     
-    if (!canSendMessage) {
-      return res.status(403).json({
-        success: false,
-        error: 'Cannot send message due to privacy settings'
-      });
+    // Check if canSendMessage exists
+    if (PrivacyManager.canSendMessage) {
+         const canSendMessage = await PrivacyManager.canSendMessage(req.userId, recipientId);
+         if (!canSendMessage) {
+           return res.status(403).json({
+             success: false,
+             error: 'Cannot send message due to privacy settings'
+           });
+         }
+    } else if (new PrivacyManager().canSendMessage) {
+         const pm = new PrivacyManager();
+         const canSendMessage = await pm.canSendMessage(req.userId, recipientId);
+         if (!canSendMessage) {
+           return res.status(403).json({
+             success: false,
+             error: 'Cannot send message due to privacy settings'
+           });
+         }
     }
   } catch (error) {
     console.error('Privacy check error:', error);
   }
 
-  // Save message in DB
-  const chatMessage = new Chat({
-    sender: req.userId,
-    recipient: recipientId,
-    message,
-  });
-  await chatMessage.save();
-
-  // If recipient has Smart Bot enabled, auto-reply using enhanced bot
   try {
-    const botResponse = await enhancedBot.generateResponse(recipientId, message);
-    if (botResponse && !botResponse.error && botResponse.response) {
-      const botMessage = new Chat({
-        sender: recipientId,
-        recipient: req.userId,
-        message: botResponse.response,
-        isBot: true, // Mark as bot message
-      });
-      await botMessage.save();
-    }
-  } catch (error) {
-    console.error('Enhanced bot auto-reply error:', error);
-    // Fallback to original bot
-    const botReply = await getBotResponse(recipientId, message);
-    if (botReply) {
-      const botMessage = new Chat({
-        sender: recipientId,
-        recipient: req.userId,
-        message: botReply,
-        isBot: true,
-      });
-      await botMessage.save();
-    }
-  }
+      const chat = await getConversation(req.userId, recipientId);
 
-  res.json({ success: true });
+      // Save message in DB (using EnhancedMessage for Prisma compatibility)
+      const chatMessage = await prisma.enhancedMessage.create({
+        data: {
+            chatId: chat.id,
+            senderId: req.userId,
+            receiverId: recipientId,
+            content: message,
+            messageType: 'text',
+            isBot: false,
+            status: 'sent'
+        }
+      });
+      
+      // Update chat last message
+      await prisma.chat.update({
+          where: { id: chat.id },
+          data: { lastMessageId: chatMessage.id }
+      });
+
+      // If recipient has Smart Bot enabled, auto-reply using enhanced bot
+      try {
+        const botResponse = await enhancedBot.generateResponse(recipientId, message);
+        if (botResponse && !botResponse.error && botResponse.response) {
+          const botMessage = await prisma.enhancedMessage.create({
+            data: {
+                chatId: chat.id,
+                senderId: recipientId,
+                receiverId: req.userId,
+                content: botResponse.response,
+                messageType: 'text',
+                isBot: true,
+                status: 'sent'
+            }
+          });
+          
+          await prisma.chat.update({
+              where: { id: chat.id },
+              data: { lastMessageId: botMessage.id }
+          });
+        }
+      } catch (error) {
+        console.error('Enhanced bot auto-reply error:', error);
+        // Fallback to original bot (migrated to Prisma)
+        const botReply = await getBotResponse(recipientId, message);
+        if (botReply) {
+          const botMessage = await prisma.enhancedMessage.create({
+            data: {
+                chatId: chat.id,
+                senderId: recipientId,
+                receiverId: req.userId,
+                content: botReply,
+                messageType: 'text',
+                isBot: true,
+                status: 'sent'
+            }
+          });
+          
+          await prisma.chat.update({
+              where: { id: chat.id },
+              data: { lastMessageId: botMessage.id }
+          });
+        }
+      }
+
+      res.json({ success: true });
+  } catch (error) {
+      console.error("Send message error:", error);
+      res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 router.post("/chat", botResponseMiddleware, (req, res) => {

@@ -51,7 +51,7 @@ export const checkBlueTickEligibility = async (req, res, next) => {
     }
 };
 
-// Middleware specifically for user updates (profile, wallet connection, etc.)
+// Middleware specifically for user updates (profile, etc.)
 export const handleProfileUpdate = async (req, res, next) => {
     try {
         // Store the original handler
@@ -93,7 +93,6 @@ export const checkAndUpdateBlueTick = async (user) => {
         user.profileCompletion.hasProfilePicture = !!user.profilePicture;
         user.profileCompletion.hasBio = !!user.bio && user.bio.length > 10;
         user.profileCompletion.hasFollowers = user.followers.length > 0;
-        user.profileCompletion.hasWalletConnected = !!user.solanaWalletAddress;
         user.profileCompletion.hasVerifiedEmail = user.emailVerification.isVerified;
         
         const requirements = [
@@ -166,17 +165,6 @@ export const getProfileCompletionSteps = (user) => {
         });
     }
     
-    if (!user.profileCompletion.hasWalletConnected) {
-        steps.push({
-            step: 'connect_wallet',
-            title: 'Connect Solana Wallet (Optional)',
-            description: 'Link your wallet to use Aeko Coin and NFT features',
-            completed: false,
-            action: 'Connect your Phantom, Solflare, or other Solana wallet',
-            optional: true // Not required for blue tick
-        });
-    }
-    
     if (!user.profileCompletion.hasFollowers) {
         steps.push({
             step: 'get_followers',
@@ -192,8 +180,7 @@ export const getProfileCompletionSteps = (user) => {
         { key: 'hasVerifiedEmail', step: 'verify_email' },
         { key: 'hasProfilePicture', step: 'add_picture' },
         { key: 'hasBio', step: 'write_bio' },
-        { key: 'hasFollowers', step: 'get_followers' },
-        { key: 'hasWalletConnected', step: 'connect_wallet', optional: true }
+        { key: 'hasFollowers', step: 'get_followers' }
     ];
     
     completedSteps.forEach(({ key, step }) => {
@@ -226,7 +213,6 @@ function getStepTitle(step) {
         verify_email: 'Verify Your Email',
         add_picture: 'Add Profile Picture',
         write_bio: 'Write Your Bio',
-        connect_wallet: 'Connect Solana Wallet',
         get_followers: 'Get Your First Follower'
     };
     return titles[step] || 'Complete Profile Step';
@@ -237,7 +223,6 @@ function getStepDescription(step) {
         verify_email: 'Email address confirmed',
         add_picture: 'Profile picture uploaded',
         write_bio: 'Bio added to profile',
-        connect_wallet: 'Solana wallet connected',
         get_followers: 'First follower gained'
     };
     return descriptions[step] || 'Profile step completed';

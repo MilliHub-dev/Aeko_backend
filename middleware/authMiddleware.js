@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+import { PrismaClient } from '@prisma/client';
 import TwoFactorService from "../services/twoFactorService.js";
+
+const prisma = new PrismaClient();
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -26,7 +28,9 @@ const authMiddleware = async (req, res, next) => {
     }
 
     // Fetch user and attach to request
-    const user = await User.findById(userId).select('-password');
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
     
     if (!user) {
       return res.status(404).json({ 
@@ -34,6 +38,9 @@ const authMiddleware = async (req, res, next) => {
         error: "User not found" 
       });
     }
+
+    // Remove password from user object
+    delete user.password;
 
     // Check if user is banned
     if (user.banned) {

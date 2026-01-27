@@ -1,26 +1,16 @@
-// db.js (or database.js)
-import mongoose from "mongoose";
-import dotenv from "dotenv";
+import { PrismaClient } from '@prisma/client';
 
-dotenv.config();
+const prisma = new PrismaClient();
 
 const connectDB = async () => {
     try {
-        if (!process.env.MONGO_URI) {
-            console.warn("MONGO_URI not configured. Running without database connection.");
-            return;
-        }
-        
-        await mongoose.connect(process.env.MONGO_URI, {
-           // useNewUrlParser: true,
-           // useUnifiedTopology: true,
-        });
-        console.log("MongoDB Connected...");
+        await prisma.$connect();
+        console.log("PostgreSQL Connected via Prisma...");
     } catch (error) {
         console.error("Database connection failed:", error.message);
-        console.warn("Continuing without database connection...");
-        // Don't exit the process, just log the error and continue
+        // process.exit(1); // Optional: decide if you want to crash on db fail
     }
 };
 
-export default connectDB; // ✅ ES Module export
+export { prisma };
+export default connectDB;

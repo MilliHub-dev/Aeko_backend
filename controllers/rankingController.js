@@ -1,4 +1,4 @@
-import User from "../models/User.js";
+import prisma from "../config/db.js";
 
 // Get ranked profiles
 export const getRankedProfiles = async (req, res) => {
@@ -7,12 +7,23 @@ export const getRankedProfiles = async (req, res) => {
     const skip = (page - 1) * limit;
     
     const [users, total] = await Promise.all([
-      User.find()
-        .select('username name profilePicture goldenTick blueTick')
-        .sort({ goldenTick: -1, blueTick: -1, username: 1 })
-        .skip(skip)
-        .limit(parseInt(limit)),
-      User.countDocuments()
+      prisma.user.findMany({
+        select: {
+          username: true,
+          name: true,
+          profilePicture: true,
+          goldenTick: true,
+          blueTick: true
+        },
+        orderBy: [
+          { goldenTick: 'desc' },
+          { blueTick: 'desc' },
+          { username: 'asc' }
+        ],
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.user.count()
     ]);
     
     res.status(200).json({

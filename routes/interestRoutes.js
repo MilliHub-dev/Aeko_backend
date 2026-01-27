@@ -1,10 +1,11 @@
 import express from 'express';
-import Interest from '../models/Interest.js';
+import { PrismaClient } from '@prisma/client';
 import authMiddleware from '../middleware/authMiddleware.js';
 import adminMiddleware from '../middleware/adminMiddleware.js';
 import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 
 const router = express.Router();
+const prisma = new PrismaClient();
 
 /**
  * @swagger
@@ -48,7 +49,9 @@ router.post('/', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwo
         const { name, displayName, description = '', icon = '' } = req.body;
         
         // Check if interest already exists
-        const existingInterest = await Interest.findOne({ name: name.toLowerCase() });
+        const existingInterest = await prisma.interest.findUnique({ 
+            where: { name: name.toLowerCase() } 
+        });
         if (existingInterest) {
             return res.status(409).json({ 
                 success: false, 
@@ -56,14 +59,15 @@ router.post('/', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwo
             });
         }
 
-        const interest = new Interest({
-            name: name.toLowerCase(),
-            displayName,
-            description,
-            icon
+        const interest = await prisma.interest.create({
+            data: {
+                name: name.toLowerCase(),
+                displayName,
+                description,
+                icon,
+                isActive: true
+            }
         });
-
-        await interest.save();
         
         res.status(201).json({
             success: true,
@@ -96,7 +100,9 @@ router.post('/', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwo
  */
 router.get('/', async (req, res) => {
     try {
-        const interests = await Interest.find({ isActive: true });
+        const interests = await prisma.interest.findMany({
+            where: { isActive: true }
+        });
         res.json({
             success: true,
             data: interests
@@ -144,22 +150,28 @@ router.get('/', async (req, res) => {
 router.put('/:id', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
     try {
         const { displayName, description, icon, isActive } = req.body;
-        const interest = await Interest.findById(req.params.id);
         
-        if (!interest) {
+        const existing = await prisma.interest.findUnique({
+            where: { id: req.params.id }
+        });
+        
+        if (!existing) {
             return res.status(404).json({
                 success: false,
                 message: 'Interest not found'
             });
         }
 
-        if (displayName) interest.displayName = displayName;
-        if (description !== undefined) interest.description = description;
-        if (icon !== undefined) interest.icon = icon;
-        if (isActive !== undefined) interest.isActive = isActive;
+        const dataToUpdate = {};
+        if (displayName) dataToUpdate.displayName = displayName;
+        if (description !== undefined) dataToUpdate.description = description;
+        if (icon !== undefined) dataToUpdate.icon = icon;
+        if (isActive !== undefined) dataToUpdate.isActive = isActive;
         
-        interest.updatedAt = Date.now();
-        await interest.save();
+        const interest = await prisma.interest.update({
+            where: { id: req.params.id },
+            data: dataToUpdate
+        });
         
         res.json({
             success: true,
@@ -196,14 +208,7 @@ router.put('/:id', authMiddleware, adminMiddleware, twoFactorMiddleware.requireT
  */
 router.delete('/:id', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
     try {
-        const interest = await Interest.findByIdAndDelete(req.params.id);
-        
-        if (!interest) {
-            return res.status(404).json({
-                success: false,
-                message: 'Interest not found'
-            });
-        }
+        await prisma.interest.delete({ where: { id: req.params.id } });
         
         res.json({
             success: true,

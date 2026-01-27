@@ -1,7 +1,7 @@
 import axios from "axios";
-import User from "../models/User.js";
-import BotConversation from "../models/BotConversation.js";
-import BotSettings from "../models/BotSettings.js";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 class EnhancedAIBot {
   constructor() {
@@ -63,12 +63,17 @@ class EnhancedAIBot {
 
   async generateResponse(userId, message, options = {}) {
     try {
-      const user = await User.findById(userId);
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
       if (!user || !user.botEnabled) {
         return { error: "Bot is disabled for this user" };
       }
 
-      const botSettings = await BotSettings.findOne({ userId }) || await this.createDefaultSettings(userId);
+      const botSettings = await prisma.botSettings.findUnique({
+        where: { userId }
+      }) || await this.createDefaultSettings(userId);
+      
       const personality = this.personalities[botSettings.botPersonality] || this.personalities.friendly;
 
       // Content moderation
@@ -336,9 +341,11 @@ class EnhancedAIBot {
 
   async getConversationContext(userId, limit = 10) {
     try {
-      const conversations = await BotConversation.find({ userId })
-        .sort({ createdAt: -1 })
-        .limit(limit * 2); // Get both user and bot messages
+      const conversations = await prisma.botConversation.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit * 2
+      });
 
       return conversations.reverse().map(conv => ({
         message: conv.userMessage || conv.botResponse,
@@ -352,13 +359,14 @@ class EnhancedAIBot {
 
   async saveConversation(userId, userMessage, botResponse, sentiment) {
     try {
-      await BotConversation.create({
-        userId,
-        userMessage,
-        botResponse,
-        sentiment: sentiment?.label,
-        sentimentScore: sentiment?.score,
-        createdAt: new Date()
+      await prisma.botConversation.create({
+        data: {
+          userId,
+          userMessage,
+          botResponse,
+          sentiment: sentiment?.label,
+          sentimentScore: sentiment?.score
+        }
       });
     } catch (error) {
       console.error('Error saving conversation:', error);
@@ -367,25 +375,33 @@ class EnhancedAIBot {
 
   async updateLearningData(userId, message, response, sentiment) {
     try {
-      const user = await User.findById(userId);
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
       if (!user) return;
 
       // Update user's bot responses for learning
-      if (!user.botResponses) user.botResponses = [];
-      user.botResponses.push(message);
+      let botResponses = user.botAnalytics ? user.botAnalytics.responses || [] : [];
+      botResponses.push(message);
       
       // Keep only recent responses (last 50)
-      if (user.botResponses.length > 50) {
-        user.botResponses = user.botResponses.slice(-50);
+      if (botResponses.length > 50) {
+        botResponses = botResponses.slice(-50);
       }
 
       // Update preferences based on sentiment
-      if (!user.botPreferences) user.botPreferences = {};
+      let botPreferences = user.botPreferences || {};
       if (sentiment) {
-        user.botPreferences.preferredSentiment = sentiment.label;
+        botPreferences = { ...botPreferences, preferredSentiment: sentiment.label };
       }
 
-      await user.save();
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          botAnalytics: { ...user.botAnalytics, responses: botResponses },
+          botPreferences: botPreferences
+        }
+      });
     } catch (error) {
       console.error('Error updating learning data:', error);
     }
@@ -393,14 +409,16 @@ class EnhancedAIBot {
 
   async createDefaultSettings(userId) {
     try {
-      const settings = await BotSettings.create({
-        userId,
-        botEnabled: true,
-        botPersonality: 'friendly',
-        aiProvider: 'openai',
-        contextLength: 10,
-        maxTokens: 500,
-        model: 'gpt-4-turbo-preview'
+      const settings = await prisma.botSettings.create({
+        data: {
+          userId,
+          botEnabled: true,
+          botPersonality: 'friendly',
+          aiProvider: 'openai',
+          contextLength: 10,
+          maxTokens: 500,
+          model: 'gpt-4-turbo-preview'
+        }
       });
       return settings;
     } catch (error) {
@@ -439,9 +457,11 @@ class EnhancedAIBot {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
 
-      const conversations = await BotConversation.find({
-        userId,
-        createdAt: { $gte: cutoffDate }
+      const conversations = await prisma.botConversation.findMany({
+        where: {
+          userId,
+          createdAt: { gte: cutoffDate }
+        }
       });
 
       if (conversations.length === 0) {

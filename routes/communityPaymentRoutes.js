@@ -3,7 +3,7 @@ import { validationResult } from 'express-validator';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { isCommunityAdmin } from '../middleware/communityMiddleware.js';
 import * as paymentService from '../services/communityPaymentService.js';
-import Transaction from '../models/Transaction.js';
+import { prisma } from '../config/db.js';
 import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 import {
   validatePaymentInitialization,
@@ -37,7 +37,7 @@ const router = express.Router();
  *                 description: ID of the community to join
  *               paymentMethod:
  *                 type: string
- *                 enum: [paystack, stripe, aeko_wallet]
+ *                 enum: [paystack, stripe]
  *                 description: Payment method to use
  *     responses:
  *       200:
@@ -109,7 +109,7 @@ router.post('/initialize', authenticate, validatePaymentInitialization, async (r
  *         required: true
  *         schema:
  *           type: string
- *           enum: [paystack, stripe, aeko_wallet]
+ *           enum: [paystack, stripe]
  *         description: Payment method used
  *     responses:
  *       200:
@@ -188,7 +188,7 @@ router.get('/verify', validatePaymentVerification, async (req, res) => {
  *                 minimum: 0.01
  *               method:
  *                 type: string
- *                 enum: [bank, aeko_wallet]
+ *                 enum: [bank]
  *                 description: Withdrawal method
  *               details:
  *                 type: object
@@ -386,7 +386,7 @@ router.get('/:communityId/transactions', authenticate, isCommunityAdmin, async (
     }
 
     // Build query filter
-    const filter = { community: communityId };
+    const filter = { communityId: communityId };
 
     // Filter by status if provided
     if (status) {
@@ -412,7 +412,7 @@ router.get('/:communityId/transactions', authenticate, isCommunityAdmin, async (
             message: 'Invalid startDate format. Use ISO 8601 format (e.g., 2024-01-01)'
           });
         }
-        filter.createdAt.$gte = start;
+        filter.createdAt.gte = start;
       }
       
       if (endDate) {
@@ -425,34 +425,38 @@ router.get('/:communityId/transactions', authenticate, isCommunityAdmin, async (
         }
         // Set to end of day
         end.setHours(23, 59, 59, 999);
-        filter.createdAt.$lte = end;
+        filter.createdAt.lte = end;
       }
     }
 
     // Fetch transactions with pagination
     const [transactions, totalCount] = await Promise.all([
-      Transaction.find(filter)
-        .sort({ createdAt: -1 })
-        .limit(limitNum)
-        .skip((pageNum - 1) * limitNum)
-        .populate('user', 'username email name profilePicture')
-        .lean(),
-      Transaction.countDocuments(filter)
+      prisma.transaction.findMany({
+        where: filter,
+        orderBy: { createdAt: 'desc' },
+        take: limitNum,
+        skip: (pageNum - 1) * limitNum,
+        include: {
+          user: {
+            select: {
+              username: true,
+              email: true,
+              name: true,
+              profilePicture: true
+            }
+          }
+        }
+      }),
+      prisma.transaction.count({ where: filter })
     ]);
 
     // Calculate summary statistics
-    const summaryPipeline = [
-      { $match: { community: communityId } },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-          totalAmount: { $sum: '$amount' }
-        }
-      }
-    ];
-
-    const summaryResults = await Transaction.aggregate(summaryPipeline);
+    const summaryResults = await prisma.transaction.groupBy({
+      by: ['status'],
+      where: { communityId: communityId },
+      _count: { _all: true },
+      _sum: { amount: true }
+    });
 
     // Build summary object
     const summary = {
@@ -464,15 +468,15 @@ router.get('/:communityId/transactions', authenticate, isCommunityAdmin, async (
     };
 
     summaryResults.forEach(result => {
-      const status = result._id;
+      const status = result.status;
       if (summary[status]) {
-        summary[status].count = result.count;
-        summary[status].amount = result.totalAmount;
+        summary[status].count = result._count._all;
+        summary[status].amount = result._sum.amount || 0;
       }
       
       // Total earnings = completed transactions
       if (status === 'completed') {
-        summary.totalEarnings = result.totalAmount;
+        summary.totalEarnings = result._sum.amount || 0;
       }
     });
 

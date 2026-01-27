@@ -1,10 +1,9 @@
 import express from "express";
 import jwt from "jsonwebtoken";
-import Web3 from "web3";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 import emailService from "../services/emailService.js";
-import User from "../models/User.js";
+import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import passport from "../config/passport.js";
 import TwoFactorService from "../services/twoFactorService.js";
@@ -212,9 +211,6 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
  *                       type: boolean
  *                     hasFollowers:
  *                       type: boolean
- *                     hasWalletConnected:
- *                       type: boolean
- *                       description: "Optional - not required for blue tick"
  *                     hasVerifiedEmail:
  *                       type: boolean
  *                     blueTick:
@@ -229,7 +225,7 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
  *     User:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *           description: User ID
  *         name:
@@ -237,7 +233,7 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
  *           description: User's full name
  *         username:
  *           type: string
- *           description: Username
+ *           description: Unique username
  *         email:
  *           type: string
  *           format: email
@@ -254,9 +250,6 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
  *         goldenTick:
  *           type: boolean
  *           description: Golden tick verification status
- *         aekoBalance:
- *           type: number
- *           description: Aeko coin balance
  *         emailVerification:
  *           type: object
  *           properties:
@@ -273,8 +266,6 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
  *               type: boolean
  *             hasFollowers:
  *               type: boolean
- *             hasWalletConnected:
- *               type: boolean
  *             hasVerifiedEmail:
  *               type: boolean
  *         createdAt:
@@ -284,15 +275,14 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
  *           type: string
  *           format: date-time
  *       example:
- *         _id: "507f1f77bcf86cd799439011"
+ *         id: "507f1f77bcf86cd799439011"
  *         name: "John Doe"
  *         username: "johndoe"
  *         email: "john@example.com"
  *         profilePicture: "https://example.com/profile.jpg"
- *         bio: "Tech enthusiast and crypto lover"
+ *         bio: "Tech enthusiast"
  *         blueTick: true
  *         goldenTick: false
- *         aekoBalance: 1500.75
  *         emailVerification:
  *           isVerified: true
  *         profileCompletion:
@@ -303,7 +293,7 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
  *           hasWalletConnected: true
  *           hasVerifiedEmail: true
  *         createdAt: "2024-01-01T12:00:00Z"
- *         updatedAt: "2024-01-01T12:00:00Z" 
+ *         updatedAt: "2024-01-01T12:00:00Z"
  * /api/auth/forgot-password:
  *   post:
  *     summary: Request password reset for user
@@ -337,7 +327,13 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 dotenv.config(); // Load environment variables
 
 const router = express.Router();
-const web3 = new Web3(new Web3.providers.HttpProvider("https://sepolia.infura.io/")); // Polygon zkEVM
+
+// Helper to generate verification code
+const generateVerificationCode = () => {
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    return { code, codeExpiresAt };
+};
 
 // Enhanced user registration with email verification
 /**
@@ -374,7 +370,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     passport.authenticate("google", { session: false, failureRedirect: process.env.OAUTH_FAILURE_REDIRECT || "/auth/failed" }),
   async (req, res) => {
     try {
-      const payload = { id: req.user._id, email: req.user.email };
+      const payload = { id: req.user.id, email: req.user.email };
       const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
       // Set JWT in HttpOnly cookie
@@ -497,20 +493,27 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     const oauthId = payload.sub;
 
     // Find or create user (same logic as web OAuth)
-    let dbUser = await User.findOne({ oauthProvider: 'google', oauthId });
+    let dbUser = await prisma.user.findFirst({ 
+        where: { oauthProvider: 'google', oauthId }
+    });
 
     if (!dbUser) {
       if (email) {
-        dbUser = await User.findOne({ email });
+        dbUser = await prisma.user.findUnique({ where: { email } });
       }
 
       if (dbUser) {
         // Link existing account
-        dbUser.oauthProvider = 'google';
-        dbUser.oauthId = oauthId;
-        dbUser.avatar = user?.photo || dbUser.avatar || '';
-        dbUser.emailVerification.isVerified = true;
-        await dbUser.save();
+        const currentEmailVerification = dbUser.emailVerification || {};
+        dbUser = await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+                oauthProvider: 'google',
+                oauthId: oauthId,
+                avatar: user?.photo || dbUser.avatar || '',
+                emailVerification: { ...currentEmailVerification, isVerified: true }
+            }
+        });
         console.log(`Linked existing account ${email} to Google OAuth (mobile)`);
       } else {
         // Create new user with unique username
@@ -518,35 +521,41 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         let username = usernameBase.replace(/\s+/g, '').toLowerCase();
         let counter = 1;
         
-        while (await User.findOne({ username })) {
+        while (await prisma.user.findUnique({ where: { username } })) {
           username = `${usernameBase.replace(/\s+/g, '').toLowerCase()}${counter}`;
           counter++;
         }
 
-        dbUser = await User.create({
-          name: user?.name || username,
-          username,
-          email: email || `${oauthId}@google-oauth.local`,
-          password: oauthId,
-          oauthProvider: 'google',
-          oauthId,
-          avatar: user?.photo || '',
-          'emailVerification.isVerified': true,
+        dbUser = await prisma.user.create({
+          data: {
+            name: user?.name || username,
+            username,
+            email: email || `${oauthId}@google-oauth.local`,
+            password: oauthId,
+            oauthProvider: 'google',
+            oauthId,
+            avatar: user?.photo || '',
+            emailVerification: { isVerified: true },
+          }
         });
         console.log(`Created new user ${username} via Google OAuth (mobile)`);
       }
     }
 
     // Update last login and avatar
-    dbUser.lastLoginAt = new Date();
+    const updateData = { lastLoginAt: new Date() };
     if (user?.photo && dbUser.avatar !== user.photo) {
-      dbUser.avatar = user.photo;
+      updateData.avatar = user.photo;
     }
-    await dbUser.save();
+    
+    dbUser = await prisma.user.update({
+        where: { id: dbUser.id },
+        data: updateData
+    });
 
     // Generate JWT
     const token = jwt.sign(
-      { id: dbUser._id, email: dbUser.email },
+      { id: dbUser.id, email: dbUser.email },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -557,7 +566,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       token,
       deepLink: `aeko://(home)?token=${token}`,
       user: {
-        _id: dbUser._id,
+        id: dbUser.id,
         name: dbUser.name,
         username: dbUser.username,
         email: dbUser.email,
@@ -566,8 +575,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         bio: dbUser.bio,
         blueTick: dbUser.blueTick,
         goldenTick: dbUser.goldenTick,
-        aekoBalance: dbUser.aekoBalance,
-        emailVerification: { isVerified: dbUser.emailVerification.isVerified },
+        emailVerification: { isVerified: dbUser.emailVerification?.isVerified },
         profileCompletion: dbUser.profileCompletion,
         isAdmin: dbUser.isAdmin,
         oauthProvider: dbUser.oauthProvider,
@@ -612,8 +620,10 @@ router.post("/signup", async (req, res) => {
         }
 
         // Check if user already exists
-        const existingUser = await User.findOne({ 
-            $or: [{ email }, { username }] 
+        const existingUser = await prisma.user.findFirst({ 
+            where: {
+                OR: [{ email }, { username }] 
+            }
         });
 
         if (existingUser) {
@@ -623,27 +633,41 @@ router.post("/signup", async (req, res) => {
             });
         }
 
-        // Create new user (password will be hashed by pre-save hook)
-        const newUser = new User({ 
-            name, 
-            username, 
-            email, 
-            password 
-        });
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Generate and send verification code
-        const verificationCode = newUser.generateVerificationCode();
-        await newUser.save();
+        // Generate verification code
+        const { code: verificationCode, codeExpiresAt } = generateVerificationCode();
+
+        // Create new user
+        const newUser = await prisma.user.create({
+            data: { 
+                name, 
+                username, 
+                email, 
+                password: hashedPassword,
+                emailVerification: {
+                    isVerified: false,
+                    verificationCode: verificationCode,
+                    codeExpiresAt: codeExpiresAt,
+                    codeAttempts: 0,
+                    lastCodeSent: new Date()
+                },
+                profileCompletion: {
+                    hasProfilePicture: false,
+                    hasBio: false,
+                    hasFollowers: false,
+                    hasVerifiedEmail: false,
+                    completionPercentage: 0
+                }
+            }
+        });
 
         // Send verification email
         const emailResult = await emailService.sendVerificationCode(email, verificationCode, name);
         
         if (!emailResult.success) {
             console.error('Failed to send verification email:', emailResult.message);
-        }
-
-        // For development: log the verification code to console if email fails
-        if (!emailResult.success) {
             console.log(`🔐 DEVELOPMENT MODE - Verification code for ${email}: ${verificationCode}`);
         }
 
@@ -652,7 +676,7 @@ router.post("/signup", async (req, res) => {
             message: emailResult.success 
                 ? "Registration successful! Check your email for verification code"
                 : `Registration successful! Email service unavailable. Your verification code is: ${verificationCode}`,
-            userId: newUser._id,
+            userId: newUser.id,
             emailSent: emailResult.success,
             verificationCode: !emailResult.success ? verificationCode : undefined // Only include in response if email failed
         });
@@ -679,7 +703,7 @@ router.post("/verify-email", async (req, res) => {
             });
         }
 
-        const user = await User.findById(userId);
+        const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
             return res.status(404).json({ 
                 success: false, 
@@ -687,48 +711,88 @@ router.post("/verify-email", async (req, res) => {
             });
         }
 
-        if (user.emailVerification.isVerified) {
+        const emailVerification = user.emailVerification || {};
+
+        if (emailVerification.isVerified) {
             return res.status(400).json({ 
                 success: false, 
                 message: "Email already verified" 
             });
         }
 
-        const verificationResult = user.verifyEmailCode(verificationCode);
-        
-        if (!verificationResult.success) {
-            await user.save(); // Save failed attempt count
-            return res.status(400).json({ 
-                success: false, 
-                message: verificationResult.message 
-            });
+        // Verification logic
+        if (!emailVerification.verificationCode) {
+             return res.status(400).json({ success: false, message: 'No verification code found' });
         }
 
-        await user.save();
+        if (new Date(emailVerification.codeExpiresAt) < new Date()) {
+             return res.status(400).json({ success: false, message: 'Verification code has expired' });
+        }
 
-        // Send welcome email
-        await emailService.sendWelcomeEmail(user.email, user.name);
+        if ((emailVerification.codeAttempts || 0) >= 3) {
+             return res.status(400).json({ success: false, message: 'Too many failed attempts. Please request a new code' });
+        }
 
-        // Generate JWT token
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+        if (emailVerification.verificationCode === verificationCode) {
+            // Success
+            const updatedUser = await prisma.user.update({
+                where: { id: userId },
+                data: {
+                    emailVerification: {
+                        ...emailVerification,
+                        isVerified: true,
+                        verificationCode: null,
+                        codeExpiresAt: null,
+                        codeAttempts: 0
+                    },
+                    profileCompletion: {
+                        ...(user.profileCompletion || {}),
+                        hasVerifiedEmail: true,
+                        // Could update percentage here too
+                    }
+                }
+            });
 
-        res.json({ 
-            success: true,
-            message: "Email verified successfully! Welcome to Aeko!",
-            token,
-            deepLink: `aeko://(home)?token=${token}`,
-            user: {
-                _id: user._id,
-                name: user.name,
-                username: user.username,
-                email: user.email,
-                profilePicture: user.profilePicture,
-                bio: user.bio,
-                blueTick: user.blueTick,
-                emailVerification: { isVerified: true },
-                profileCompletion: user.profileCompletion
-            }
-        });
+            // Send welcome email
+            await emailService.sendWelcomeEmail(user.email, user.name);
+
+            // Generate JWT token
+            const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+            res.json({ 
+                success: true,
+                message: "Email verified successfully! Welcome to Aeko!",
+                token,
+                deepLink: `aeko://(home)?token=${token}`,
+                user: {
+                    id: updatedUser.id,
+                    name: updatedUser.name,
+                    username: updatedUser.username,
+                    email: updatedUser.email,
+                    profilePicture: updatedUser.profilePicture,
+                    bio: updatedUser.bio,
+                    blueTick: updatedUser.blueTick,
+                    emailVerification: { isVerified: true },
+                    profileCompletion: updatedUser.profileCompletion
+                }
+            });
+
+        } else {
+            // Fail
+            await prisma.user.update({
+                where: { id: userId },
+                data: {
+                    emailVerification: {
+                        ...emailVerification,
+                        codeAttempts: (emailVerification.codeAttempts || 0) + 1
+                    }
+                }
+            });
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Invalid verification code' 
+            });
+        }
 
     } catch (error) {
         console.error('Email verification error:', error);
@@ -745,7 +809,7 @@ router.post("/resend-verification", async (req, res) => {
     try {
         const { userId } = req.body;
 
-        const user = await User.findById(userId);
+        const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
             return res.status(404).json({ 
                 success: false, 
@@ -753,24 +817,38 @@ router.post("/resend-verification", async (req, res) => {
             });
         }
 
-        if (user.emailVerification.isVerified) {
+        const emailVerification = user.emailVerification || {};
+
+        if (emailVerification.isVerified) {
             return res.status(400).json({ 
                 success: false, 
                 message: "Email already verified" 
             });
         }
 
-        if (!user.canRequestNewCode()) {
-            return res.status(429).json({ 
+        const lastCodeSent = emailVerification.lastCodeSent ? new Date(emailVerification.lastCodeSent) : null;
+        if (lastCodeSent && (new Date() - lastCodeSent < 60000)) {
+             return res.status(429).json({ 
                 success: false, 
                 message: "Please wait 1 minute before requesting a new code" 
             });
         }
 
         // Reset attempts and generate new code
-        user.emailVerification.codeAttempts = 0;
-        const verificationCode = user.generateVerificationCode();
-        await user.save();
+        const { code: verificationCode, codeExpiresAt } = generateVerificationCode();
+        
+        await prisma.user.update({
+            where: { id: userId },
+            data: {
+                emailVerification: {
+                    ...emailVerification,
+                    verificationCode,
+                    codeExpiresAt,
+                    codeAttempts: 0,
+                    lastCodeSent: new Date()
+                }
+            }
+        });
 
         // Send new verification email
         const emailResult = await emailService.sendVerificationCode(user.email, verificationCode, user.name);
@@ -811,7 +889,7 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
             });
         }
 
-        const user = await User.findOne({ email });
+        const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
             console.log(`Login attempt failed: User not found for email ${email}`);
             return res.status(401).json({ 
@@ -832,12 +910,13 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
         console.log(`Login attempt: User ${email} found, password valid, checking verification status...`);
 
         // Check if email is verified
-        if (!user.emailVerification.isVerified) {
+        const emailVerification = user.emailVerification || {};
+        if (!emailVerification.isVerified) {
             return res.status(401).json({ 
                 success: false, 
                 message: "Please verify your email before logging in",
                 emailVerified: false,
-                userId: user._id
+                userId: user.id
             });
         }
 
@@ -850,7 +929,8 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
         }
 
         // Check if 2FA is enabled for this user
-        const twoFactorStatus = await TwoFactorService.get2FAStatus(user._id);
+        // Note: TwoFactorService will need to be checked if it uses Mongoose
+        const twoFactorStatus = await TwoFactorService.get2FAStatus(user.id);
         
         if (twoFactorStatus.isEnabled) {
             // 2FA is enabled, verify the token or backup code
@@ -859,7 +939,7 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
                     success: false,
                     message: "2FA verification required",
                     requires2FA: true,
-                    userId: user._id
+                    userId: user.id
                 });
             }
 
@@ -868,14 +948,14 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
             if (backupCode) {
                 // Verify backup code
                 try {
-                    twoFactorValid = await TwoFactorService.verifyBackupCodeForLogin(user._id, backupCode);
+                    twoFactorValid = await TwoFactorService.verifyBackupCodeForLogin(user.id, backupCode);
                 } catch (error) {
                     console.log(`2FA backup code verification failed for user ${email}:`, error.message);
                 }
             } else if (twoFactorToken) {
                 // Verify TOTP token
                 try {
-                    twoFactorValid = await TwoFactorService.validateLoginWith2FA(user._id, twoFactorToken);
+                    twoFactorValid = await TwoFactorService.validateLoginWith2FA(user.id, twoFactorToken);
                 } catch (error) {
                     console.log(`2FA TOTP verification failed for user ${email}:`, error.message);
                 }
@@ -892,7 +972,7 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
             console.log(`2FA verification successful for user ${email}`);
         }
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+        const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
         // Send login notification email
         const userAgent = req.headers['user-agent'] || 'Unknown Device';
@@ -908,7 +988,7 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
             token,
             deepLink: `aeko://(home)?token=${token}`,
             user: {
-                _id: user._id,
+                id: user.id,
                 name: user.name,
                 username: user.username,
                 email: user.email,
@@ -917,7 +997,7 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
                 blueTick: user.blueTick,
                 goldenTick: user.goldenTick,
                 aekoBalance: user.aekoBalance,
-                emailVerification: { isVerified: user.emailVerification.isVerified },
+                emailVerification: { isVerified: emailVerification.isVerified },
                 profileCompletion: user.profileCompletion,
                 isAdmin: user.isAdmin,
                 twoFactorEnabled: twoFactorStatus.isEnabled
@@ -937,7 +1017,7 @@ router.post("/login", twoFactorMiddleware.checkLoginTwoFactor(), async (req, res
 // Get profile completion status
 router.get("/profile-completion", authMiddleware, async (req, res) => {
     try {
-        const user = await User.findById(req.user.id);
+        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
         if (!user) {
             return res.status(404).json({ 
                 success: false, 
@@ -945,39 +1025,34 @@ router.get("/profile-completion", authMiddleware, async (req, res) => {
             });
         }
 
+        const profileCompletion = user.profileCompletion || {};
+
         // Generate next steps
         const nextSteps = [];
-        if (!user.profileCompletion.hasProfilePicture) {
+        if (!profileCompletion.hasProfilePicture) {
             nextSteps.push("Add a profile picture");
         }
-        if (!user.profileCompletion.hasBio) {
+        if (!profileCompletion.hasBio) {
             nextSteps.push("Write a bio (minimum 10 characters)");
         }
-        if (!user.profileCompletion.hasFollowers) {
+        if (!profileCompletion.hasFollowers) {
             nextSteps.push("Get your first follower");
         }
-        // Note: Wallet connection is optional for blue tick
-        if (!user.profileCompletion.hasWalletConnected) {
-            nextSteps.push("Connect your Solana wallet (optional - for Web3 features)");
-        }
-        if (!user.profileCompletion.hasVerifiedEmail) {
+        if (!profileCompletion.hasVerifiedEmail) {
             nextSteps.push("Verify your email address");
         }
 
         res.json({ 
             success: true,
             profileCompletion: {
-                ...user.profileCompletion.toObject(),
+                ...profileCompletion,
                 blueTick: user.blueTick,
                 nextSteps: nextSteps,
                 requirements: {
-                    profilePicture: user.profileCompletion.hasProfilePicture,
-                    bio: user.profileCompletion.hasBio,
-                    followers: user.profileCompletion.hasFollowers,
-                    email: user.profileCompletion.hasVerifiedEmail
-                },
-                optional: {
-                    wallet: user.profileCompletion.hasWalletConnected
+                    profilePicture: profileCompletion.hasProfilePicture,
+                    bio: profileCompletion.hasBio,
+                    followers: profileCompletion.hasFollowers,
+                    email: profileCompletion.hasVerifiedEmail
                 }
             }
         });
@@ -992,37 +1067,10 @@ router.get("/profile-completion", authMiddleware, async (req, res) => {
     }
 });
 
-// Wallet login with signature verification
-router.post("/wallet-login", async (req, res) => {
-    try {
-        const { address, message, signature } = req.body;
-
-        const recoveredAddress = web3.eth.accounts.recover(message, signature);
-        if (recoveredAddress.toLowerCase() === address.toLowerCase()) {
-            const token = jwt.sign({ address }, process.env.JWT_SECRET, { expiresIn: "24h" });
-            return res.json({ 
-                success: true,
-                message: "Login successful", 
-                token 
-            });
-        }
-        res.status(401).json({ 
-            success: false,
-            message: "Invalid signature" 
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            message: "Error verifying signature", 
-            error: error.message 
-        });
-    }
-});
-
 // Get current authenticated user (useful after OAuth)
 router.get('/me', authMiddleware, async (req, res) => {
     try {
-        const user = await User.findById(req.user.id).select('-password -twoFactorAuth.secret -twoFactorAuth.backupCodes');
+        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
         
         if (!user) {
             return res.status(404).json({ 
@@ -1031,10 +1079,13 @@ router.get('/me', authMiddleware, async (req, res) => {
             });
         }
 
+        // Remove sensitive fields manually since .select() is not available in Prisma findUnique (it is, but we want to exclude)
+        // Actually, explicit select is better
+        
         res.json({ 
             success: true,
             user: {
-                _id: user._id,
+                id: user.id,
                 name: user.name,
                 username: user.username,
                 email: user.email,
@@ -1043,8 +1094,7 @@ router.get('/me', authMiddleware, async (req, res) => {
                 bio: user.bio,
                 blueTick: user.blueTick,
                 goldenTick: user.goldenTick,
-                aekoBalance: user.aekoBalance,
-                emailVerification: { isVerified: user.emailVerification.isVerified },
+                emailVerification: { isVerified: user.emailVerification?.isVerified },
                 profileCompletion: user.profileCompletion,
                 isAdmin: user.isAdmin,
                 oauthProvider: user.oauthProvider,
@@ -1100,7 +1150,7 @@ router.post('/forgot-password', async (req, res) => {
             });
         }
 
-        const user = await User.findOne({ email }).select('_id email');
+        const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
             clearTimeout(timeout);
             // Don't reveal that the email doesn't exist for security
@@ -1111,124 +1161,33 @@ router.post('/forgot-password', async (req, res) => {
         }
 
         const resetToken = jwt.sign(
-            { userId: user._id },
+            { userId: user.id },
             process.env.JWT_SECRET,
-            { expiresIn: '15m' }
+            { expiresIn: '1h' }
         );
 
-        // Use the imported EmailService
-        if (!emailService.isAvailable()) {
-            clearTimeout(timeout);
-            return res.status(500).json({
-                success: false,
-                error: 'Email service is not properly configured.'
-            });
-        }
+        // In a real app, you would save this token hash in the DB to invalidate it after use
+        // or check against it. For now we just send it.
 
-        // Send email in the background
-        const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+        const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
         
-        // Start email sending in the background
-        (async () => {
-            try {
-                console.log(`Sending password reset email to ${email}...`);
-                const emailResult = await emailService.sendPasswordResetEmail(
-                    email,
-                    user.username || 'User',
-                    resetLink
-                );
-                
-                if (emailResult.success) {
-                    console.log(`Password reset email sent to ${email}`);
-                } else {
-                    console.error('Failed to send password reset email:', emailResult.message);
-                }
-            } catch (emailError) {
-                console.error('Background email sending failed:', emailError);
-            }
-        })();
-
-        // Immediately respond to the client
+        await emailService.sendPasswordResetEmail(email, user.name, resetLink);
+        
         clearTimeout(timeout);
-        return res.json({ 
-            success: true, 
-            message: 'If an account with that email exists, a password reset link has been sent.'
+        res.json({ 
+            success: true,
+            message: 'If an account with that email exists, a password reset link has been sent.' 
         });
+
     } catch (error) {
         clearTimeout(timeout);
-        console.error('Password reset error:', error);
-        
-        // Don't expose internal errors to the client
-        const errorMessage = process.env.NODE_ENV === 'development' 
-            ? error.message 
-            : 'An error occurred while processing your request.';
-            
-        res.status(500).json({ 
-            success: false,
-            error: errorMessage
-        });
-    }
-});
-
-// ✅ Reset Password Route
-router.post('/reset-password/:token', async (req, res) => {
-    try {
-        const { token } = req.params;
-        const { newPassword } = req.body;
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        const user = await User.findById(decoded.userId);
-        if (!user) {
-            return res.status(404).json({ 
-                success: false,
-                error: 'Invalid token or user not found' 
-            });
-        }
-
-        user.password = await bcrypt.hash(newPassword, 10);
-        await user.save();
-
-        res.json({ 
-            success: true, 
-            message: 'Password reset successful' 
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            error: error.message 
-        });
-    }
-});
-
-// Temporary route to fix double-hashed passwords (remove after fixing)
-router.post("/fix-password", async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(404).json({ 
-                success: false, 
-                message: "User not found" 
-            });
-        }
-        
-        // Update password (will be hashed by pre-save hook)
-        user.password = password;
-        await user.save();
-        
-        res.json({ 
-            success: true, 
-            message: "Password fixed successfully" 
-        });
-        
-    } catch (error) {
+        console.error('Forgot password error:', error);
         res.status(500).json({ 
             success: false, 
-            message: "Error fixing password", 
+            message: 'Failed to process request', 
             error: error.message 
         });
     }
 });
 
-export default router; // ✅ ES Module export
+export default router;

@@ -1,10 +1,9 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
-import Status from '../models/Status.js';
+import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
-const router = express.Router();
 
+const router = express.Router();
 
 /**
  * @swagger
@@ -38,9 +37,23 @@ const router = express.Router();
  */
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const userId = req.userId || req.user?.id || req.user?._id;
+    const userId = req.userId; // authMiddleware guarantees this
     const { type, content } = req.body;
-    const newStatus = await Status.create({ userId, type, content });
+    
+    // Default expiration: 24 hours from now
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    const newStatus = await prisma.status.create({
+        data: {
+            userId,
+            type,
+            content,
+            expiresAt,
+            reactions: [],
+            originalContent: {},
+            shareMetadata: {}
+        }
+    });
     res.status(201).json({ success: true, status: newStatus });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -90,21 +103,34 @@ router.post('/', authMiddleware, async (req, res) => {
  */
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const requestingUserId = req.userId || req.user?.id || req.user?._id;
+    const requestingUserId = req.userId;
     
     // Find active statuses and populate user information
-    const statuses = await Status.find({ expiresAt: { $gt: new Date() } })
-      .populate('userId', 'username profilePic')
-      .populate('originalContent.creator', 'username profilePic')
-      .populate('shareMetadata.sharedBy', 'username profilePic')
-      .sort({ createdAt: -1 });
+    const statuses = await prisma.status.findMany({
+      where: { 
+          expiresAt: { gt: new Date() } 
+      },
+      include: {
+          user: {
+              select: { id: true, username: true, profilePicture: true, name: true }
+          },
+          sharedPost: {
+              include: {
+                  user: {
+                      select: { id: true, username: true, profilePicture: true, name: true }
+                  }
+              }
+          }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
 
     // Apply blocking filter
     const BlockingService = (await import('../services/blockingService.js')).default;
     const filteredStatuses = [];
     
     for (const status of statuses) {
-      const authorId = status.userId._id || status.userId;
+      const authorId = status.userId;
       const canInteract = await BlockingService.enforceBlockingRules(requestingUserId, authorId);
       if (canInteract) {
         filteredStatuses.push(status);
@@ -112,28 +138,50 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 
     // Format statuses to include shared post information
-    const formattedStatuses = await Promise.all(filteredStatuses.map(async (status) => {
-      const statusObj = status.toObject();
+    const formattedStatuses = filteredStatuses.map(status => {
+      // Create a plain object
+      const statusObj = { ...status };
       
-      // If this is a shared post, add formatted shared post data
-      if (status.isSharedPost()) {
-        const sharedPostData = await status.getSharedPostData();
-        statusObj.sharedPostData = sharedPostData;
+      // Handle shared posts
+      if (status.type === 'shared_post' && (status.sharedPost || status.originalContent)) {
+        // Construct sharedPostData from Prisma relation or fallback to originalContent JSON
+        // Prioritize relation if available, otherwise use stored snapshot
         
-        // Format the display content for shared posts
+        // Note: originalContent is stored as JSON in Prisma model
+        const originalContent = status.originalContent || {};
+        const shareMetadata = status.shareMetadata || {};
+        
+        const originalCreator = status.sharedPost?.user || originalContent.creator;
+        
+        statusObj.sharedPostData = {
+          originalPost: {
+            content: status.sharedPost?.text || originalContent.text,
+            media: status.sharedPost?.media || originalContent.media,
+            type: status.sharedPost?.type || originalContent.type,
+            creator: originalCreator,
+            createdAt: status.sharedPost?.createdAt || originalContent.createdAt
+          },
+          shareInfo: {
+            sharedAt: shareMetadata.sharedAt || status.createdAt,
+            sharedBy: shareMetadata.sharedBy || status.user,
+            additionalContent: status.content
+          }
+        };
+        
+        // Format the display content for shared posts (Legacy format support)
         statusObj.displayContent = {
           type: 'shared_post',
-          originalCreator: sharedPostData.originalPost.creator,
-          originalContent: sharedPostData.originalPost.content,
-          originalMedia: sharedPostData.originalPost.media,
-          originalType: sharedPostData.originalPost.type,
-          originalCreatedAt: sharedPostData.originalPost.createdAt,
-          sharedBy: sharedPostData.shareInfo.sharedBy,
-          sharedAt: sharedPostData.shareInfo.sharedAt,
-          additionalContent: sharedPostData.shareInfo.additionalContent
+          originalCreator: statusObj.sharedPostData.originalPost.creator,
+          originalContent: statusObj.sharedPostData.originalPost.content,
+          originalMedia: statusObj.sharedPostData.originalPost.media,
+          originalType: statusObj.sharedPostData.originalPost.type,
+          originalCreatedAt: statusObj.sharedPostData.originalPost.createdAt,
+          sharedBy: statusObj.sharedPostData.shareInfo.sharedBy,
+          sharedAt: statusObj.sharedPostData.shareInfo.sharedAt,
+          additionalContent: statusObj.sharedPostData.shareInfo.additionalContent
         };
       } else {
-        // For regular statuses, keep the original format
+        // For regular statuses
         statusObj.displayContent = {
           type: status.type,
           content: status.content
@@ -141,7 +189,7 @@ router.get('/', authMiddleware, async (req, res) => {
       }
       
       return statusObj;
-    }));
+    });
 
     res.json({ success: true, statuses: formattedStatuses });
   } catch (error) {
@@ -171,9 +219,19 @@ router.get('/', authMiddleware, async (req, res) => {
  */
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
-    const userId = req.userId || req.user?.id || req.user?._id;
-    const status = await Status.findOneAndDelete({ _id: req.params.id, userId });
-    if (!status) return res.status(404).json({ error: 'Status not found' });
+    const userId = req.userId;
+    
+    // Use deleteMany to ensure we only delete if it belongs to user
+    const result = await prisma.status.deleteMany({
+      where: {
+        id: req.params.id,
+        userId: userId
+      }
+    });
+
+    if (result.count === 0) {
+      return res.status(404).json({ error: 'Status not found or unauthorized' });
+    }
 
     res.json({ success: true, message: 'Status deleted' });
   } catch (error) {
@@ -213,13 +271,26 @@ router.delete('/:id', authMiddleware, async (req, res) => {
  */
 router.post('/:id/react', authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
   try {
-    const userId = req.userId || req.user?.id || req.user?._id;
+    const userId = req.userId;
     const { emoji } = req.body;
-    const status = await Status.findById(req.params.id);
+    
+    const status = await prisma.status.findUnique({
+        where: { id: req.params.id }
+    });
+    
     if (!status) return res.status(404).json({ error: 'Status not found' });
 
-    status.reactions.push({ userId, emoji });
-    await status.save();
+    // Update reactions array (JSON field)
+    // We need to fetch current reactions, append, and update.
+    const currentReactions = Array.isArray(status.reactions) ? status.reactions : [];
+    const newReactions = [...currentReactions, { userId, emoji, createdAt: new Date() }];
+
+    await prisma.status.update({
+        where: { id: req.params.id },
+        data: {
+            reactions: newReactions
+        }
+    });
 
     res.json({ success: true, message: 'Reaction added' });
   } catch (error) {

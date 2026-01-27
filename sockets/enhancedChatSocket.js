@@ -1,8 +1,6 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
-import EnhancedMessage from "../models/EnhancedMessage.js";
-import Chat from "../models/Chat.js";
+import { prisma } from "../config/db.js";
 import enhancedBot from "../ai/enhancedBot.js";
 import multer from "multer";
 import path from "path";
@@ -37,13 +35,15 @@ class EnhancedChatSocket {
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id || decoded.userId).select('-password');
+        const user = await prisma.user.findUnique({
+          where: { id: decoded.id || decoded.userId }
+        });
         
         if (!user) {
           return next(new Error('Authentication error: User not found'));
         }
 
-        socket.userId = user._id.toString();
+        socket.userId = user.id;
         socket.user = user;
         next();
       } catch (error) {
@@ -163,9 +163,9 @@ class EnhancedChatSocket {
       const { receiverId, chatId, content, messageType = 'text', replyToId, metadata } = data;
 
       const messageData = {
-        sender: socket.userId,
-        receiver: receiverId,
-        chatId: chatId,
+        senderId: socket.userId,
+        receiverId,
+        chatId,
         content,
         messageType,
         status: 'sent',
@@ -173,28 +173,36 @@ class EnhancedChatSocket {
           ...metadata,
           deviceType: socket.handshake.headers['user-agent']?.includes('Mobile') ? 'mobile' : 'web',
           clientId: data.clientId
-        }
+        },
+        replyToId: replyToId || null
       };
 
-      if (replyToId) {
-        messageData.replyTo = replyToId;
-      }
-
-      const message = new EnhancedMessage(messageData);
-      await message.save();
-
-      // Populate sender info
-      await message.populate('sender', 'username profilePicture');
-      if (replyToId) {
-        await message.populate('replyTo', 'content sender');
-      }
+      const message = await prisma.enhancedMessage.create({
+        data: messageData,
+        include: {
+          sender: {
+            select: {
+              username: true,
+              profilePicture: true
+            }
+          },
+          replyTo: replyToId
+            ? {
+                select: {
+                  content: true,
+                  sender: true
+                }
+              }
+            : false
+        }
+      });
 
       // Send to receiver
       this.io.to(receiverId).emit('new_message', {
         message,
         chatId,
         sender: {
-          _id: socket.userId,
+          id: socket.userId,
           username: socket.user.username,
           profilePicture: socket.user.profilePicture
         }
@@ -202,7 +210,7 @@ class EnhancedChatSocket {
 
       // Send confirmation to sender
       socket.emit('message_sent', {
-        messageId: message._id,
+        messageId: message.id,
         status: 'sent',
         timestamp: message.createdAt
       });
@@ -211,7 +219,7 @@ class EnhancedChatSocket {
       await this.checkAndTriggerBotResponse(receiverId, content, chatId, socket.userId);
 
       // Update chat's last message
-      await this.updateChatLastMessage(chatId, message._id);
+      await this.updateChatLastMessage(chatId, message.id);
 
     } catch (error) {
       console.error('Send message error:', error);
@@ -256,29 +264,35 @@ class EnhancedChatSocket {
       const voiceBuffer = Buffer.from(voiceData.split(',')[1], 'base64');
       fs.writeFileSync(voicePath, voiceBuffer);
 
-      const messageData = {
-        sender: socket.userId,
-        receiver: receiverId,
-        chatId,
-        messageType: 'voice',
-        voiceMessage: {
-          url: voicePath,
-          duration,
-          waveform: waveform || []
+      const message = await prisma.enhancedMessage.create({
+        data: {
+          senderId: socket.userId,
+          receiverId,
+          chatId,
+          messageType: 'voice',
+          voiceMessage: {
+            url: voicePath,
+            duration,
+            waveform: waveform || []
+          },
+          status: 'sent'
         },
-        status: 'sent'
-      };
-
-      const message = new EnhancedMessage(messageData);
-      await message.save();
-      await message.populate('sender', 'username profilePicture');
+        include: {
+          sender: {
+            select: {
+              username: true,
+              profilePicture: true
+            }
+          }
+        }
+      });
 
       // Send to receiver
       this.io.to(receiverId).emit('new_voice_message', {
         message,
         chatId,
         sender: {
-          _id: socket.userId,
+          id: socket.userId,
           username: socket.user.username,
           profilePicture: socket.user.profilePicture
         }
@@ -286,12 +300,12 @@ class EnhancedChatSocket {
 
       // Send confirmation to sender
       socket.emit('voice_message_sent', {
-        messageId: message._id,
+        messageId: message.id,
         status: 'sent'
       });
 
       // Update chat's last message
-      await this.updateChatLastMessage(chatId, message._id);
+      await this.updateChatLastMessage(chatId, message.id);
 
     } catch (error) {
       console.error('Send voice message error:', error);
@@ -342,21 +356,20 @@ class EnhancedChatSocket {
         return;
       }
 
-      // Save bot message
-      const botMessage = new EnhancedMessage({
-        sender: socket.userId, // Bot responds as if from user's perspective
-        receiver: socket.userId,
-        chatId,
-        content: botResponse.response,
-        messageType: 'ai_response',
-        isBot: true,
-        botPersonality: botResponse.personality,
-        aiProvider: botResponse.provider,
-        confidence: botResponse.confidence,
-        status: 'sent'
+      const botMessage = await prisma.enhancedMessage.create({
+        data: {
+          senderId: socket.userId,
+          receiverId: socket.userId,
+          chatId,
+          content: botResponse.response,
+          messageType: 'ai_response',
+          isBot: true,
+          botPersonality: botResponse.personality,
+          aiProvider: botResponse.provider,
+          confidence: botResponse.confidence,
+          status: 'sent'
+        }
       });
-
-      await botMessage.save();
 
       // Send bot response to user
       socket.emit('bot_response', {
@@ -378,29 +391,29 @@ class EnhancedChatSocket {
 
   async checkAndTriggerBotResponse(receiverId, userMessage, chatId, senderId) {
     try {
-      const receiver = await User.findById(receiverId);
+      const receiver = await prisma.user.findUnique({
+        where: { id: receiverId }
+      });
       
       if (receiver && receiver.botEnabled) {
         // Generate bot auto-reply
         const botResponse = await enhancedBot.generateResponse(receiverId, userMessage);
         
         if (botResponse && !botResponse.error) {
-          // Save bot message
-          const botMessage = new EnhancedMessage({
-            sender: receiverId,
-            receiver: senderId,
-            chatId,
-            content: botResponse.response,
-            messageType: 'ai_response',
-            isBot: true,
-            botPersonality: botResponse.personality,
-            aiProvider: botResponse.provider,
-            confidence: botResponse.confidence,
-            status: 'sent'
+          const botMessage = await prisma.enhancedMessage.create({
+            data: {
+              senderId: receiverId,
+              receiverId: senderId,
+              chatId,
+              content: botResponse.response,
+              messageType: 'ai_response',
+              isBot: true,
+              botPersonality: botResponse.personality,
+              aiProvider: botResponse.provider,
+              confidence: botResponse.confidence,
+              status: 'sent'
+            }
           });
-
-          await botMessage.save();
-          await botMessage.populate('sender', 'username profilePicture');
 
           // Send bot response to original sender
           this.io.to(senderId).emit('bot_auto_reply', {
@@ -433,16 +446,35 @@ class EnhancedChatSocket {
     try {
       const { messageId, emoji } = data;
 
-      const message = await EnhancedMessage.findById(messageId);
+      const message = await prisma.enhancedMessage.findUnique({
+        where: { id: messageId },
+        select: { chatId: true, reactions: true }
+      });
       if (!message) {
         socket.emit('reaction_error', { error: 'Message not found' });
         return;
       }
 
-      await message.addReaction(socket.userId, emoji);
+      const reactions = Array.isArray(message.reactions) ? message.reactions : [];
+      const exists = reactions.some(
+        (r) => r.userId === socket.userId && r.emoji === emoji
+      );
+
+      if (!exists) {
+        reactions.push({
+          userId: socket.userId,
+          emoji,
+          timestamp: new Date().toISOString()
+        });
+
+        await prisma.enhancedMessage.update({
+          where: { id: messageId },
+          data: { reactions }
+        });
+      }
 
       // Notify all participants in the chat
-      this.io.to(message.chatId.toString()).emit('reaction_added', {
+      this.io.to(message.chatId).emit('reaction_added', {
         messageId,
         userId: socket.userId,
         username: socket.user.username,
@@ -460,16 +492,29 @@ class EnhancedChatSocket {
     try {
       const { messageId, emoji } = data;
 
-      const message = await EnhancedMessage.findById(messageId);
+      const message = await prisma.enhancedMessage.findUnique({
+        where: { id: messageId },
+        select: { chatId: true, reactions: true }
+      });
       if (!message) {
         socket.emit('reaction_error', { error: 'Message not found' });
         return;
       }
 
-      await message.removeReaction(socket.userId, emoji);
+      const reactions = Array.isArray(message.reactions) ? message.reactions : [];
+      const filtered = reactions.filter(
+        (r) => !(r.userId === socket.userId && r.emoji === emoji)
+      );
+
+      if (filtered.length !== reactions.length) {
+        await prisma.enhancedMessage.update({
+          where: { id: messageId },
+          data: { reactions: filtered }
+        });
+      }
 
       // Notify all participants in the chat
-      this.io.to(message.chatId.toString()).emit('reaction_removed', {
+      this.io.to(message.chatId).emit('reaction_removed', {
         messageId,
         userId: socket.userId,
         emoji
@@ -544,12 +589,30 @@ class EnhancedChatSocket {
     try {
       const { messageId } = data;
 
-      const message = await EnhancedMessage.findById(messageId);
+      const message = await prisma.enhancedMessage.findUnique({
+        where: { id: messageId },
+        select: { senderId: true, readBy: true }
+      });
       if (message) {
-        await message.markAsRead(socket.userId);
-        
-        // Notify sender that message was read
-        this.io.to(message.sender.toString()).emit('message_read', {
+        const readBy = Array.isArray(message.readBy) ? message.readBy : [];
+        const exists = readBy.some((r) => r.userId === socket.userId);
+
+        if (!exists) {
+          readBy.push({
+            userId: socket.userId,
+            readAt: new Date().toISOString()
+          });
+
+          await prisma.enhancedMessage.update({
+            where: { id: messageId },
+            data: {
+              readBy,
+              status: "read"
+            }
+          });
+        }
+
+        this.io.to(message.senderId).emit("message_read", {
           messageId,
           readBy: socket.userId,
           readAt: new Date()
@@ -562,10 +625,12 @@ class EnhancedChatSocket {
 
   async sendUnreadCount(socket) {
     try {
-      const unreadCount = await EnhancedMessage.countDocuments({
-        receiver: socket.userId,
-        status: { $ne: 'read' },
-        deleted: false
+      const unreadCount = await prisma.enhancedMessage.count({
+        where: {
+          receiverId: socket.userId,
+          NOT: { status: "read" },
+          deleted: false
+        }
       });
 
       socket.emit('unread_count', { count: unreadCount });
@@ -576,9 +641,7 @@ class EnhancedChatSocket {
 
   async updateChatLastMessage(chatId, messageId) {
     try {
-      await Chat.findByIdAndUpdate(chatId, {
-        lastMessage: messageId
-      });
+      // No-op for now; Chat model does not track last message
     } catch (error) {
       console.error('Update chat last message error:', error);
     }

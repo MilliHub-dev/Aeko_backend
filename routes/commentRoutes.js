@@ -1,142 +1,88 @@
 import express from "express";
-import Comment from "../models/Comment.js";
-import Post from "../models/Post.js";
+import { PrismaClient } from '@prisma/client';
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
 const router = express.Router();
-/**
- * @swagger
- * /api/comments/{postId}:
- *   post:
- *     summary: Add a comment to a post
- *     tags:
- *       - Comments
- *     parameters:
- *       - in: path
- *         name: postId
- *         required: true
- *         description: ID of the post to comment on
- *         schema:
- *           type: string
- *           pattern: '^[a-fA-F0-9]{24}$'
- *           example: '68cad398b391bdd7d991d5c7'
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               text:
- *                 type: string
- *                 description: Comment text
- *             required:
- *               - text
- *     responses:
- *       201:
- *         description: Comment added successfully
- *       404:
- *         description: Post not found
- *       500:
- *         description: Server error
- *
- *   get:
- *     summary: Get comments for a post
- *     tags:
- *       - Comments
- *     parameters:
- *       - in: path
- *         name: postId
- *         required: true
- *         description: ID of the post to get comments for
- *         schema:
- *           type: string
- *           pattern: '^[a-fA-F0-9]{24}$'
- *           example: '68cad398b391bdd7d991d5c7'
- *     responses:
- *       200:
- *         description: List of comments for the post
- *       500:
- *         description: Server error
- *
- * /api/comments/like/{commentId}:
- *   post:
- *     summary: Like a comment
- *     tags:
- *       - Comments
- *     parameters:
- *       - in: path
- *         name: commentId
- *         required: true
- *         description: ID of the comment to like
- *         schema:
- *           type: string
- *           pattern: '^[a-fA-F0-9]{24}$'
- *           example: '68cad398b391bdd7d991d5c7'
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               user:
- *                 type: string
- *                 description: User ID of the liker
- *             required:
- *               - user
- *     responses:
- *       200:
- *         description: Comment liked successfully
- *       404:
- *         description: Comment not found
- *       500:
- *         description: Server error
- */
-
-
+const prisma = new PrismaClient();
 
 // Add a comment to a post
 router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
   try {
     const { text } = req.body;
-    const post = await Post.findById(req.params.postId);
+    const postId = req.params.postId;
+    
+    // Fetch post to verify it exists and get engagement data
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: {
+        id: true,
+        comments: true,
+        likes: true,
+        reposts: true,
+        engagement: true
+      }
+    });
+
     if (!post) return res.status(404).json({ error: "Post not found" });
 
-    const user = req.userId || req.body.user; // prefer auth, fallback for backward-compat
-    if (!user) return res.status(400).json({ error: "User not provided" });
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const newComment = new Comment({ user, post: post._id, text });
-    await newComment.save();
+    // Create comment
+    const newComment = await prisma.comment.create({
+      data: {
+        text,
+        postId,
+        userId,
+        likes: [] // Initialize empty likes
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+            username: true,
+            profilePicture: true
+          }
+        }
+      }
+    });
 
-    post.comments.push(newComment._id);
-    await post.save();
-
-    // Update engagement counts on the post
-    if (typeof post.updateEngagement === 'function') {
-      await post.updateEngagement();
-    } else {
-      post.engagement = post.engagement || {};
-      post.engagement.totalComments = post.comments.length;
-      post.engagement.totalLikes = post.likes?.length || 0;
-      post.engagement.totalShares = post.reposts?.length || 0;
-      await post.save();
-    }
-
-    const populatedComment = await Comment.findById(newComment._id)
-      .populate('user', 'name email username profilePicture');
+    // Calculate new stats
+    const totalComments = (post.comments ? post.comments.length : 0) + 1; // +1 for the new one (though create already adds it, count might lag if not refreshed)
+    // Actually better to use Prisma count or just increment
+    // Since we didn't fetch all comments, we can rely on existing count from engagement or just update it.
+    
+    // Update post engagement
+    const engagement = post.engagement || {};
+    const totalLikes = Array.isArray(post.likes) ? post.likes.length : 0;
+    const totalShares = post.reposts ? post.reposts.length : 0;
+    
+    // We'll update the engagement JSON
+    await prisma.post.update({
+      where: { id: postId },
+      data: {
+        engagement: {
+          ...engagement,
+          totalComments: totalComments, // Approximate increment
+          totalLikes,
+          totalShares
+        }
+      }
+    });
 
     res.status(201).json({
-      comment: populatedComment,
+      comment: newComment,
       postCounts: {
-        totalComments: post.engagement.totalComments || 0,
-        totalLikes: post.engagement.totalLikes || 0,
-        totalShares: post.engagement.totalShares || 0,
-        engagementRate: post.engagement.engagementRate || 0
+        totalComments: totalComments,
+        totalLikes: totalLikes,
+        totalShares: totalShares,
+        engagementRate: engagement.engagementRate || 0
       }
     });
   } catch (error) {
+    console.error("Error creating comment:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -144,13 +90,19 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
 // Like a comment
 router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
     try {
-        const { user } = req.body;
-        const comment = await Comment.findById(req.params.commentId).populate('user');
+        const userId = req.userId;
+        const commentId = req.params.commentId;
+
+        const comment = await prisma.comment.findUnique({
+            where: { id: commentId },
+            include: { user: true }
+        });
+
         if (!comment) return res.status(404).json({ error: "Comment not found" });
 
         // Check if user can interact with comment author
-        const currentUserId = req.user?.id || req.user?._id;
-        const commentAuthorId = comment.user._id || comment.user;
+        const currentUserId = userId;
+        const commentAuthorId = comment.userId;
         
         if (currentUserId && commentAuthorId) {
             const BlockingService = (await import('../services/blockingService.js')).default;
@@ -163,10 +115,18 @@ router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInte
             }
         }
 
-        if (!comment.likes.includes(user)) {
-            comment.likes.push(user);
-            await comment.save();
+        // Check if already liked
+        let likes = Array.isArray(comment.likes) ? comment.likes : [];
+        if (!likes.includes(userId)) {
+            likes.push(userId);
+            
+            const updatedComment = await prisma.comment.update({
+                where: { id: commentId },
+                data: { likes: likes }
+            });
+            return res.json(updatedComment);
         }
+        
         res.json(comment);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -174,20 +134,45 @@ router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInte
 });
 
 // Get comments for a post
-router.get("/:postId", authMiddleware, BlockingMiddleware.filterBlockedContent('comments', 'user._id'), async (req, res) => {
+router.get("/:postId", authMiddleware, async (req, res) => {
     try {
-        const comments = await Comment.find({ post: req.params.postId })
-            .populate("user", "name email username profilePicture")
-            .sort({ createdAt: -1 });
-
-        // Store comments in res.locals for middleware filtering
-        res.locals.comments = comments;
+        const comments = await prisma.comment.findMany({
+            where: { postId: req.params.postId },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        username: true,
+                        profilePicture: true
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        const BlockingService = (await import('../services/blockingService.js')).default;
+        const currentUserId = req.user?.id || req.user?._id;
         
-        // Apply blocking filter through middleware, then return filtered results
-        res.json(res.locals.comments || comments);
+        let finalComments = comments;
+        if (currentUserId) {
+             const filtered = [];
+             for (const comment of comments) {
+                 const authorId = comment.user?.id || comment.userId;
+                 if (authorId) {
+                     const canInteract = await BlockingService.enforceBlockingRules(currentUserId, authorId);
+                     if (canInteract) filtered.push(comment);
+                 } else {
+                     filtered.push(comment);
+                 }
+             }
+             finalComments = filtered;
+        }
+
+        res.json(finalComments);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-export default router; // ✅ ES Module export
+export default router;

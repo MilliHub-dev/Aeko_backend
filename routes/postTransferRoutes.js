@@ -1,6 +1,5 @@
 import express from "express";
-import Post from "../models/Post.js";
-import User from "../models/User.js";
+import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -45,7 +44,7 @@ const router = express.Router();
 router.post("/transfer", authMiddleware, async (req, res) => {
   try {
     const { postId, toUserId, reason = "" } = req.body;
-    const currentUserId = req.user.id;
+    const currentUserId = req.user.id || req.user._id;
 
     // Validate input
     if (!postId || !toUserId) {
@@ -56,7 +55,7 @@ router.post("/transfer", authMiddleware, async (req, res) => {
     }
 
     // Get the post
-    const post = await Post.findById(postId);
+    const post = await prisma.post.findUnique({ where: { id: postId } });
     if (!post) {
       return res.status(404).json({ 
         success: false, 
@@ -65,7 +64,7 @@ router.post("/transfer", authMiddleware, async (req, res) => {
     }
 
     // Check if current user owns the post
-    if (post.user.toString() !== currentUserId) {
+    if (post.userId !== currentUserId) {
       return res.status(403).json({ 
         success: false, 
         message: "You can only transfer your own posts" 
@@ -73,7 +72,7 @@ router.post("/transfer", authMiddleware, async (req, res) => {
     }
 
     // Check if target user exists
-    const targetUser = await User.findById(toUserId);
+    const targetUser = await prisma.user.findUnique({ where: { id: toUserId } });
     if (!targetUser) {
       return res.status(404).json({ 
         success: false, 
@@ -89,32 +88,37 @@ router.post("/transfer", authMiddleware, async (req, res) => {
       });
     }
 
-    // Check if post is an NFT (special handling required)
-    if (post.nftMinted) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Cannot transfer posts that have been minted as NFTs. Use NFT marketplace instead." 
-      });
-    }
+
 
     // Perform the transfer
-    await post.transferTo(toUserId, currentUserId, reason);
+    const transferEntry = {
+      fromUser: currentUserId,
+      toUser: toUserId,
+      reason,
+      timestamp: new Date()
+    };
 
-    // Update user post counts
-    await User.findByIdAndUpdate(currentUserId, {
-      $pull: { posts: postId }
+    const transferHistory = Array.isArray(post.transferHistory) ? post.transferHistory : [];
+    transferHistory.push(transferEntry);
+
+    const ownershipChain = Array.isArray(post.ownershipChain) ? post.ownershipChain : [];
+    if (!ownershipChain.includes(toUserId)) {
+      ownershipChain.push(toUserId);
+    }
+
+    // In Prisma, updating the relation automatically updates the foreign key
+    const updatedPost = await prisma.post.update({
+      where: { id: postId },
+      data: {
+        userId: toUserId,
+        transferHistory,
+        ownershipChain
+      },
+      include: {
+        user: { select: { username: true, profilePicture: true } },
+        originalOwner: { select: { username: true, profilePicture: true } }
+      }
     });
-
-    await User.findByIdAndUpdate(toUserId, {
-      $push: { posts: postId }
-    });
-
-    // Populate the updated post for response
-    const updatedPost = await Post.findById(postId)
-      .populate('user', 'username profilePicture')
-      .populate('originalOwner', 'username profilePicture')
-      .populate('transferHistory.fromUser', 'username')
-      .populate('transferHistory.toUser', 'username');
 
     res.json({
       success: true,
@@ -162,11 +166,13 @@ router.get("/transfer-history/:postId", async (req, res) => {
   try {
     const { postId } = req.params;
 
-    const post = await Post.findById(postId)
-      .populate('originalOwner', 'username profilePicture')
-      .populate('user', 'username profilePicture')
-      .populate('transferHistory.fromUser', 'username profilePicture')
-      .populate('transferHistory.toUser', 'username profilePicture');
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      include: {
+        originalOwner: { select: { username: true, profilePicture: true } },
+        user: { select: { username: true, profilePicture: true } }
+      }
+    });
 
     if (!post) {
       return res.status(404).json({ 
@@ -175,12 +181,34 @@ router.get("/transfer-history/:postId", async (req, res) => {
       });
     }
 
+    // Manually populate transfer history if needed
+    // Assuming transferHistory is array of objects { fromUser: id, toUser: id, ... }
+    let transferHistory = post.transferHistory;
+    if (Array.isArray(transferHistory) && transferHistory.length > 0) {
+      const userIds = new Set();
+      transferHistory.forEach(t => {
+        if (t.fromUser) userIds.add(t.fromUser);
+        if (t.toUser) userIds.add(t.toUser);
+      });
+      
+      const users = await prisma.user.findMany({
+        where: { id: { in: Array.from(userIds) } },
+        select: { id: true, username: true, profilePicture: true }
+      });
+      
+      transferHistory = transferHistory.map(t => ({
+        ...t,
+        fromUser: users.find(u => u.id === t.fromUser) || { id: t.fromUser },
+        toUser: users.find(u => u.id === t.toUser) || { id: t.toUser }
+      }));
+    }
+
     res.json({
       success: true,
       data: {
         postId,
         ownershipChain: post.ownershipChain,
-        transferHistory: post.transferHistory,
+        transferHistory: transferHistory,
         currentOwner: post.user,
         originalOwner: post.originalOwner
       }
@@ -191,207 +219,6 @@ router.get("/transfer-history/:postId", async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: "Server error getting transfer history" 
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/posts/my-received-posts:
- *   get:
- *     summary: Get posts received through transfers
- *     tags: [Post Transfer]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Received posts retrieved successfully
- */
-router.get("/my-received-posts", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    // Find posts where user is current owner but not original owner
-    const receivedPosts = await Post.find({
-      user: userId,
-      originalOwner: { $ne: userId, $exists: true }
-    })
-    .populate('originalOwner', 'username profilePicture')
-    .populate('transferHistory.fromUser', 'username profilePicture')
-    .sort({ updatedAt: -1 });
-
-    res.json({
-      success: true,
-      data: {
-        posts: receivedPosts,
-        count: receivedPosts.length
-      }
-    });
-
-  } catch (error) {
-    console.error("Get received posts error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error getting received posts" 
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/posts/my-transferred-posts:
- *   get:
- *     summary: Get posts that user has transferred to others
- *     tags: [Post Transfer]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Transferred posts retrieved successfully
- */
-router.get("/my-transferred-posts", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    // Find posts where user is original owner but not current owner
-    const transferredPosts = await Post.find({
-      originalOwner: userId,
-      user: { $ne: userId }
-    })
-    .populate('user', 'username profilePicture')
-    .populate('transferHistory.toUser', 'username profilePicture')
-    .sort({ updatedAt: -1 });
-
-    res.json({
-      success: true,
-      data: {
-        posts: transferredPosts,
-        count: transferredPosts.length
-      }
-    });
-
-  } catch (error) {
-    console.error("Get transferred posts error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error getting transferred posts" 
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/posts/increment-view/{postId}:
- *   post:
- *     summary: Increment view count for a post
- *     tags: [Post Transfer]
- *     parameters:
- *       - in: path
- *         name: postId
- *         required: true
- *         schema:
- *           type: string
- *         description: Post ID
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 description: Optional user ID for unique view tracking
- *     responses:
- *       200:
- *         description: View incremented successfully
- *       404:
- *         description: Post not found
- */
-router.post("/increment-view/:postId", async (req, res) => {
-  try {
-    const { postId } = req.params;
-    const { userId } = req.body;
-
-    const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Post not found" 
-      });
-    }
-
-    // Increment view
-    await post.incrementView(userId);
-
-    // Update engagement metrics
-    await post.updateEngagement();
-
-    res.json({
-      success: true,
-      data: {
-        views: post.views,
-        uniqueViewers: post.uniqueViewers.length,
-        isEligibleForNFT: post.isEligibleForNFT,
-        engagementRate: post.engagement.engagementRate
-      }
-    });
-
-  } catch (error) {
-    console.error("Increment view error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error incrementing view" 
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/posts/nft-eligible:
- *   get:
- *     summary: Get posts eligible for NFT minting
- *     tags: [Post Transfer]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: NFT eligible posts retrieved successfully
- */
-router.get("/nft-eligible", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    // Get user's Aeko balance to check eligibility
-    const user = await User.findById(userId);
-    const hasAekoCoins = user.aekoBalance > 0;
-
-    const eligiblePosts = await Post.find({
-      user: userId,
-      isEligibleForNFT: true,
-      nftMinted: false,
-      views: { $gte: 200000 }
-    }).sort({ views: -1 });
-
-    res.json({
-      success: true,
-      data: {
-        posts: eligiblePosts,
-        userAekoBalance: user.aekoBalance,
-        hasAekoCoins,
-        eligibilityMet: hasAekoCoins && eligiblePosts.length > 0,
-        requirements: {
-          minViews: 200000,
-          mustHoldAekoCoins: true,
-          postNotAlreadyMinted: true
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error("Get NFT eligible posts error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error getting NFT eligible posts" 
     });
   }
 });
