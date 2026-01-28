@@ -3,6 +3,226 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Shared Styles & Layout
+const getEmailTemplate = (title, content, username = '') => {
+  const currentYear = new Date().getFullYear();
+  const frontendUrl = process.env.FRONTEND_URL || 'https://aeko.social';
+  
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${title} - Aeko</title>
+      <!-- Import Inter Font -->
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+      <style>
+        /* Reset & Base */
+        body { 
+          font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+          margin: 0; 
+          padding: 0; 
+          background-color: #f3f4f6; 
+          color: #1f2937;
+          -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Layout */
+        .wrapper {
+          width: 100%;
+          background-color: #f3f4f6;
+          padding: 40px 0;
+        }
+        
+        .container { 
+          max-width: 500px; 
+          margin: 0 auto; 
+          background-color: #ffffff; 
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Header */
+        .header { 
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+          padding: 30px 40px; 
+          text-align: center;
+        }
+        
+        .logo {
+          font-size: 28px;
+          font-weight: 800;
+          color: #ffffff;
+          letter-spacing: -1px;
+          margin: 0;
+          text-transform: lowercase;
+        }
+
+        .header-title {
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 16px;
+          font-weight: 500;
+          margin-top: 10px;
+          margin-bottom: 0;
+        }
+        
+        /* Content */
+        .content { 
+          padding: 40px; 
+          line-height: 1.6;
+        }
+        
+        h2 {
+          font-size: 22px;
+          font-weight: 700;
+          color: #111827;
+          margin-top: 0;
+          margin-bottom: 20px;
+        }
+        
+        p {
+          font-size: 15px;
+          color: #4b5563;
+          margin-bottom: 20px;
+        }
+        
+        /* Components */
+        .btn { 
+          display: inline-block; 
+          padding: 14px 32px; 
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+          color: #ffffff !important; 
+          text-decoration: none; 
+          border-radius: 50px; 
+          font-weight: 600;
+          font-size: 15px;
+          text-align: center;
+          transition: transform 0.2s, box-shadow 0.2s;
+          box-shadow: 0 4px 6px -1px rgba(102, 126, 234, 0.4);
+          margin: 20px 0;
+        }
+        
+        .code-box { 
+          background-color: #f9fafb; 
+          border: 1px dashed #d1d5db; 
+          border-radius: 12px; 
+          padding: 24px; 
+          text-align: center; 
+          margin: 24px 0; 
+        }
+        
+        .verification-code { 
+          font-family: 'Courier New', monospace;
+          font-size: 32px; 
+          font-weight: 700; 
+          color: #4f46e5; 
+          letter-spacing: 8px; 
+          margin: 10px 0; 
+        }
+
+        .alert-box {
+          background-color: #fffbeb;
+          border-left: 4px solid #f59e0b;
+          padding: 16px;
+          border-radius: 4px;
+          font-size: 14px;
+          color: #92400e;
+          margin: 24px 0;
+        }
+
+        .feature-list {
+          list-style: none;
+          padding: 0;
+          margin: 20px 0;
+        }
+
+        .feature-item {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+          font-size: 15px;
+          color: #4b5563;
+        }
+
+        .feature-icon {
+          margin-right: 12px;
+          font-size: 18px;
+        }
+        
+        /* Footer */
+        .footer { 
+          background-color: #f9fafb; 
+          padding: 30px; 
+          text-align: center; 
+          border-top: 1px solid #e5e7eb; 
+        }
+        
+        .footer p {
+          font-size: 13px;
+          color: #9ca3af;
+          margin-bottom: 10px;
+        }
+        
+        .social-links a {
+          color: #6b7280;
+          text-decoration: none;
+          margin: 0 8px;
+          font-size: 13px;
+          font-weight: 500;
+        }
+
+        .divider {
+          height: 1px;
+          background-color: #e5e7eb;
+          margin: 30px 0;
+        }
+
+        /* Responsive */
+        @media only screen and (max-width: 600px) {
+          .wrapper { padding: 20px 10px; }
+          .container { width: 100% !important; }
+          .content { padding: 30px 20px; }
+          .header { padding: 30px 20px; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="wrapper">
+        <div class="container">
+          <!-- Header -->
+          <div class="header">
+            <h1 class="logo">aeko</h1>
+            <p class="header-title">${title}</p>
+          </div>
+          
+          <!-- Content -->
+          <div class="content">
+            ${username ? `<h2>Hi ${username} 👋</h2>` : ''}
+            ${content}
+          </div>
+          
+          <!-- Footer -->
+          <div class="footer">
+            <p>&copy; ${currentYear} Aeko Social. All rights reserved.</p>
+            <div class="social-links">
+              <a href="${frontendUrl}/help">Help Center</a> •
+              <a href="${frontendUrl}/privacy">Privacy</a> •
+              <a href="${frontendUrl}/terms">Terms</a>
+            </div>
+            <p style="margin-top: 20px;">
+              You received this email because you have an account on Aeko.<br>
+              If you didn't make this request, please contact support.
+            </p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 class EmailService {
   constructor() {
     // Check if ZeptoMail API key is configured
@@ -54,62 +274,26 @@ class EmailService {
       return { success: true, message: 'Verification code generated (Email service unavailable)' };
     }
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Email Verification - Aeko</title>
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-          .container { max-width: 600px; margin: 0 auto; background-color: white; }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
-          .content { padding: 40px 30px; }
-          .code-box { background-color: #f8f9ff; border: 2px dashed #667eea; border-radius: 10px; padding: 20px; text-align: center; margin: 30px 0; }
-          .verification-code { font-size: 36px; font-weight: bold; color: #667eea; letter-spacing: 8px; margin: 10px 0; }
-          .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
-          .button { display: inline-block; padding: 12px 30px; background-color: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
-          .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🚀 Welcome to Aeko!</h1>
-            <p>Verify your email to get started</p>
-          </div>
-          
-          <div class="content">
-            <h2>Hi ${username}! 👋</h2>
-            <p>Thank you for joining <strong>Aeko</strong> - the next-generation social media platform!</p>
-            
-            <p>To complete your registration and unlock all features, please verify your email address using the code below:</p>
-            
-            <div class="code-box">
-              <p><strong>Your Verification Code:</strong></p>
-              <div class="verification-code">${code}</div>
-              <p style="color: #6c757d; font-size: 14px;">This code expires in 10 minutes</p>
-            </div>
-            
-            <div class="warning">
-              <strong>⚠️ Important:</strong> You have 3 attempts to enter the correct code. If you fail, you'll need to request a new one.
-            </div>
-            
-            <p>If you didn't create an account with Aeko, you can safely ignore this email.</p>
-          </div>
-          
-          <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Aeko Social. All rights reserved.</p>
-            <p>This is an automated message, please do not reply.</p>
-          </div>
-        </div>
-      </body>
-      </html>
+    const content = `
+      <p>Thank you for joining <strong>Aeko</strong> - the next-generation social media platform! We're excited to have you on board.</p>
+      
+      <p>To ensure the security of your account, please verify your email address using the code below:</p>
+      
+      <div class="code-box">
+        <p style="margin-bottom: 5px; font-size: 13px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Verification Code</p>
+        <div class="verification-code">${code}</div>
+        <p style="color: #9ca3af; font-size: 13px; margin-top: 5px;">Expires in 10 minutes</p>
+      </div>
+      
+      <div class="alert-box">
+        <strong>⚠️ Security Notice:</strong> Never share this code with anyone. Aeko staff will never ask for your verification code.
+      </div>
     `;
 
+    const htmlContent = getEmailTemplate("Verify Your Email", content, username);
+
     try {
-      const emailParams = this.createEmailParams(email, username, "🔐 Your Aeko Verification Code", htmlContent);
+      const emailParams = this.createEmailParams(email, username, "🔐 Verify your Aeko account", htmlContent);
       const response = await this.client.sendMail(emailParams);
       console.log('✅ Verification email sent successfully. ID:', response);
       return { success: true, message: 'Verification email sent successfully' };
@@ -129,60 +313,28 @@ class EmailService {
       return { success: false, message: 'Email service not configured' };
     }
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Password Reset - Aeko</title>
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-          .container { max-width: 600px; margin: 0 auto; background-color: white; }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
-          .content { padding: 40px 30px; }
-          .code-box { background-color: #f8f9ff; border: 2px dashed #667eea; border-radius: 10px; padding: 20px; text-align: center; margin: 30px 0; }
-          .button { display: inline-block; padding: 12px 30px; background-color: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
-          .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0; }
-          .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🔑 Reset Your Password</h1>
-            <p>Hello ${username || 'User'}, we received a request to reset your password</p>
-          </div>
-          
-          <div class="content">
-            <p>Click the button below to reset your password. This link will expire in 15 minutes.</p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetLink}" class="button">Reset Password</a>
-            </div>
-            
-            <div class="code-box">
-              <p>Or copy and paste this link into your browser:</p>
-              <p style="word-break: break-all; color: #667eea; font-size: 14px;">${resetLink}</p>
-            </div>
-            
-            <div class="warning">
-              <strong>⚠️ Security Tip:</strong> If you didn't request this password reset, please ignore this email.
-            </div>
-            
-            <p>For security reasons, this link will expire in 15 minutes.</p>
-            
-            <p>Thanks,<br>The Aeko Team</p>
-          </div>
-          
-          <div class="footer">
-            <p>Need help? Contact us at <a href="mailto:support@aeko.social">support@aeko.social</a></p>
-            <p>© ${new Date().getFullYear()} Aeko. All rights reserved.</p>
-          </div>
-        </div>
-      </body>
-      </html>
+    const content = `
+      <p>We received a request to reset the password for your Aeko account. If you made this request, click the button below:</p>
+      
+      <div style="text-align: center;">
+        <a href="${resetLink}" class="btn">Reset Password</a>
+      </div>
+      
+      <p style="text-align: center; font-size: 13px; color: #6b7280; margin-top: 0;">Link expires in 15 minutes</p>
+
+      <div class="divider"></div>
+      
+      <p style="font-size: 13px; color: #6b7280;">Or copy and paste this URL into your browser:</p>
+      <div style="background: #f3f4f6; padding: 12px; border-radius: 8px; word-break: break-all; font-family: monospace; font-size: 12px; color: #4b5563;">
+        ${resetLink}
+      </div>
+      
+      <div class="alert-box" style="margin-top: 24px;">
+        <strong>Didn't request this?</strong> You can safely ignore this email. Your password will remain unchanged.
+      </div>
     `;
+
+    const htmlContent = getEmailTemplate("Reset Password", content, username);
 
     try {
       const emailParams = this.createEmailParams(email, username || 'User', "🔑 Reset Your Aeko Password", htmlContent);
@@ -206,45 +358,28 @@ class EmailService {
        return { success: false, message: 'Email service not configured' };
     }
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>New Login Detected - Aeko</title>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-            .container { max-width: 600px; margin: 0 auto; background-color: white; }
-            .header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 40px 20px; text-align: center; }
-            .content { padding: 40px 30px; }
-            .info-box { background-color: #fff5f5; border-left: 4px solid #f5576c; padding: 20px; margin: 20px 0; }
-            .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🛡️ New Login Detected</h1>
-          </div>
-          <div class="content">
-            <h2>Hello ${username},</h2>
-            <p>We detected a new login to your Aeko account.</p>
-            
-            <div class="info-box">
-              <p><strong>Time:</strong> ${time}</p>
-              <p><strong>Device:</strong> ${device}</p>
-            </div>
-            
-            <p>If this was you, you can safely ignore this email.</p>
-            <p><strong>If you did not authorize this login, please change your password immediately.</strong></p>
-          </div>
-          <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Aeko. All rights reserved.</p>
-          </div>
+    const content = `
+      <p>We detected a new login to your Aeko account from a new device or location.</p>
+      
+      <div style="background-color: #f8f9ff; border-left: 4px solid #667eea; padding: 20px; border-radius: 4px; margin: 24px 0;">
+        <div class="feature-item">
+          <span class="feature-icon">🕒</span>
+          <strong>Time:</strong>&nbsp; ${time}
         </div>
-      </body>
-      </html>
+        <div class="feature-item" style="margin-bottom: 0;">
+          <span class="feature-icon">📱</span>
+          <strong>Device:</strong>&nbsp; ${device}
+        </div>
+      </div>
+      
+      <p>If this was you, you can safely ignore this email.</p>
+      
+      <div class="alert-box">
+        <strong>Not you?</strong> Please change your password immediately to secure your account.
+      </div>
     `;
+
+    const htmlContent = getEmailTemplate("New Login Detected", content, username);
 
     try {
       const emailParams = this.createEmailParams(email, username, "🛡️ New Login Alert - Aeko", htmlContent);
@@ -263,46 +398,33 @@ class EmailService {
        return { success: false, message: 'Email service not configured' };
     }
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>Golden Tick Awarded - Aeko</title>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-            .container { max-width: 600px; margin: 0 auto; background-color: white; }
-            .header { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: white; padding: 40px 20px; text-align: center; }
-            .content { padding: 40px 30px; }
-            .tick-box { background-color: #fff9e6; border: 2px solid #fda085; border-radius: 10px; padding: 30px; text-align: center; margin: 30px 0; }
-            .golden-tick { font-size: 48px; color: #fda085; margin: 10px 0; }
-            .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🏆 Premium Status Unlocked!</h1>
-            <p>You've earned the Golden Tick!</p>
-          </div>
-          <div class="content">
-            <h2>Congratulations, ${username}! 🌟</h2>
-            <div class="tick-box">
-              <div class="golden-tick">✨ ✓ ✨</div>
-            </div>
-            <p>You are now a Premium Golden Member on Aeko!</p>
-            <p>Enjoy exclusive features, higher limits, and priority support.</p>
-          </div>
-          <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Aeko. All rights reserved.</p>
-          </div>
-        </div>
-      </body>
-      </html>
+    const content = `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <div style="font-size: 64px; margin-bottom: 10px;">🏆</div>
+        <h2 style="color: #d97706; margin-bottom: 10px;">Premium Unlocked!</h2>
+      </div>
+
+      <p style="text-align: center;">You've officially earned the <strong>Golden Tick</strong>! You are now a Premium Golden Member on Aeko.</p>
+      
+      <div class="code-box" style="border-color: #fbbf24; background-color: #fffbeb;">
+        <h3 style="margin-top: 0; color: #d97706;">Your New Superpowers</h3>
+        <ul class="feature-list" style="text-align: left; display: inline-block;">
+          <li class="feature-item"><span class="feature-icon">✨</span> Exclusive Golden Badge</li>
+          <li class="feature-item"><span class="feature-icon">🚀</span> Boosted Post Visibility</li>
+          <li class="feature-item"><span class="feature-icon">💎</span> Priority Support</li>
+          <li class="feature-item"><span class="feature-icon">📊</span> Advanced Analytics</li>
+        </ul>
+      </div>
+
+      <div style="text-align: center;">
+        <a href="${process.env.FRONTEND_URL}/profile" class="btn" style="background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); box-shadow: 0 4px 6px -1px rgba(253, 160, 133, 0.4);">View My Profile</a>
+      </div>
     `;
 
+    const htmlContent = getEmailTemplate("Golden Status Awarded", content, username);
+
     try {
-      const emailParams = this.createEmailParams(email, username, "🏆 Congratulations! You are now a Golden Member!", htmlContent);
+      const emailParams = this.createEmailParams(email, username, "🏆 You are now a Golden Member!", htmlContent);
       await this.client.sendMail(emailParams);
       return { success: true, message: 'Golden tick notification sent' };
     } catch (error) {
@@ -318,45 +440,27 @@ class EmailService {
        return { success: false, message: 'Email service not configured' };
     }
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>Blue Tick Awarded - Aeko</title>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-            .container { max-width: 600px; margin: 0 auto; background-color: white; }
-            .header { background: linear-gradient(135deg, #1da1f2 0%, #1991db 100%); color: white; padding: 40px 20px; text-align: center; }
-            .content { padding: 40px 30px; }
-            .tick-box { background-color: #e8f5ff; border: 2px solid #1da1f2; border-radius: 10px; padding: 30px; text-align: center; margin: 30px 0; }
-            .blue-tick { font-size: 48px; color: #1da1f2; margin: 10px 0; }
-            .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🎉 Congratulations!</h1>
-            <p>You've earned your Blue Tick!</p>
-          </div>
-          <div class="content">
-            <h2>Amazing work, ${username}! 🌟</h2>
-            <div class="tick-box">
-              <div class="blue-tick">✓</div>
-            </div>
-            <p>You are now a verified creator on Aeko!</p>
-          </div>
-          <div class="footer">
-            <p>© ${new Date().getFullYear()} Aeko. All rights reserved.</p>
-          </div>
-        </div>
-      </body>
-      </html>
+    const content = `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <div style="font-size: 64px; margin-bottom: 10px; color: #3b82f6;">✓</div>
+        <h2 style="color: #2563eb; margin-bottom: 10px;">You're Verified!</h2>
+      </div>
+
+      <p style="text-align: center;">Congratulations! You've earned the <strong>Blue Tick</strong>. You are now a verified creator on Aeko.</p>
+      
+      <div class="code-box" style="border-color: #3b82f6; background-color: #eff6ff;">
+        <p>This badge lets everyone know that your account is authentic and trustworthy. Keep creating amazing content!</p>
+      </div>
+
+      <div style="text-align: center;">
+        <a href="${process.env.FRONTEND_URL}/profile" class="btn" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4);">View My Profile</a>
+      </div>
     `;
 
+    const htmlContent = getEmailTemplate("Verified Status Awarded", content, username);
+
     try {
-      const emailParams = this.createEmailParams(email, username, "🎉 Congratulations! You earned your Blue Tick!", htmlContent);
+      const emailParams = this.createEmailParams(email, username, "🎉 You earned the Blue Tick!", htmlContent);
       await this.client.sendMail(emailParams);
       return { success: true, message: 'Blue tick notification sent' };
     } catch (error) {
@@ -372,64 +476,47 @@ class EmailService {
        return { success: false, message: 'Email service not configured' };
     }
 
-    const htmlContent = `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Welcome to Aeko</title>
-          <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-            .container { max-width: 600px; margin: 0 auto; background-color: white; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
-            .content { padding: 40px 30px; }
-            .feature-box { background-color: #f8f9ff; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; }
-            .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; border-top: 1px solid #dee2e6; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1> Welcome to Aeko, ${username}!</h1>
-              <p>Your email has been successfully verified</p>
-            </div>
-            
-            <div class="content">
-              <h2>Get Started with Aeko </h2>
-              <p>You're now part of the next-generation social media platform! Here's how to make the most of your experience:</p>
-              
-              <div class="feature-box">
-                <h3> Complete Your Profile (Earn Blue Tick)</h3>
-                <p>Complete these steps to earn your verified status:</p>
-                <ul>
-                  <li>📸 Add a profile picture</li>
-                  <li>📝 Write an engaging bio</li>
-                  <li>👥 Get your first follower</li>
-                </ul>
-              </div>
-              
-              <div class="feature-box">
-                <h3>🤖 AI Chat Bot</h3>
-                <p>Chat with our AI bot featuring 7 unique personalities. Enable auto-replies in your settings!</p>
-              </div>
-              
-              <h3>🔗 Useful Links</h3>
-              <ul>
-                <li><a href="${process.env.FRONTEND_URL}/profile">Complete Your Profile</a></li>
-                <li><a href="${process.env.FRONTEND_URL}/help">Help Center</a></li>
-              </ul>
-            </div>
-            
-            <div class="footer">
-              <p>Questions? Contact us at <a href="mailto:support@aeko.social">support@aeko.social</a></p>
-              <p>Follow us: <a href="#">Twitter</a> | <a href="#">Discord</a> | <a href="#">Telegram</a></p>
-              <p>© 2025 Aeko. All rights reserved.</p>
-            </div>
+    const content = `
+      <p>Welcome to the future of social media! Your email has been successfully verified, and you're all set to start your journey.</p>
+      
+      <h3>🚀 Quick Start Guide</h3>
+      
+      <div style="background-color: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+        <div class="feature-item">
+          <span class="feature-icon">📸</span>
+          <div>
+            <strong>Complete Profile</strong>
+            <div style="font-size: 13px; color: #6b7280;">Add a photo and bio to get discovered</div>
           </div>
-        </body>
-        </html>
+        </div>
+        <div class="divider" style="margin: 15px 0;"></div>
+        <div class="feature-item">
+          <span class="feature-icon">🤖</span>
+          <div>
+            <strong>Meet Your AI Bot</strong>
+            <div style="font-size: 13px; color: #6b7280;">Customize your personal AI assistant</div>
+          </div>
+        </div>
+        <div class="divider" style="margin: 15px 0;"></div>
+        <div class="feature-item">
+          <span class="feature-icon">👥</span>
+          <div>
+            <strong>Connect</strong>
+            <div style="font-size: 13px; color: #6b7280;">Find friends and join communities</div>
+          </div>
+        </div>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${process.env.FRONTEND_URL}/profile" class="btn">Setup My Profile</a>
+      </div>
+      
+      <p style="text-align: center; font-size: 14px; margin-top: 20px;">
+        Need help? Visit our <a href="${process.env.FRONTEND_URL}/help" style="color: #667eea; text-decoration: none; font-weight: 500;">Help Center</a>
+      </p>
     `;
+
+    const htmlContent = getEmailTemplate("Welcome to Aeko", content, username);
 
     try {
       const emailParams = this.createEmailParams(email, username, "🎉 Welcome to Aeko - Your Journey Begins!", htmlContent);
