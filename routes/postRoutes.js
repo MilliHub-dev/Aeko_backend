@@ -375,6 +375,61 @@ router.get("/:postId", authMiddleware, async (req, res) => {
     }
 });
 
+// Like/Unlike a post
+router.post("/:postId/like", authMiddleware, async (req, res) => {
+    try {
+        const { postId } = req.params;
+        const userId = req.user.id || req.user._id;
+
+        const post = await prisma.post.findUnique({ where: { id: postId } });
+        if (!post) {
+            return res.status(404).json({ message: "Post not found" });
+        }
+
+        // Check blocking
+        const canInteract = await BlockingService.enforceBlockingRules(userId, post.userId);
+        if (!canInteract) {
+             return res.status(404).json({ error: "Post not found" });
+        }
+
+        let likes = Array.isArray(post.likes) ? post.likes : [];
+        const isLiked = likes.includes(userId);
+        
+        if (isLiked) {
+            // Unlike
+            likes = likes.filter(id => id !== userId);
+        } else {
+            // Like
+            likes.push(userId);
+        }
+
+        const totalLikes = likes.length;
+        const currentEngagement = post.engagement || {};
+
+        const updatedPost = await prisma.post.update({
+            where: { id: postId },
+            data: {
+                likes: likes,
+                engagement: {
+                    ...currentEngagement,
+                    totalLikes
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: isLiked ? "Post unliked successfully" : "Post liked successfully",
+            liked: !isLiked,
+            totalLikes,
+            post: updatedPost
+        });
+
+    } catch (error) {
+        console.error("Like Post Error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
 // Get reposts
 router.get("/:postId/reposts", authMiddleware, async (req, res) => {
   try {
