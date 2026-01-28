@@ -1,9 +1,6 @@
-# Aeko Backend API Documentation
+# Aeko Enhanced API
 
-Base URL: `https://dev.aeko.social`
 
-Version: 2.0.0
-Description: 
 # Aeko Backend API Documentation
 
 Welcome to the comprehensive API documentation for Aeko, the **Social Media Platform** featuring advanced real-time communication.
@@ -78,101 +75,143 @@ The enhanced chat system uses **Socket.IO** for real-time features:
 - **Voice messages**: WebM audio with waveform data
         
 
+**Base URL**: `https://dev.aeko.social`
+**Version**: 2.0.0
+
 ## AI Bot
 
 ### Chat with AI bot
 
-**Endpoint:** `POST /api/enhanced-chat/bot-chat`
+`POST` **/api/enhanced-chat/bot-chat**
 
 Send message to AI bot with customizable personality and get intelligent response
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "message": "string",
-  "chatId": "string",
-  "personality": "string",
-  "instruction": "string"
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string"
+    },
+    "chatId": {
+      "type": "string"
+    },
+    "personality": {
+      "type": "string",
+      "enum": [
+        "friendly",
+        "professional",
+        "sarcastic",
+        "creative",
+        "analytical",
+        "mentor",
+        "companion"
+      ]
+    },
+    "instruction": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| message | string | - |
-| chatId | string | - |
-| personality | string | - |
-| instruction | string | - |
-
 #### Responses
 
-**200**: Bot response generated successfully
+- **200**: Bot response generated successfully
 
 ---
 
 ## Admin
 
-### Get advertisements for admin review
+### Delete a user permanently
 
-**Endpoint:** `GET /api/ads/admin/review`
+`DELETE` **/api/admin/users/{userId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| status | query | string | No | - |
-| page | query | integer | No | - |
-| limit | query | integer | No | - |
+| userId | path | string | Yes | ID of the user to delete |
 
 #### Responses
 
-**200**: Ads for review retrieved successfully
+- **200**: User deleted successfully
+- **404**: User not found
+- **500**: Server error
+
+---
+
+### Get advertisements for admin review
+
+`GET` **/api/ads/admin/review**
+
+**Security**: [{"bearerAuth":[]}]
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| status | query | string | No |  |
+| page | query | integer | No |  |
+| limit | query | integer | No |  |
+
+#### Responses
+
+- **200**: Ads for review retrieved successfully
 
 ---
 
 ### Review advertisement (admin only)
 
-**Endpoint:** `POST /api/ads/admin/review/{adId}`
+`POST` **/api/ads/admin/review/{adId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| adId | path | string | Yes | - |
+| adId | path | string | Yes |  |
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "status": "string",
-  "rejectionReason": "string",
-  "feedback": "string"
+  "type": "object",
+  "required": [
+    "status"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "approved",
+        "rejected"
+      ]
+    },
+    "rejectionReason": {
+      "type": "string"
+    },
+    "feedback": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| status | string | - |
-| rejectionReason | string | - |
-| feedback | string | - |
-
 #### Responses
 
-**200**: Advertisement reviewed successfully
+- **200**: Advertisement reviewed successfully
 
 ---
 
@@ -180,130 +219,204 @@ Content-Type: `application/json`
 
 ### Create new advertisement
 
-**Endpoint:** `POST /api/ads`
+`POST` **/api/ads**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "title": "Summer Sale - 50% Off",
-  "description": "Don't miss our biggest summer sale!",
-  "mediaType": "string",
-  "mediaUrl": "https://example.com/ad-image.jpg",
-  "targetAudience": {
-    "age": {
-      "min": 18,
-      "max": 45
+  "type": "object",
+  "required": [
+    "title",
+    "description",
+    "mediaType",
+    "budget",
+    "pricing",
+    "campaign"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "example": "Summer Sale - 50% Off"
     },
-    "location": [
-      "string"
-    ],
-    "interests": [
-      "string"
-    ]
-  },
-  "budget": {
-    "total": 1000,
-    "daily": 50,
-    "currency": "USD"
-  },
-  "pricing": {
-    "model": "string",
-    "bidAmount": 2.5
-  },
-  "campaign": {
-    "objective": "string",
-    "schedule": {
-      "startDate": "string",
-      "endDate": "string"
+    "description": {
+      "type": "string",
+      "example": "Don't miss our biggest summer sale!"
+    },
+    "mediaType": {
+      "type": "string",
+      "enum": [
+        "image",
+        "video",
+        "text",
+        "carousel"
+      ]
+    },
+    "mediaUrl": {
+      "type": "string",
+      "example": "https://example.com/ad-image.jpg"
+    },
+    "targetAudience": {
+      "type": "object",
+      "properties": {
+        "age": {
+          "type": "object",
+          "properties": {
+            "min": {
+              "type": "number",
+              "example": 18
+            },
+            "max": {
+              "type": "number",
+              "example": 45
+            }
+          }
+        },
+        "location": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "example": [
+            "United States"
+          ]
+        },
+        "interests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "example": [
+            "fashion",
+            "shopping"
+          ]
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "total"
+      ],
+      "properties": {
+        "total": {
+          "type": "number",
+          "example": 1000
+        },
+        "daily": {
+          "type": "number",
+          "example": 50
+        },
+        "currency": {
+          "type": "string",
+          "enum": [
+            "USD",
+            "AEKO"
+          ],
+          "example": "USD"
+        }
+      }
+    },
+    "pricing": {
+      "type": "object",
+      "required": [
+        "model",
+        "bidAmount"
+      ],
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": [
+            "cpm",
+            "cpc",
+            "cpa"
+          ]
+        },
+        "bidAmount": {
+          "type": "number",
+          "example": 2.5
+        }
+      }
+    },
+    "campaign": {
+      "type": "object",
+      "required": [
+        "objective",
+        "schedule"
+      ],
+      "properties": {
+        "objective": {
+          "type": "string",
+          "enum": [
+            "awareness",
+            "traffic",
+            "engagement",
+            "conversions",
+            "app_installs"
+          ]
+        },
+        "schedule": {
+          "type": "object",
+          "required": [
+            "startDate",
+            "endDate"
+          ],
+          "properties": {
+            "startDate": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "endDate": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      }
+    },
+    "callToAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "learn_more",
+            "shop_now",
+            "sign_up",
+            "download",
+            "contact_us",
+            "visit_website"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
     }
-  },
-  "callToAction": {
-    "type": "string",
-    "url": "string",
-    "text": "string"
   }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| title | string | - |
-| description | string | - |
-| mediaType | string | - |
-| mediaUrl | string | - |
-| targetAudience | object | - |
-| budget | object | - |
-| pricing | object | - |
-| campaign | object | - |
-| callToAction | object | - |
 
 #### Responses
 
-**201**: Advertisement created successfully
-
-```json
-{
-  "success": true,
-  "message": "Advertisement created successfully and submitted for review",
-  "ad": {
-    "_id": "string",
-    "title": "Summer Sale - 50% Off",
-    "description": "Don't miss our biggest summer sale with amazing discounts!",
-    "mediaType": "string",
-    "mediaUrl": "string",
-    "targetAudience": {
-      "age": "...",
-      "location": "...",
-      "interests": "...",
-      "gender": "..."
-    },
-    "budget": {
-      "total": "...",
-      "daily": "...",
-      "spent": "...",
-      "currency": "..."
-    },
-    "pricing": {
-      "model": "...",
-      "bidAmount": "..."
-    },
-    "campaign": {
-      "objective": "...",
-      "schedule": "..."
-    },
-    "status": "string",
-    "analytics": {
-      "impressions": "...",
-      "clicks": "...",
-      "ctr": "...",
-      "conversions": "...",
-      "conversionRate": "..."
-    },
-    "advertiserId": "...",
-    "createdAt": "string",
-    "updatedAt": "string"
-  }
-}
-```
-
-**400**: Bad request - validation errors
-
-**401**: Unauthorized
+- **201**: Advertisement created successfully
+- **400**: Bad request - validation errors
+- **401**: Unauthorized
 
 ---
 
 ### Get user's advertisements
 
-**Endpoint:** `GET /api/ads`
+`GET` **/api/ads**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -315,31 +428,15 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: User advertisements retrieved successfully
-
-```json
-{
-  "success": true,
-  "data": {
-    "ads": [
-      "..."
-    ],
-    "pagination": {
-      "current": 0,
-      "pages": 0,
-      "total": 0
-    }
-  }
-}
-```
+- **200**: User advertisements retrieved successfully
 
 ---
 
 ### Get targeted advertisements for user
 
-**Endpoint:** `GET /api/ads/targeted`
+`GET` **/api/ads/targeted**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -349,311 +446,294 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Targeted ads retrieved successfully
-
-```json
-{
-  "success": true,
-  "data": {
-    "ads": [
-      "..."
-    ],
-    "count": 0
-  }
-}
-```
+- **200**: Targeted ads retrieved successfully
 
 ---
 
 ### Track advertisement impression
 
-**Endpoint:** `POST /api/ads/track/impression`
+`POST` **/api/ads/track/impression**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "adId": "string",
-  "metadata": {
-    "age": 0,
-    "location": "string",
-    "device": "string"
+  "type": "object",
+  "required": [
+    "adId"
+  ],
+  "properties": {
+    "adId": {
+      "type": "string",
+      "description": "Advertisement ID"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "age": {
+          "type": "number"
+        },
+        "location": {
+          "type": "string"
+        },
+        "device": {
+          "type": "string"
+        }
+      }
+    }
   }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| adId | string | Advertisement ID |
-| metadata | object | - |
-
 #### Responses
 
-**200**: Impression tracked successfully
-
-**400**: Bad request
-
-**404**: Advertisement not found
+- **200**: Impression tracked successfully
+- **400**: Bad request
+- **404**: Advertisement not found
 
 ---
 
 ### Track advertisement click
 
-**Endpoint:** `POST /api/ads/track/click`
+`POST` **/api/ads/track/click**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "adId": "string",
-  "metadata": {}
+  "type": "object",
+  "required": [
+    "adId"
+  ],
+  "properties": {
+    "adId": {
+      "type": "string",
+      "description": "Advertisement ID"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| adId | string | Advertisement ID |
-| metadata | object | - |
-
 #### Responses
 
-**200**: Click tracked successfully
+- **200**: Click tracked successfully
 
 ---
 
 ### Track advertisement conversion
 
-**Endpoint:** `POST /api/ads/track/conversion`
+`POST` **/api/ads/track/conversion**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "adId": "string",
-  "conversionValue": 0,
-  "conversionType": "string"
+  "type": "object",
+  "required": [
+    "adId"
+  ],
+  "properties": {
+    "adId": {
+      "type": "string"
+    },
+    "conversionValue": {
+      "type": "number"
+    },
+    "conversionType": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| adId | string | - |
-| conversionValue | number | - |
-| conversionType | string | - |
-
 #### Responses
 
-**200**: Conversion tracked successfully
+- **200**: Conversion tracked successfully
 
 ---
 
 ### Get advertisement analytics
 
-**Endpoint:** `GET /api/ads/{adId}/analytics`
+`GET` **/api/ads/{adId}/analytics**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| adId | path | string | Yes | - |
-| timeRange | query | string | No | - |
+| adId | path | string | Yes |  |
+| timeRange | query | string | No |  |
 
 #### Responses
 
-**200**: Analytics retrieved successfully
-
-```json
-{
-  "success": true,
-  "data": {
-    "overview": {
-      "impressions": 0,
-      "clicks": 0,
-      "ctr": 0,
-      "conversions": 0,
-      "conversionRate": 0,
-      "performanceScore": 0
-    },
-    "budget": {
-      "total": 0,
-      "spent": 0,
-      "remaining": 0
-    }
-  }
-}
-```
+- **200**: Analytics retrieved successfully
 
 ---
 
 ### Update advertisement
 
-**Endpoint:** `PUT /api/ads/{adId}`
+`PUT` **/api/ads/{adId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| adId | path | string | Yes | - |
+| adId | path | string | Yes |  |
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "title": "string",
-  "description": "string",
-  "status": "string",
-  "budget": {}
-}
-```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| title | string | - |
-| description | string | - |
-| status | string | - |
-| budget | object | - |
-
-#### Responses
-
-**200**: Advertisement updated successfully
-
----
-
-### Delete advertisement
-
-**Endpoint:** `DELETE /api/ads/{adId}`
-
-**Security:** [{"bearerAuth":[]}]
-
-#### Parameters
-
-| Name | In | Type | Required | Description |
-|------|----|------|----------|-------------|
-| adId | path | string | Yes | - |
-
-#### Responses
-
-**200**: Advertisement deleted successfully
-
-**400**: Cannot delete running advertisement
-
----
-
-### Get advertisement dashboard
-
-**Endpoint:** `GET /api/ads/dashboard`
-
-**Security:** [{"bearerAuth":[]}]
-
-#### Parameters
-
-| Name | In | Type | Required | Description |
-|------|----|------|----------|-------------|
-| timeRange | query | string | No | - |
-
-#### Responses
-
-**200**: Dashboard data retrieved successfully
-
-```json
-{
-  "success": true,
-  "data": {
-    "summary": {
-      "totalAds": 0,
-      "activeAds": 0,
-      "totalSpent": 0,
-      "totalImpressions": 0,
-      "totalClicks": 0,
-      "averageCTR": 0
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "pending",
+        "running",
+        "paused"
+      ]
+    },
+    "budget": {
+      "type": "object"
     }
   }
 }
 ```
 
+#### Responses
+
+- **200**: Advertisement updated successfully
+
 ---
 
-### Get advertisements for admin review
+### Delete advertisement
 
-**Endpoint:** `GET /api/ads/admin/review`
+`DELETE` **/api/ads/{adId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| status | query | string | No | - |
-| page | query | integer | No | - |
-| limit | query | integer | No | - |
+| adId | path | string | Yes |  |
 
 #### Responses
 
-**200**: Ads for review retrieved successfully
+- **200**: Advertisement deleted successfully
+- **400**: Cannot delete running advertisement
+
+---
+
+### Get advertisement dashboard
+
+`GET` **/api/ads/dashboard**
+
+**Security**: [{"bearerAuth":[]}]
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| timeRange | query | string | No |  |
+
+#### Responses
+
+- **200**: Dashboard data retrieved successfully
+
+---
+
+### Get advertisements for admin review
+
+`GET` **/api/ads/admin/review**
+
+**Security**: [{"bearerAuth":[]}]
+
+#### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| status | query | string | No |  |
+| page | query | integer | No |  |
+| limit | query | integer | No |  |
+
+#### Responses
+
+- **200**: Ads for review retrieved successfully
 
 ---
 
 ### Review advertisement (admin only)
 
-**Endpoint:** `POST /api/ads/admin/review/{adId}`
+`POST` **/api/ads/admin/review/{adId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| adId | path | string | Yes | - |
+| adId | path | string | Yes |  |
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "status": "string",
-  "rejectionReason": "string",
-  "feedback": "string"
+  "type": "object",
+  "required": [
+    "status"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "approved",
+        "rejected"
+      ]
+    },
+    "rejectionReason": {
+      "type": "string"
+    },
+    "feedback": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| status | string | - |
-| rejectionReason | string | - |
-| feedback | string | - |
-
 #### Responses
 
-**200**: Advertisement reviewed successfully
+- **200**: Advertisement reviewed successfully
 
 ---
 
@@ -661,175 +741,155 @@ Content-Type: `application/json`
 
 ### Track advertisement impression
 
-**Endpoint:** `POST /api/ads/track/impression`
+`POST` **/api/ads/track/impression**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "adId": "string",
-  "metadata": {
-    "age": 0,
-    "location": "string",
-    "device": "string"
+  "type": "object",
+  "required": [
+    "adId"
+  ],
+  "properties": {
+    "adId": {
+      "type": "string",
+      "description": "Advertisement ID"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "age": {
+          "type": "number"
+        },
+        "location": {
+          "type": "string"
+        },
+        "device": {
+          "type": "string"
+        }
+      }
+    }
   }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| adId | string | Advertisement ID |
-| metadata | object | - |
-
 #### Responses
 
-**200**: Impression tracked successfully
-
-**400**: Bad request
-
-**404**: Advertisement not found
+- **200**: Impression tracked successfully
+- **400**: Bad request
+- **404**: Advertisement not found
 
 ---
 
 ### Track advertisement click
 
-**Endpoint:** `POST /api/ads/track/click`
+`POST` **/api/ads/track/click**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "adId": "string",
-  "metadata": {}
+  "type": "object",
+  "required": [
+    "adId"
+  ],
+  "properties": {
+    "adId": {
+      "type": "string",
+      "description": "Advertisement ID"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| adId | string | Advertisement ID |
-| metadata | object | - |
-
 #### Responses
 
-**200**: Click tracked successfully
+- **200**: Click tracked successfully
 
 ---
 
 ### Track advertisement conversion
 
-**Endpoint:** `POST /api/ads/track/conversion`
+`POST` **/api/ads/track/conversion**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "adId": "string",
-  "conversionValue": 0,
-  "conversionType": "string"
+  "type": "object",
+  "required": [
+    "adId"
+  ],
+  "properties": {
+    "adId": {
+      "type": "string"
+    },
+    "conversionValue": {
+      "type": "number"
+    },
+    "conversionType": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| adId | string | - |
-| conversionValue | number | - |
-| conversionType | string | - |
-
 #### Responses
 
-**200**: Conversion tracked successfully
+- **200**: Conversion tracked successfully
 
 ---
 
 ### Get advertisement analytics
 
-**Endpoint:** `GET /api/ads/{adId}/analytics`
+`GET` **/api/ads/{adId}/analytics**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| adId | path | string | Yes | - |
-| timeRange | query | string | No | - |
+| adId | path | string | Yes |  |
+| timeRange | query | string | No |  |
 
 #### Responses
 
-**200**: Analytics retrieved successfully
-
-```json
-{
-  "success": true,
-  "data": {
-    "overview": {
-      "impressions": 0,
-      "clicks": 0,
-      "ctr": 0,
-      "conversions": 0,
-      "conversionRate": 0,
-      "performanceScore": 0
-    },
-    "budget": {
-      "total": 0,
-      "spent": 0,
-      "remaining": 0
-    }
-  }
-}
-```
+- **200**: Analytics retrieved successfully
 
 ---
 
 ### Get advertisement dashboard
 
-**Endpoint:** `GET /api/ads/dashboard`
+`GET` **/api/ads/dashboard**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| timeRange | query | string | No | - |
+| timeRange | query | string | No |  |
 
 #### Responses
 
-**200**: Dashboard data retrieved successfully
-
-```json
-{
-  "success": true,
-  "data": {
-    "summary": {
-      "totalAds": 0,
-      "activeAds": 0,
-      "totalSpent": 0,
-      "totalImpressions": 0,
-      "totalClicks": 0,
-      "averageCTR": 0
-    }
-  }
-}
-```
+- **200**: Dashboard data retrieved successfully
 
 ---
 
@@ -837,424 +897,341 @@ Content-Type: `application/json`
 
 ### User registration with email verification
 
-**Endpoint:** `POST /api/auth/signup`
+`POST` **/api/auth/signup**
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "name": "John Doe",
-  "username": "johndoe",
-  "email": "john@example.com",
-  "password": "password123"
+  "type": "object",
+  "required": [
+    "name",
+    "username",
+    "email",
+    "password"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "User's full name",
+      "example": "John Doe"
+    },
+    "username": {
+      "type": "string",
+      "description": "Unique username",
+      "example": "johndoe"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "User's email address",
+      "example": "john@example.com"
+    },
+    "password": {
+      "type": "string",
+      "minLength": 6,
+      "description": "User's password",
+      "example": "password123"
+    }
+  }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| name | string | User's full name |
-| username | string | Unique username |
-| email | string | User's email address |
-| password | string | User's password |
 
 #### Responses
 
-**201**: User registered successfully, verification code sent
-
-```json
-{
-  "success": true,
-  "message": "Registration successful! Check your email for verification code",
-  "userId": "string"
-}
-```
-
-**400**: Bad request - validation errors
-
-**409**: User already exists
+- **201**: User registered successfully, verification code sent
+- **400**: Bad request - validation errors
+- **409**: User already exists
 
 ---
 
 ### Verify email with 4-digit code
 
-**Endpoint:** `POST /api/auth/verify-email`
+`POST` **/api/auth/verify-email**
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "userId": "string",
-  "verificationCode": "1234"
-}
-```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| userId | string | User ID from registration |
-| verificationCode | string | 4-digit verification code |
-
-#### Responses
-
-**200**: Email verified successfully
-
-```json
-{
-  "success": true,
-  "message": "Email verified successfully",
-  "token": "string",
-  "user": {
-    "_id": "string",
-    "username": "string",
-    "email": "string",
-    "profilePicture": "string",
-    "status": "string",
-    "botEnabled": true,
-    "botPersonality": "string",
-    "isAdmin": true,
-    "id": "string",
-    "name": "string",
-    "bio": "string",
-    "blueTick": true,
-    "goldenTick": true,
-    "emailVerification": {
-      "isVerified": "..."
+  "type": "object",
+  "required": [
+    "userId",
+    "verificationCode"
+  ],
+  "properties": {
+    "userId": {
+      "type": "string",
+      "description": "User ID from registration"
     },
-    "profileCompletion": {
-      "completionPercentage": "...",
-      "hasProfilePicture": "...",
-      "hasBio": "...",
-      "hasFollowers": "...",
-      "hasVerifiedEmail": "..."
-    },
-    "createdAt": "string",
-    "updatedAt": "string"
+    "verificationCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4}$",
+      "description": "4-digit verification code",
+      "example": "1234"
+    }
   }
 }
 ```
 
-**400**: Invalid or expired code
+#### Responses
+
+- **200**: Email verified successfully
+- **400**: Invalid or expired code
 
 ---
 
 ### Resend verification code
 
-**Endpoint:** `POST /api/auth/resend-verification`
+`POST` **/api/auth/resend-verification**
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "userId": "string"
+  "type": "object",
+  "required": [
+    "userId"
+  ],
+  "properties": {
+    "userId": {
+      "type": "string",
+      "description": "User ID"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| userId | string | User ID |
-
 #### Responses
 
-**200**: New verification code sent
-
-**429**: Rate limit exceeded
+- **200**: New verification code sent
+- **429**: Rate limit exceeded
 
 ---
 
 ### User login
 
-**Endpoint:** `POST /api/auth/login`
+`POST` **/api/auth/login**
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "email": "john@example.com",
-  "password": "password123"
-}
-```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| email | string | - |
-| password | string | - |
-
-#### Responses
-
-**200**: Successful login
-
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "token": "string",
-  "user": {
-    "_id": "string",
-    "username": "string",
-    "email": "string",
-    "profilePicture": "string",
-    "status": "string",
-    "botEnabled": true,
-    "botPersonality": "string",
-    "isAdmin": true,
-    "id": "string",
-    "name": "string",
-    "bio": "string",
-    "blueTick": true,
-    "goldenTick": true,
-    "emailVerification": {
-      "isVerified": "..."
+  "type": "object",
+  "required": [
+    "email",
+    "password"
+  ],
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email",
+      "example": "john@example.com"
     },
-    "profileCompletion": {
-      "completionPercentage": "...",
-      "hasProfilePicture": "...",
-      "hasBio": "...",
-      "hasFollowers": "...",
-      "hasVerifiedEmail": "..."
-    },
-    "createdAt": "string",
-    "updatedAt": "string"
+    "password": {
+      "type": "string",
+      "example": "password123"
+    }
   }
 }
 ```
 
-**401**: Invalid credentials or unverified email
+#### Responses
+
+- **200**: Successful login
+- **401**: Invalid credentials or unverified email
 
 ---
 
 ### Get profile completion status
 
-**Endpoint:** `GET /api/auth/profile-completion`
+`GET` **/api/auth/profile-completion**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: Profile completion status
-
-```json
-{
-  "success": true,
-  "profileCompletion": {
-    "completionPercentage": 80,
-    "hasProfilePicture": true,
-    "hasBio": true,
-    "hasFollowers": true,
-    "hasVerifiedEmail": true,
-    "blueTick": true,
-    "nextSteps": [
-      "string"
-    ]
-  }
-}
-```
+- **200**: Profile completion status
 
 ---
 
 ### Request password reset for user
 
-**Endpoint:** `POST /api/auth/forgot-password`
+`POST` **/api/auth/forgot-password**
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "email": "string"
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email"
+    }
+  },
+  "example": {
+    "email": "john@example.com"
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| email | string | - |
-
 #### Responses
 
-**200**: Email sent successfully
-
-**400**: Bad request (e.g. invalid email)
-
-**404**: User not found
-
-**500**: Internal server error
+- **200**: Email sent successfully
+- **400**: Bad request (e.g. invalid email)
+- **404**: User not found
+- **500**: Internal server error
 
 ---
 
 ### Redirect to Google for OAuth login/signup
 
-**Endpoint:** `GET /api/auth/google`
+`GET` **/api/auth/google**
 
 #### Responses
 
-**302**: Redirects to Google OAuth consent screen
+- **302**: Redirects to Google OAuth consent screen
 
 ---
 
 ### Google OAuth callback. Issues JWT and redirects to frontend
 
-**Endpoint:** `GET /api/auth/google/callback`
+`GET` **/api/auth/google/callback**
 
 #### Responses
 
-**302**: Redirects to success or failure URL after issuing JWT
-
-**401**: OAuth failed
+- **302**: Redirects to success or failure URL after issuing JWT
+- **401**: OAuth failed
 
 ---
 
 ### Google OAuth for mobile apps (React Native)
 
-**Endpoint:** `POST /api/auth/google/mobile`
+`POST` **/api/auth/google/mobile**
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "idToken": "string",
-  "user": {
-    "name": "string",
-    "email": "string",
-    "photo": "string"
+  "type": "object",
+  "required": [
+    "idToken"
+  ],
+  "properties": {
+    "idToken": {
+      "type": "string",
+      "description": "Google ID token from mobile SDK"
+    },
+    "user": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "photo": {
+          "type": "string"
+        }
+      }
+    }
   }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| idToken | string | Google ID token from mobile SDK |
-| user | object | - |
 
 #### Responses
 
-**200**: Successful authentication
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "token": "string",
-  "deepLink": "aeko://(home)?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "_id": "string",
-    "username": "string",
-    "email": "string",
-    "profilePicture": "string",
-    "status": "string",
-    "botEnabled": true,
-    "botPersonality": "string",
-    "isAdmin": true,
-    "id": "string",
-    "name": "string",
-    "bio": "string",
-    "blueTick": true,
-    "goldenTick": true,
-    "emailVerification": {
-      "isVerified": "..."
-    },
-    "profileCompletion": {
-      "completionPercentage": "...",
-      "hasProfilePicture": "...",
-      "hasBio": "...",
-      "hasFollowers": "...",
-      "hasVerifiedEmail": "..."
-    },
-    "createdAt": "string",
-    "updatedAt": "string"
-  }
-}
-```
-
-**400**: Bad request - missing ID token
-
-**401**: Invalid ID token
+- **200**: Successful authentication
+- **400**: Bad request - missing ID token
+- **401**: Invalid ID token
 
 ---
 
 ### Register a new user
 
-**Endpoint:** `POST /api/users/register`
+`POST` **/api/users/register**
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "username": "string",
-  "email": "string",
-  "password": "string"
+  "type": "object",
+  "required": [
+    "username",
+    "email",
+    "password"
+  ],
+  "properties": {
+    "username": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "password": {
+      "type": "string",
+      "minLength": 6
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| username | string | - |
-| email | string | - |
-| password | string | - |
-
 #### Responses
 
-**201**: User registered successfully
-
-**400**: Bad request
-
-**500**: Server error
+- **201**: User registered successfully
+- **400**: Bad request
+- **500**: Server error
 
 ---
 
 ### Login with email and password
 
-**Endpoint:** `POST /api/users/login`
+`POST` **/api/users/login**
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "email": "string",
-  "password": "string"
+  "type": "object",
+  "required": [
+    "email",
+    "password"
+  ],
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "password": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| email | string | - |
-| password | string | - |
-
 #### Responses
 
-**200**: Login successful
-
-**401**: Invalid credentials
-
-**500**: Server error
+- **200**: Login successful
+- **401**: Invalid credentials
+- **500**: Server error
 
 ---
 
@@ -1262,99 +1239,114 @@ Content-Type: `application/json`
 
 ### Enable/Disable Smart Bot
 
-**Endpoint:** `PUT /api/bot-settings`
+`PUT` **/api/bot-settings**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "botEnabled": true,
-  "botPersonality": "string"
+  "type": "object",
+  "required": [
+    "botEnabled",
+    "botPersonality"
+  ],
+  "properties": {
+    "botEnabled": {
+      "type": "boolean"
+    },
+    "botPersonality": {
+      "type": "string",
+      "enum": [
+        "friendly",
+        "professional",
+        "sarcastic"
+      ]
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| botEnabled | boolean | - |
-| botPersonality | string | - |
-
 #### Responses
 
-**200**: Smart Bot settings updated successfully
-
-**400**: Bad request
+- **200**: Smart Bot settings updated successfully
+- **400**: Bad request
 
 ---
 
 ### Interact with the Smart Bot
 
-**Endpoint:** `POST /api/chat`
+`POST` **/api/chat**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "message": "string"
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "message"
+  ]
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| message | string | - |
-
 #### Responses
 
-**200**: Bot reply returned successfully
-
-**400**: Bad request
-
-**403**: Bot is disabled
+- **200**: Bot reply returned successfully
+- **400**: Bad request
+- **403**: Bot is disabled
 
 ---
 
 ### Update Smart Bot settings
 
-**Endpoint:** `PUT /api/chat/bot-settings`
+`PUT` **/api/chat/bot-settings**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "botEnabled": true,
-  "botPersonality": "string"
+  "type": "object",
+  "required": [
+    "botEnabled",
+    "botPersonality"
+  ],
+  "properties": {
+    "botEnabled": {
+      "type": "boolean"
+    },
+    "botPersonality": {
+      "type": "string",
+      "enum": [
+        "friendly",
+        "professional",
+        "sarcastic"
+      ]
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| botEnabled | boolean | - |
-| botPersonality | string | - |
-
 #### Responses
 
-**200**: Smart Bot settings updated successfully
-
-**400**: Bad request
-
-**401**: Unauthorized
+- **200**: Smart Bot settings updated successfully
+- **400**: Bad request
+- **401**: Unauthorized
 
 ---
 
@@ -1362,35 +1354,37 @@ Content-Type: `application/json`
 
 ### Send a message
 
-**Endpoint:** `POST /api/chat/send-message`
+`POST` **/api/chat/send-message**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "recipientId": "string",
-  "message": "string"
+  "type": "object",
+  "required": [
+    "recipientId",
+    "message"
+  ],
+  "properties": {
+    "recipientId": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| recipientId | string | - |
-| message | string | - |
-
 #### Responses
 
-**200**: Message sent successfully
-
-**400**: Bad request
-
-**401**: Unauthorized
+- **200**: Message sent successfully
+- **400**: Bad request
+- **401**: Unauthorized
 
 ---
 
@@ -1398,11 +1392,11 @@ Content-Type: `application/json`
 
 ### Update community profile
 
-**Endpoint:** `PUT /api/communities/{id}/profile`
+`PUT` **/api/communities/{id}/profile**
 
 Update community profile information. Only community owner or moderators can update. Requires authentication and authorization.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -1412,95 +1406,49 @@ Update community profile information. Only community owner or moderators can upd
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "name": "string",
-  "description": "string",
-  "website": "string",
-  "location": "string"
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 50
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "website": {
+      "type": "string",
+      "format": "uri"
+    },
+    "location": {
+      "type": "string"
+    }
+  }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| name | string | - |
-| description | string | - |
-| website | string | - |
-| location | string | - |
 
 #### Responses
 
-**200**: Community profile updated successfully
-
-```json
-{
-  "_id": "string",
-  "name": "string",
-  "description": "string",
-  "profile": {
-    "avatar": "string",
-    "coverPhoto": "string",
-    "website": "string",
-    "location": "string"
-  },
-  "owner": "string",
-  "moderators": [
-    "string"
-  ],
-  "members": [
-    {
-      "user": "...",
-      "joinedAt": "...",
-      "role": "..."
-    }
-  ],
-  "settings": {
-    "isPrivate": true,
-    "requireApproval": true,
-    "canPost": true,
-    "canComment": true,
-    "payment": {
-      "isPaidCommunity": "...",
-      "price": "...",
-      "currency": "...",
-      "subscriptionType": "...",
-      "paymentAddress": "..."
-    },
-    "postSettings": {
-      "allowImages": "...",
-      "allowVideos": "...",
-      "allowLinks": "...",
-      "requireApproval": "..."
-    }
-  },
-  "memberCount": 0,
-  "isActive": true,
-  "createdAt": "string",
-  "updatedAt": "string"
-}
-```
-
-**400**: Validation error
-
-**401**: Unauthorized - authentication required
-
-**403**: Not authorized to update this community
-
-**404**: Community not found
+- **200**: Community profile updated successfully
+- **400**: Validation error
+- **401**: Unauthorized - authentication required
+- **403**: Not authorized to update this community
+- **404**: Community not found
 
 ---
 
 ### Upload community avatar or cover photo
 
-**Endpoint:** `POST /api/communities/{id}/upload-photo`
+`POST` **/api/communities/{id}/upload-photo**
 
 Upload community photo. Only community owner or moderators can upload. Requires authentication and authorization.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -1511,37 +1459,47 @@ Upload community photo. Only community owner or moderators can upload. Requires 
 
 #### Request Body
 
-#### Responses
-
-**200**: Photo uploaded successfully
+**Content-Type**: `multipart/form-data`
 
 ```json
 {
-  "success": true,
-  "data": {
-    "avatar": "string",
-    "coverPhoto": "string"
+  "type": "object",
+  "required": [
+    "photo"
+  ],
+  "properties": {
+    "photo": {
+      "type": "string",
+      "format": "binary"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "avatar",
+        "cover"
+      ]
+    }
   }
 }
 ```
 
-**400**: No file uploaded or invalid file type
+#### Responses
 
-**401**: Unauthorized - authentication required
-
-**403**: Not authorized to update this community
-
-**404**: Community not found
+- **200**: Photo uploaded successfully
+- **400**: No file uploaded or invalid file type
+- **401**: Unauthorized - authentication required
+- **403**: Not authorized to update this community
+- **404**: Community not found
 
 ---
 
 ### Update community settings
 
-**Endpoint:** `PUT /api/communities/{id}/settings`
+`PUT` **/api/communities/{id}/settings**
 
 Update community settings including payment and post settings. Only community owner can update settings. Requires authentication and owner authorization.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -1551,108 +1509,95 @@ Update community settings including payment and post settings. Only community ow
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "settings": {
-    "payment": {
-      "isPaidCommunity": true,
-      "price": 0,
-      "currency": "string",
-      "subscriptionType": "string",
-      "paymentAddress": "string"
-    },
-    "postSettings": {
-      "allowImages": true,
-      "allowVideos": true,
-      "allowLinks": true,
-      "requireApproval": true,
-      "requireMembershipToPost": true
-    },
-    "isPrivate": true,
-    "requireApproval": true,
-    "canPost": true,
-    "canComment": true
+  "type": "object",
+  "properties": {
+    "settings": {
+      "type": "object",
+      "properties": {
+        "payment": {
+          "type": "object",
+          "properties": {
+            "isPaidCommunity": {
+              "type": "boolean"
+            },
+            "price": {
+              "type": "number"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "subscriptionType": {
+              "type": "string",
+              "enum": [
+                "one_time",
+                "monthly",
+                "yearly"
+              ]
+            },
+            "paymentAddress": {
+              "type": "string"
+            }
+          }
+        },
+        "postSettings": {
+          "type": "object",
+          "properties": {
+            "allowImages": {
+              "type": "boolean"
+            },
+            "allowVideos": {
+              "type": "boolean"
+            },
+            "allowLinks": {
+              "type": "boolean"
+            },
+            "requireApproval": {
+              "type": "boolean"
+            },
+            "requireMembershipToPost": {
+              "type": "boolean"
+            }
+          }
+        },
+        "isPrivate": {
+          "type": "boolean"
+        },
+        "requireApproval": {
+          "type": "boolean"
+        },
+        "canPost": {
+          "type": "boolean"
+        },
+        "canComment": {
+          "type": "boolean"
+        }
+      }
+    }
   }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| settings | object | - |
-
 #### Responses
 
-**200**: Community settings updated successfully
-
-```json
-{
-  "_id": "string",
-  "name": "string",
-  "description": "string",
-  "profile": {
-    "avatar": "string",
-    "coverPhoto": "string",
-    "website": "string",
-    "location": "string"
-  },
-  "owner": "string",
-  "moderators": [
-    "string"
-  ],
-  "members": [
-    {
-      "user": "...",
-      "joinedAt": "...",
-      "role": "..."
-    }
-  ],
-  "settings": {
-    "isPrivate": true,
-    "requireApproval": true,
-    "canPost": true,
-    "canComment": true,
-    "payment": {
-      "isPaidCommunity": "...",
-      "price": "...",
-      "currency": "...",
-      "subscriptionType": "...",
-      "paymentAddress": "..."
-    },
-    "postSettings": {
-      "allowImages": "...",
-      "allowVideos": "...",
-      "allowLinks": "...",
-      "requireApproval": "..."
-    }
-  },
-  "memberCount": 0,
-  "isActive": true,
-  "createdAt": "string",
-  "updatedAt": "string"
-}
-```
-
-**400**: Validation error or invalid community ID
-
-**401**: Unauthorized - authentication required
-
-**403**: Only community owner can update settings
-
-**404**: Community not found
+- **200**: Community settings updated successfully
+- **400**: Validation error or invalid community ID
+- **401**: Unauthorized - authentication required
+- **403**: Only community owner can update settings
+- **404**: Community not found
 
 ---
 
 ### Follow a community (without joining chat)
 
-**Endpoint:** `POST /api/communities/{id}/follow`
+`POST` **/api/communities/{id}/follow**
 
 Follow a community without joining the chat. Requires authentication.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -1662,23 +1607,20 @@ Follow a community without joining the chat. Requires authentication.
 
 #### Responses
 
-**200**: Successfully followed the community
-
-**400**: Already following this community or already a member
-
-**401**: Unauthorized - authentication required
-
-**404**: Community not found
+- **200**: Successfully followed the community
+- **400**: Already following this community or already a member
+- **401**: Unauthorized - authentication required
+- **404**: Community not found
 
 ---
 
 ### Unfollow a community
 
-**Endpoint:** `POST /api/communities/{id}/unfollow`
+`POST` **/api/communities/{id}/unfollow**
 
 Unfollow a community. Requires authentication.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -1688,113 +1630,74 @@ Unfollow a community. Requires authentication.
 
 #### Responses
 
-**200**: Successfully unfollowed the community
-
-**400**: Not following or invalid request
-
-**401**: Unauthorized - authentication required
-
-**404**: Community not found
+- **200**: Successfully unfollowed the community
+- **400**: Not following or invalid request
+- **401**: Unauthorized - authentication required
+- **404**: Community not found
 
 ---
 
 ### Create a new community
 
-**Endpoint:** `POST /api/communities`
+`POST` **/api/communities**
 
 Create a new community. Only users with golden tick can create communities. Requires authentication.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "name": "string",
-  "description": "string",
-  "isPrivate": true,
-  "tags": [
-    "string"
-  ]
+  "type": "object",
+  "required": [
+    "name",
+    "description"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Community name",
+      "minLength": 3,
+      "maxLength": 50
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Community description (minimum 10 characters)",
+      "maxLength": 500
+    },
+    "isPrivate": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the community is private"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Community tags"
+    }
+  }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| name | string | Community name |
-| description | string | Community description (minimum 10 characters) |
-| isPrivate | boolean | Whether the community is private |
-| tags | array | Community tags |
 
 #### Responses
 
-**201**: Community created successfully
-
-```json
-{
-  "_id": "string",
-  "name": "string",
-  "description": "string",
-  "profile": {
-    "avatar": "string",
-    "coverPhoto": "string",
-    "website": "string",
-    "location": "string"
-  },
-  "owner": "string",
-  "moderators": [
-    "string"
-  ],
-  "members": [
-    {
-      "user": "...",
-      "joinedAt": "...",
-      "role": "..."
-    }
-  ],
-  "settings": {
-    "isPrivate": true,
-    "requireApproval": true,
-    "canPost": true,
-    "canComment": true,
-    "payment": {
-      "isPaidCommunity": "...",
-      "price": "...",
-      "currency": "...",
-      "subscriptionType": "...",
-      "paymentAddress": "..."
-    },
-    "postSettings": {
-      "allowImages": "...",
-      "allowVideos": "...",
-      "allowLinks": "...",
-      "requireApproval": "..."
-    }
-  },
-  "memberCount": 0,
-  "isActive": true,
-  "createdAt": "string",
-  "updatedAt": "string"
-}
-```
-
-**400**: Invalid input
-
-**401**: Unauthorized - authentication required
-
-**403**: User doesn't have permission to create a community
-
-**500**: Server error
+- **201**: Community created successfully
+- **400**: Invalid input
+- **401**: Unauthorized - authentication required
+- **403**: User doesn't have permission to create a community
+- **500**: Server error
 
 ---
 
 ### Get all communities
 
-**Endpoint:** `GET /api/communities`
+`GET` **/api/communities**
 
 Retrieve a list of all active communities with pagination and search
 
@@ -1808,47 +1711,18 @@ Retrieve a list of all active communities with pagination and search
 
 #### Responses
 
-**200**: List of communities
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "...",
-      "name": "...",
-      "description": "...",
-      "profile": "...",
-      "owner": "...",
-      "moderators": "...",
-      "members": "...",
-      "settings": "...",
-      "memberCount": "...",
-      "isActive": "...",
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
-  ],
-  "pagination": {
-    "total": 0,
-    "page": 0,
-    "pages": 0,
-    "limit": 0
-  }
-}
-```
-
-**500**: Server error
+- **200**: List of communities
+- **500**: Server error
 
 ---
 
 ### Get community by ID
 
-**Endpoint:** `GET /api/communities/{id}`
+`GET` **/api/communities/{id}**
 
 Retrieve detailed information about a specific community. Private communities require membership. Requires authentication.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -1858,73 +1732,21 @@ Retrieve detailed information about a specific community. Private communities re
 
 #### Responses
 
-**200**: Community details
-
-```json
-{
-  "_id": "string",
-  "name": "string",
-  "description": "string",
-  "profile": {
-    "avatar": "string",
-    "coverPhoto": "string",
-    "website": "string",
-    "location": "string"
-  },
-  "owner": "string",
-  "moderators": [
-    "string"
-  ],
-  "members": [
-    {
-      "user": "...",
-      "joinedAt": "...",
-      "role": "..."
-    }
-  ],
-  "settings": {
-    "isPrivate": true,
-    "requireApproval": true,
-    "canPost": true,
-    "canComment": true,
-    "payment": {
-      "isPaidCommunity": "...",
-      "price": "...",
-      "currency": "...",
-      "subscriptionType": "...",
-      "paymentAddress": "..."
-    },
-    "postSettings": {
-      "allowImages": "...",
-      "allowVideos": "...",
-      "allowLinks": "...",
-      "requireApproval": "..."
-    }
-  },
-  "memberCount": 0,
-  "isActive": true,
-  "createdAt": "string",
-  "updatedAt": "string"
-}
-```
-
-**400**: Invalid community ID format
-
-**401**: Unauthorized - authentication required
-
-**403**: Not authorized to view this community (if private)
-
-**404**: Community not found
+- **200**: Community details
+- **400**: Invalid community ID format
+- **401**: Unauthorized - authentication required
+- **403**: Not authorized to view this community (if private)
+- **404**: Community not found
 
 ---
 
 ### Update community
 
-**Endpoint:** `PUT /api/communities/{id}`
+`PUT` **/api/communities/{id}**
 
 Update community details. Only community owner or moderators can update. Requires authentication and authorization.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -1934,51 +1756,52 @@ Update community details. Only community owner or moderators can update. Require
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "name": "string",
-  "description": "string",
-  "isPrivate": true,
-  "tags": [
-    "string"
-  ],
-  "settings": {}
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10
+    },
+    "isPrivate": {
+      "type": "boolean"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "settings": {
+      "type": "object"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| name | string | - |
-| description | string | - |
-| isPrivate | boolean | - |
-| tags | array | - |
-| settings | object | - |
-
 #### Responses
 
-**200**: Community updated successfully
-
-**400**: Validation error or invalid community ID
-
-**401**: Unauthorized - authentication required
-
-**403**: Forbidden - only owner or moderators can update
-
-**404**: Community not found
+- **200**: Community updated successfully
+- **400**: Validation error or invalid community ID
+- **401**: Unauthorized - authentication required
+- **403**: Forbidden - only owner or moderators can update
+- **404**: Community not found
 
 ---
 
 ### Delete a community
 
-**Endpoint:** `DELETE /api/communities/{id}`
+`DELETE` **/api/communities/{id}**
 
 Delete a community permanently. Only community owner can delete. Requires authentication and owner authorization.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -1988,25 +1811,21 @@ Delete a community permanently. Only community owner can delete. Requires authen
 
 #### Responses
 
-**200**: Community deleted successfully
-
-**400**: Invalid community ID format
-
-**401**: Unauthorized - authentication required
-
-**403**: Only the community owner can delete the community
-
-**404**: Community not found
+- **200**: Community deleted successfully
+- **400**: Invalid community ID format
+- **401**: Unauthorized - authentication required
+- **403**: Only the community owner can delete the community
+- **404**: Community not found
 
 ---
 
 ### Join a community
 
-**Endpoint:** `POST /api/communities/{id}/join`
+`POST` **/api/communities/{id}/join**
 
 Join a community. For paid communities, payment is required first. Requires authentication.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -2016,35 +1835,22 @@ Join a community. For paid communities, payment is required first. Requires auth
 
 #### Responses
 
-**200**: Successfully joined the community
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "requiresApproval": true
-}
-```
-
-**400**: Already a member of this community
-
-**401**: Unauthorized - authentication required
-
-**402**: Payment required - this is a paid community
-
-**403**: Community is private and requires approval
-
-**404**: Community not found
+- **200**: Successfully joined the community
+- **400**: Already a member of this community
+- **401**: Unauthorized - authentication required
+- **402**: Payment required - this is a paid community
+- **403**: Community is private and requires approval
+- **404**: Community not found
 
 ---
 
 ### Leave a community
 
-**Endpoint:** `POST /api/communities/{id}/leave`
+`POST` **/api/communities/{id}/leave**
 
 Leave a community. Community owners cannot leave their own community. Requires authentication.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -2054,15 +1860,11 @@ Leave a community. Community owners cannot leave their own community. Requires a
 
 #### Responses
 
-**200**: Successfully left the community
-
-**400**: Not a member of this community
-
-**401**: Unauthorized - authentication required
-
-**403**: Community owner cannot leave (must transfer ownership first)
-
-**404**: Community not found
+- **200**: Successfully left the community
+- **400**: Not a member of this community
+- **401**: Unauthorized - authentication required
+- **403**: Community owner cannot leave (must transfer ownership first)
+- **404**: Community not found
 
 ---
 
@@ -2070,53 +1872,52 @@ Leave a community. Community owners cannot leave their own community. Requires a
 
 ### Initialize community payment
 
-**Endpoint:** `POST /api/community/payment/initialize`
+`POST` **/api/community/payment/initialize**
 
 Initialize payment for joining a paid community. Requires authentication.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "communityId": "string",
-  "paymentMethod": "string"
+  "type": "object",
+  "required": [
+    "communityId",
+    "paymentMethod"
+  ],
+  "properties": {
+    "communityId": {
+      "type": "string",
+      "description": "ID of the community to join"
+    },
+    "paymentMethod": {
+      "type": "string",
+      "enum": [
+        "paystack",
+        "stripe"
+      ],
+      "description": "Payment method to use"
+    }
+  }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| communityId | string | ID of the community to join |
-| paymentMethod | string | Payment method to use |
 
 #### Responses
 
-**200**: Payment initialized successfully
-
-```json
-{
-  "success": true,
-  "authorizationUrl": "string",
-  "reference": "string"
-}
-```
-
-**400**: Invalid request or payment method not configured
-
-**401**: Unauthorized - authentication required
-
-**404**: Community or user not found
+- **200**: Payment initialized successfully
+- **400**: Invalid request or payment method not configured
+- **401**: Unauthorized - authentication required
+- **404**: Community or user not found
 
 ---
 
 ### Verify community payment
 
-**Endpoint:** `GET /api/community/payment/verify`
+`GET` **/api/community/payment/verify**
 
 Verify payment status and grant community membership if successful. No authentication required as this is called from payment provider callback.
 
@@ -2129,84 +1930,86 @@ Verify payment status and grant community membership if successful. No authentic
 
 #### Responses
 
-**200**: Payment verified successfully and membership granted
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "data": {}
-}
-```
-
-**400**: Payment verification failed or invalid reference
-
-**404**: Transaction not found
+- **200**: Payment verified successfully and membership granted
+- **400**: Payment verification failed or invalid reference
+- **404**: Transaction not found
 
 ---
 
 ### Request withdrawal of community earnings
 
-**Endpoint:** `POST /api/community/withdraw`
+`POST` **/api/community/withdraw**
 
 Request withdrawal of available community earnings. Only community owner can withdraw. Requires authentication and owner authorization.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "communityId": "string",
-  "amount": 0,
-  "method": "string",
-  "details": {
-    "accountNumber": "string",
-    "bankCode": "string",
-    "accountName": "string"
+  "type": "object",
+  "required": [
+    "communityId",
+    "amount",
+    "method",
+    "details"
+  ],
+  "properties": {
+    "communityId": {
+      "type": "string",
+      "description": "ID of the community"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Amount to withdraw (must not exceed available balance)",
+      "minimum": 0.01
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "bank"
+      ],
+      "description": "Withdrawal method"
+    },
+    "details": {
+      "type": "object",
+      "description": "Withdrawal details (required for bank transfers)",
+      "properties": {
+        "accountNumber": {
+          "type": "string"
+        },
+        "bankCode": {
+          "type": "string"
+        },
+        "accountName": {
+          "type": "string"
+        }
+      }
+    }
   }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| communityId | string | ID of the community |
-| amount | number | Amount to withdraw (must not exceed available balance) |
-| method | string | Withdrawal method |
-| details | object | Withdrawal details (required for bank transfers) |
-
 #### Responses
 
-**200**: Withdrawal request submitted successfully
-
-```json
-{
-  "success": true,
-  "message": "string"
-}
-```
-
-**400**: Invalid request, insufficient balance, or invalid community ID
-
-**401**: Unauthorized - authentication required
-
-**403**: Forbidden - only community owner can withdraw
-
-**404**: Community not found
+- **200**: Withdrawal request submitted successfully
+- **400**: Invalid request, insufficient balance, or invalid community ID
+- **401**: Unauthorized - authentication required
+- **403**: Forbidden - only community owner can withdraw
+- **404**: Community not found
 
 ---
 
 ### Get community transaction history with filtering and statistics
 
-**Endpoint:** `GET /api/community/{communityId}/transactions`
+`GET` **/api/community/{communityId}/transactions**
 
 Retrieve transaction history for a community with pagination and filtering. Only community owner can view transactions. Requires authentication and owner authorization.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -2221,46 +2024,12 @@ Retrieve transaction history for a community with pagination and filtering. Only
 
 #### Responses
 
-**200**: Returns list of transactions with summary statistics
-
-```json
-{
-  "success": true,
-  "data": {
-    "transactions": [
-      {
-        "_id": "...",
-        "user": "...",
-        "amount": "...",
-        "status": "...",
-        "paymentMethod": "...",
-        "createdAt": "..."
-      }
-    ],
-    "summary": {
-      "totalEarnings": 0,
-      "pending": {},
-      "completed": {},
-      "failed": {}
-    },
-    "pagination": {
-      "currentPage": 0,
-      "totalPages": 0,
-      "totalTransactions": 0
-    }
-  }
-}
-```
-
-**400**: Invalid request parameters or community ID format
-
-**401**: Unauthorized - authentication required
-
-**403**: Forbidden - only community owner can view transactions
-
-**404**: Community not found
-
-**500**: Server error
+- **200**: Returns list of transactions with summary statistics
+- **400**: Invalid request parameters or community ID format
+- **401**: Unauthorized - authentication required
+- **403**: Forbidden - only community owner can view transactions
+- **404**: Community not found
+- **500**: Server error
 
 ---
 
@@ -2268,11 +2037,11 @@ Retrieve transaction history for a community with pagination and filtering. Only
 
 ### Create a post in community
 
-**Endpoint:** `POST /api/communities/{id}/posts`
+`POST` **/api/communities/{id}/posts**
 
 Create a post in a community. Requires active membership. For paid communities, requires active subscription. Requires authentication and membership authorization.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -2282,83 +2051,46 @@ Create a post in a community. Requires active membership. For paid communities, 
 
 #### Request Body
 
-#### Responses
-
-**201**: Post created successfully
+**Content-Type**: `multipart/form-data`
 
 ```json
 {
-  "_id": "string",
-  "content": "string",
-  "author": {
-    "_id": "...",
-    "username": "...",
-    "email": "...",
-    "profilePicture": "...",
-    "status": "...",
-    "botEnabled": "...",
-    "botPersonality": "...",
-    "isAdmin": "...",
-    "id": "...",
-    "name": "...",
-    "bio": "...",
-    "blueTick": "...",
-    "goldenTick": "...",
-    "emailVerification": "...",
-    "profileCompletion": "...",
-    "createdAt": "...",
-    "updatedAt": "..."
-  },
-  "community": {
-    "_id": "...",
-    "name": "...",
-    "description": "...",
-    "profile": "...",
-    "owner": "...",
-    "moderators": "...",
-    "members": "...",
-    "settings": "...",
-    "memberCount": "...",
-    "isActive": "...",
-    "createdAt": "...",
-    "updatedAt": "..."
-  },
-  "media": [
-    {
-      "url": "...",
-      "type": "..."
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "string",
+      "description": "Post content"
+    },
+    "media": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "binary"
+      },
+      "maxItems": 10,
+      "description": "Media files (images, videos)"
     }
-  ],
-  "likes": [
-    "string"
-  ],
-  "comments": [
-    "string"
-  ],
-  "shares": 0,
-  "status": "string",
-  "createdAt": "string",
-  "updatedAt": "string"
+  }
 }
 ```
 
-**400**: Validation error or invalid community ID
+#### Responses
 
-**401**: Unauthorized - authentication required
-
-**403**: Not authorized to post in this community
-
-**404**: Community not found
+- **201**: Post created successfully
+- **400**: Validation error or invalid community ID
+- **401**: Unauthorized - authentication required
+- **403**: Not authorized to post in this community
+- **404**: Community not found
 
 ---
 
 ### Get community posts
 
-**Endpoint:** `GET /api/communities/{id}/posts`
+`GET` **/api/communities/{id}/posts**
 
 Retrieve posts from a community. Private communities require membership. Paid communities require active subscription. Requires authentication.
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -2370,42 +2102,11 @@ Retrieve posts from a community. Private communities require membership. Paid co
 
 #### Responses
 
-**200**: List of community posts
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "...",
-      "content": "...",
-      "author": "...",
-      "community": "...",
-      "media": "...",
-      "likes": "...",
-      "comments": "...",
-      "shares": "...",
-      "status": "...",
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
-  ],
-  "pagination": {
-    "total": 0,
-    "page": 0,
-    "pages": 0,
-    "limit": 0
-  }
-}
-```
-
-**400**: Invalid community ID format
-
-**401**: Unauthorized - authentication required
-
-**403**: Not authorized to view posts in this community
-
-**404**: Community not found
+- **200**: List of community posts
+- **400**: Invalid community ID format
+- **401**: Unauthorized - authentication required
+- **403**: Not authorized to view posts in this community
+- **404**: Community not found
 
 ---
 
@@ -2413,49 +2114,48 @@ Retrieve posts from a community. Private communities require membership. Paid co
 
 ### Add emoji reaction to message
 
-**Endpoint:** `POST /api/enhanced-chat/emoji-reactions/{messageId}`
+`POST` **/api/enhanced-chat/emoji-reactions/{messageId}**
 
 Add emoji reaction to a specific message with real-time synchronization
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| messageId | path | string | Yes | - |
+| messageId | path | string | Yes |  |
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "emoji": "string"
+  "type": "object",
+  "properties": {
+    "emoji": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| emoji | string | - |
-
 #### Responses
 
-**200**: Reaction added successfully
+- **200**: Reaction added successfully
 
 ---
 
 ### Get popular emojis list
 
-**Endpoint:** `GET /api/enhanced-chat/emoji-list`
+`GET` **/api/enhanced-chat/emoji-list**
 
 Retrieve categorized list of popular emojis for chat interface
 
 #### Responses
 
-**200**: Emoji list retrieved successfully
+- **200**: Emoji list retrieved successfully
 
 ---
 
@@ -2463,93 +2163,90 @@ Retrieve categorized list of popular emojis for chat interface
 
 ### Chat with Enhanced AI Bot
 
-**Endpoint:** `POST /api/enhanced-bot/chat`
+`POST` **/api/enhanced-bot/chat**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "message": "string",
-  "instruction": "string",
-  "personalityOverride": "string"
+  "type": "object",
+  "required": [
+    "message"
+  ],
+  "properties": {
+    "message": {
+      "type": "string"
+    },
+    "instruction": {
+      "type": "string"
+    },
+    "personalityOverride": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| message | string | - |
-| instruction | string | - |
-| personalityOverride | string | - |
-
 #### Responses
 
-**200**: Bot response generated successfully
-
-**403**: Bot is disabled
+- **200**: Bot response generated successfully
+- **403**: Bot is disabled
 
 ---
 
 ### Get user's bot settings
 
-**Endpoint:** `GET /api/enhanced-bot/settings`
+`GET` **/api/enhanced-bot/settings**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: Bot settings retrieved successfully
+- **200**: Bot settings retrieved successfully
 
 ---
 
 ### Update bot settings
 
-**Endpoint:** `PUT /api/enhanced-bot/settings`
+`PUT` **/api/enhanced-bot/settings**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "botEnabled": true,
-  "botPersonality": "string",
-  "aiProvider": "string",
-  "model": "string",
-  "maxTokens": 0,
-  "contextLength": 0,
-  "temperature": 0
+  "$ref": "#/components/schemas/BotSettings"
 }
 ```
 
 #### Responses
 
-**200**: Settings updated successfully
+- **200**: Settings updated successfully
 
 ---
 
 ### Get available bot personalities
 
-**Endpoint:** `GET /api/enhanced-bot/personalities`
+`GET` **/api/enhanced-bot/personalities**
 
 #### Responses
 
-**200**: Available personalities retrieved successfully
+- **200**: Available personalities retrieved successfully
 
 ---
 
 ### Get conversation history
 
-**Endpoint:** `GET /api/enhanced-bot/conversation-history`
+`GET` **/api/enhanced-bot/conversation-history**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -2560,109 +2257,117 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Conversation history retrieved successfully
+- **200**: Conversation history retrieved successfully
 
 ---
 
 ### Get bot usage analytics
 
-**Endpoint:** `GET /api/enhanced-bot/analytics`
+`GET` **/api/enhanced-bot/analytics**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: Analytics retrieved successfully
+- **200**: Analytics retrieved successfully
 
 ---
 
 ### Generate image using AI
 
-**Endpoint:** `POST /api/enhanced-bot/generate-image`
+`POST` **/api/enhanced-bot/generate-image**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "prompt": "string"
+  "type": "object",
+  "required": [
+    "prompt"
+  ],
+  "properties": {
+    "prompt": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| prompt | string | - |
-
 #### Responses
 
-**200**: Image generated successfully
-
-**403**: Image generation not available
+- **200**: Image generated successfully
+- **403**: Image generation not available
 
 ---
 
 ### Summarize conversation history
 
-**Endpoint:** `POST /api/enhanced-bot/summarize-conversation`
+`POST` **/api/enhanced-bot/summarize-conversation**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "days": 0
+  "type": "object",
+  "properties": {
+    "days": {
+      "type": "number",
+      "default": 7
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| days | number | - |
-
 #### Responses
 
-**200**: Conversation summarized successfully
+- **200**: Conversation summarized successfully
 
 ---
 
 ### Rate bot response
 
-**Endpoint:** `POST /api/enhanced-bot/rate-response`
+`POST` **/api/enhanced-bot/rate-response**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "conversationId": "string",
-  "rating": 0,
-  "feedback": "string"
+  "type": "object",
+  "required": [
+    "conversationId",
+    "rating"
+  ],
+  "properties": {
+    "conversationId": {
+      "type": "string"
+    },
+    "rating": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "feedback": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| conversationId | string | - |
-| rating | number | - |
-| feedback | string | - |
-
 #### Responses
 
-**200**: Response rated successfully
+- **200**: Response rated successfully
 
 ---
 
@@ -2670,23 +2375,19 @@ Content-Type: `application/json`
 
 ### Get enhanced chat system information
 
-**Endpoint:** `GET /api/chat-info`
+`GET` **/api/chat-info**
 
 Retrieve detailed information about the enhanced chat system capabilities and statistics
 
 #### Responses
 
-**200**: Chat system information
-
-```json
-null
-```
+- **200**: Chat system information
 
 ---
 
 ### WebSocket (Socket.IO) API Documentation
 
-**Endpoint:** `GET /websocket`
+`GET` **/websocket**
 
 
 Connect to the WebSocket server for real-time features (chat, video/voice calls, notifications, etc.).
@@ -2723,300 +2424,318 @@ socket.emit('send-message', { chatId, content });
 
 #### Responses
 
-**200**: WebSocket documentation page (Markdown)
+- **200**: WebSocket documentation page (Markdown)
 
 ---
 
 ### Get user's conversations
 
-**Endpoint:** `GET /api/enhanced-chat/conversations`
+`GET` **/api/enhanced-chat/conversations**
 
 Retrieve paginated list of user's conversations with unread message counts and last message preview
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| page | query | integer | No | - |
-| limit | query | integer | No | - |
+| page | query | integer | No |  |
+| limit | query | integer | No |  |
 
 #### Responses
 
-**200**: Conversations retrieved successfully
-
-**401**: Unauthorized
+- **200**: Conversations retrieved successfully
+- **401**: Unauthorized
 
 ---
 
 ### Get messages for a chat
 
-**Endpoint:** `GET /api/enhanced-chat/messages/{chatId}`
+`GET` **/api/enhanced-chat/messages/{chatId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| chatId | path | string | Yes | - |
-| page | query | integer | No | - |
-| limit | query | integer | No | - |
+| chatId | path | string | Yes |  |
+| page | query | integer | No |  |
+| limit | query | integer | No |  |
 | before | query | string | No | Message ID to load messages before |
 
 #### Responses
 
-**200**: Messages retrieved successfully
+- **200**: Messages retrieved successfully
 
 ---
 
 ### Send a text message
 
-**Endpoint:** `POST /api/enhanced-chat/send-message`
+`POST` **/api/enhanced-chat/send-message**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "receiverId": "string",
-  "chatId": "string",
-  "content": "string",
-  "messageType": "string",
-  "replyToId": "string"
+  "type": "object",
+  "properties": {
+    "receiverId": {
+      "type": "string"
+    },
+    "chatId": {
+      "type": "string"
+    },
+    "content": {
+      "type": "string"
+    },
+    "messageType": {
+      "type": "string",
+      "enum": [
+        "text",
+        "emoji"
+      ]
+    },
+    "replyToId": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| receiverId | string | - |
-| chatId | string | - |
-| content | string | - |
-| messageType | string | - |
-| replyToId | string | - |
-
 #### Responses
 
-**200**: Message sent successfully
+- **200**: Message sent successfully
 
 ---
 
 ### Upload a voice message
 
-**Endpoint:** `POST /api/enhanced-chat/upload-voice`
+`POST` **/api/enhanced-chat/upload-voice**
 
 Upload recorded voice message with waveform data and automatic duration detection
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| voice | formData | string | Yes | - |
-| receiverId | formData | string | Yes | - |
-| chatId | formData | string | Yes | - |
-| duration | formData | string | Yes | - |
+| voice | formData | string | Yes |  |
+| receiverId | formData | string | Yes |  |
+| chatId | formData | string | Yes |  |
+| duration | formData | string | Yes |  |
 
 #### Responses
 
-**200**: Voice message uploaded successfully
+- **200**: Voice message uploaded successfully
 
 ---
 
 ### Upload a file/image/video
 
-**Endpoint:** `POST /api/enhanced-chat/upload-file`
+`POST` **/api/enhanced-chat/upload-file**
 
 Upload files up to 100MB with automatic type detection and thumbnail generation
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: File uploaded successfully
+- **200**: File uploaded successfully
 
 ---
 
 ### Add emoji reaction to message
 
-**Endpoint:** `POST /api/enhanced-chat/emoji-reactions/{messageId}`
+`POST` **/api/enhanced-chat/emoji-reactions/{messageId}**
 
 Add emoji reaction to a specific message with real-time synchronization
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| messageId | path | string | Yes | - |
+| messageId | path | string | Yes |  |
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "emoji": "string"
+  "type": "object",
+  "properties": {
+    "emoji": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| emoji | string | - |
-
 #### Responses
 
-**200**: Reaction added successfully
+- **200**: Reaction added successfully
 
 ---
 
 ### Remove emoji reaction from message
 
-**Endpoint:** `DELETE /api/enhanced-chat/emoji-reactions/{messageId}`
+`DELETE` **/api/enhanced-chat/emoji-reactions/{messageId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| messageId | path | string | Yes | - |
-| emoji | query | string | Yes | - |
+| messageId | path | string | Yes |  |
+| emoji | query | string | Yes |  |
 
 #### Responses
 
-**200**: Reaction removed successfully
+- **200**: Reaction removed successfully
 
 ---
 
 ### Chat with AI bot
 
-**Endpoint:** `POST /api/enhanced-chat/bot-chat`
+`POST` **/api/enhanced-chat/bot-chat**
 
 Send message to AI bot with customizable personality and get intelligent response
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "message": "string",
-  "chatId": "string",
-  "personality": "string",
-  "instruction": "string"
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string"
+    },
+    "chatId": {
+      "type": "string"
+    },
+    "personality": {
+      "type": "string",
+      "enum": [
+        "friendly",
+        "professional",
+        "sarcastic",
+        "creative",
+        "analytical",
+        "mentor",
+        "companion"
+      ]
+    },
+    "instruction": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| message | string | - |
-| chatId | string | - |
-| personality | string | - |
-| instruction | string | - |
-
 #### Responses
 
-**200**: Bot response generated successfully
+- **200**: Bot response generated successfully
 
 ---
 
 ### Create a new chat
 
-**Endpoint:** `POST /api/enhanced-chat/create-chat`
+`POST` **/api/enhanced-chat/create-chat**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "participants": [
-    "string"
-  ],
-  "isGroup": true,
-  "groupName": "string"
+  "type": "object",
+  "properties": {
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "isGroup": {
+      "type": "boolean"
+    },
+    "groupName": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| participants | array | - |
-| isGroup | boolean | - |
-| groupName | string | - |
-
 #### Responses
 
-**200**: Chat created successfully
+- **200**: Chat created successfully
 
 ---
 
 ### Mark all messages in chat as read
 
-**Endpoint:** `POST /api/enhanced-chat/mark-read/{chatId}`
+`POST` **/api/enhanced-chat/mark-read/{chatId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| chatId | path | string | Yes | - |
+| chatId | path | string | Yes |  |
 
 #### Responses
 
-**200**: Messages marked as read successfully
+- **200**: Messages marked as read successfully
 
 ---
 
 ### Search messages
 
-**Endpoint:** `GET /api/enhanced-chat/search`
+`GET` **/api/enhanced-chat/search**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| q | query | string | Yes | - |
-| chatId | query | string | No | - |
-| messageType | query | string | No | - |
-| limit | query | integer | No | - |
+| q | query | string | Yes |  |
+| chatId | query | string | No |  |
+| messageType | query | string | No |  |
+| limit | query | integer | No |  |
 
 #### Responses
 
-**200**: Search results
+- **200**: Search results
 
 ---
 
 ### Get popular emojis list
 
-**Endpoint:** `GET /api/enhanced-chat/emoji-list`
+`GET` **/api/enhanced-chat/emoji-list**
 
 Retrieve categorized list of popular emojis for chat interface
 
 #### Responses
 
-**200**: Emoji list retrieved successfully
+- **200**: Emoji list retrieved successfully
 
 ---
 
@@ -3024,9 +2743,9 @@ Retrieve categorized list of popular emojis for chat interface
 
 ### Get explore feed with trending content, suggested users, and communities
 
-**Endpoint:** `GET /api/explore`
+`GET` **/api/explore**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -3037,9 +2756,8 @@ Retrieve categorized list of popular emojis for chat interface
 
 #### Responses
 
-**200**: Explore feed retrieved successfully
-
-**401**: Unauthorized
+- **200**: Explore feed retrieved successfully
+- **401**: Unauthorized
 
 ---
 
@@ -3047,79 +2765,101 @@ Retrieve categorized list of popular emojis for chat interface
 
 ### Apply a filter to a photo
 
-**Endpoint:** `POST /api/photo/edit`
+`POST` **/api/photo/edit**
 
 Upload a photo and apply a filter (greyscale, blur, rotate). Returns the URL to the edited photo.
 
 #### Request Body
 
+**Content-Type**: `multipart/form-data`
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "photo": {
+      "type": "string",
+      "format": "binary",
+      "description": "Photo file to upload"
+    },
+    "filter": {
+      "type": "string",
+      "enum": [
+        "greyscale",
+        "blur",
+        "rotate"
+      ],
+      "description": "Type of filter to apply"
+    }
+  },
+  "required": [
+    "photo",
+    "filter"
+  ]
+}
+```
+
 #### Responses
 
-**200**: Edited photo URL
-
-```json
-{
-  "success": true,
-  "url": "string",
-  "error": "string"
-}
-```
-
-**500**: Error editing photo
-
-```json
-{
-  "success": true,
-  "url": "string",
-  "error": "string"
-}
-```
+- **200**: Edited photo URL
+- **500**: Error editing photo
 
 ---
 
 ### Apply an effect to a video
 
-**Endpoint:** `POST /api/video/edit`
+`POST` **/api/video/edit**
 
 Upload a video and apply an effect (grayscale, negate, blur). Returns the URL to the edited video.
 
 #### Request Body
 
+**Content-Type**: `multipart/form-data`
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "video": {
+      "type": "string",
+      "format": "binary",
+      "description": "Video file to upload"
+    },
+    "effect": {
+      "type": "string",
+      "enum": [
+        "grayscale",
+        "negate",
+        "blur"
+      ],
+      "description": "Type of effect to apply"
+    }
+  },
+  "required": [
+    "video",
+    "effect"
+  ]
+}
+```
+
 #### Responses
 
-**200**: Edited video URL
-
-```json
-{
-  "success": true,
-  "url": "string",
-  "error": "string"
-}
-```
-
-**500**: Error editing video
-
-```json
-{
-  "success": true,
-  "url": "string",
-  "error": "string"
-}
-```
+- **200**: Edited video URL
+- **500**: Error editing video
 
 ---
 
 ### Upload a file/image/video
 
-**Endpoint:** `POST /api/enhanced-chat/upload-file`
+`POST` **/api/enhanced-chat/upload-file**
 
 Upload files up to 100MB with automatic type detection and thumbnail generation
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: File uploaded successfully
+- **200**: File uploaded successfully
 
 ---
 
@@ -3127,119 +2867,116 @@ Upload files up to 100MB with automatic type detection and thumbnail generation
 
 ### Create a new interest (Admin only)
 
-**Endpoint:** `POST /api/interests`
+`POST` **/api/interests**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "name": "string",
-  "displayName": "string",
-  "description": "string",
-  "icon": "string"
+  "type": "object",
+  "required": [
+    "name",
+    "displayName"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "icon": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| name | string | - |
-| displayName | string | - |
-| description | string | - |
-| icon | string | - |
-
 #### Responses
 
-**201**: Interest created successfully
-
-**400**: Bad request
-
-**401**: Unauthorized
-
-**409**: Interest already exists
+- **201**: Interest created successfully
+- **400**: Bad request
+- **401**: Unauthorized
+- **409**: Interest already exists
 
 ---
 
 ### Get all active interests
 
-**Endpoint:** `GET /api/interests`
+`GET` **/api/interests**
 
 #### Responses
 
-**200**: List of active interests
-
-```json
-[
-  {}
-]
-```
+- **200**: List of active interests
 
 ---
 
 ### Update an interest (Admin only)
 
-**Endpoint:** `PUT /api/interests/{id}`
+`PUT` **/api/interests/{id}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| id | path | string | Yes | - |
+| id | path | string | Yes |  |
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "displayName": "string",
-  "description": "string",
-  "icon": "string",
-  "isActive": true
+  "type": "object",
+  "properties": {
+    "displayName": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "icon": {
+      "type": "string"
+    },
+    "isActive": {
+      "type": "boolean"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| displayName | string | - |
-| description | string | - |
-| icon | string | - |
-| isActive | boolean | - |
-
 #### Responses
 
-**200**: Interest updated successfully
-
-**404**: Interest not found
+- **200**: Interest updated successfully
+- **404**: Interest not found
 
 ---
 
 ### Delete an interest (Admin only)
 
-**Endpoint:** `DELETE /api/interests/{id}`
+`DELETE` **/api/interests/{id}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| id | path | string | Yes | - |
+| id | path | string | Yes |  |
 
 #### Responses
 
-**200**: Interest deleted successfully
-
-**404**: Interest not found
+- **200**: Interest deleted successfully
+- **404**: Interest not found
 
 ---
 
@@ -3247,45 +2984,44 @@ Content-Type: `application/json`
 
 ### Initiate a payment
 
-**Endpoint:** `POST /api/payments/pay`
+`POST` **/api/payments/pay**
 
 Initiates a payment and returns a payment link
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "amount": 0,
-  "currency": "string"
+  "type": "object",
+  "properties": {
+    "amount": {
+      "type": "number",
+      "description": "Amount to be paid"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency for the payment"
+    }
+  },
+  "required": [
+    "amount",
+    "currency"
+  ]
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| amount | number | Amount to be paid |
-| currency | string | Currency for the payment |
 
 #### Responses
 
-**200**: Payment link generated successfully
-
-```json
-{
-  "link": "string"
-}
-```
-
-**400**: Bad request
+- **200**: Payment link generated successfully
+- **400**: Bad request
 
 ---
 
 ### Verify a payment
 
-**Endpoint:** `GET /api/payments/verify`
+`GET` **/api/payments/verify**
 
 Verifies the payment status using the payment ID
 
@@ -3297,17 +3033,8 @@ Verifies the payment status using the payment ID
 
 #### Responses
 
-**200**: Payment verified successfully
-
-```json
-{
-  "status": "string",
-  "amount": 0,
-  "currency": "string"
-}
-```
-
-**400**: Bad request
+- **200**: Payment verified successfully
+- **400**: Bad request
 
 ---
 
@@ -3315,33 +3042,44 @@ Verifies the payment status using the payment ID
 
 ### Apply a filter to a photo
 
-**Endpoint:** `POST /api/photo/edit`
+`POST` **/api/photo/edit**
 
 Upload a photo and apply a filter (greyscale, blur, rotate). Returns the URL to the edited photo.
 
 #### Request Body
 
+**Content-Type**: `multipart/form-data`
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "photo": {
+      "type": "string",
+      "format": "binary",
+      "description": "Photo file to upload"
+    },
+    "filter": {
+      "type": "string",
+      "enum": [
+        "greyscale",
+        "blur",
+        "rotate"
+      ],
+      "description": "Type of filter to apply"
+    }
+  },
+  "required": [
+    "photo",
+    "filter"
+  ]
+}
+```
+
 #### Responses
 
-**200**: Edited photo URL
-
-```json
-{
-  "success": true,
-  "url": "string",
-  "error": "string"
-}
-```
-
-**500**: Error editing photo
-
-```json
-{
-  "success": true,
-  "url": "string",
-  "error": "string"
-}
-```
+- **200**: Edited photo URL
+- **500**: Error editing photo
 
 ---
 
@@ -3349,45 +3087,50 @@ Upload a photo and apply a filter (greyscale, blur, rotate). Returns the URL to 
 
 ### Transfer a post to another user
 
-**Endpoint:** `POST /api/posts/transfer`
+`POST` **/api/posts/transfer**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "postId": "string",
-  "toUserId": "string",
-  "reason": "string"
+  "type": "object",
+  "required": [
+    "postId",
+    "toUserId"
+  ],
+  "properties": {
+    "postId": {
+      "type": "string",
+      "description": "ID of the post to transfer"
+    },
+    "toUserId": {
+      "type": "string",
+      "description": "ID of the user to transfer to"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Optional reason for transfer"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| postId | string | ID of the post to transfer |
-| toUserId | string | ID of the user to transfer to |
-| reason | string | Optional reason for transfer |
-
 #### Responses
 
-**200**: Post transferred successfully
-
-**400**: Invalid request
-
-**403**: Not authorized to transfer this post
-
-**404**: Post or user not found
+- **200**: Post transferred successfully
+- **400**: Invalid request
+- **403**: Not authorized to transfer this post
+- **404**: Post or user not found
 
 ---
 
 ### Get transfer history of a post
 
-**Endpoint:** `GET /api/posts/transfer-history/{postId}`
+`GET` **/api/posts/transfer-history/{postId}**
 
 #### Parameters
 
@@ -3397,9 +3140,8 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Transfer history retrieved successfully
-
-**404**: Post not found
+- **200**: Transfer history retrieved successfully
+- **404**: Post not found
 
 ---
 
@@ -3407,277 +3149,206 @@ Content-Type: `application/json`
 
 ### Get profile completion status
 
-**Endpoint:** `GET /api/auth/profile-completion`
+`GET` **/api/auth/profile-completion**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: Profile completion status
-
-```json
-{
-  "success": true,
-  "profileCompletion": {
-    "completionPercentage": 80,
-    "hasProfilePicture": true,
-    "hasBio": true,
-    "hasFollowers": true,
-    "hasVerifiedEmail": true,
-    "blueTick": true,
-    "nextSteps": [
-      "string"
-    ]
-  }
-}
-```
+- **200**: Profile completion status
 
 ---
 
 ### Get user profile
 
-**Endpoint:** `GET /api/profile`
+`GET` **/api/profile**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: User profile retrieved successfully
-
-**401**: Unauthorized
-
-**403**: Forbidden
-
-**500**: Server error
+- **200**: User profile retrieved successfully
+- **401**: Unauthorized
+- **403**: Forbidden
+- **500**: Server error
 
 ---
 
 ### Update user profile
 
-**Endpoint:** `PUT /api/profile/update`
+`PUT` **/api/profile/update**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "username": "string",
-  "email": "string",
-  "profilePic": "string",
-  "bio": "string"
-}
-```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| username | string | - |
-| email | string | - |
-| profilePic | string | - |
-| bio | string | - |
-
-#### Responses
-
-**200**: User profile updated successfully
-
-```json
-{
-  "success": true,
-  "user": {
-    "_id": "string",
-    "username": "string",
-    "email": "string",
-    "profilePicture": "string",
-    "status": "string",
-    "botEnabled": true,
-    "botPersonality": "string",
-    "isAdmin": true,
-    "id": "string",
-    "name": "string",
-    "bio": "string",
-    "blueTick": true,
-    "goldenTick": true,
-    "emailVerification": {
-      "isVerified": "..."
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string"
     },
-    "profileCompletion": {
-      "completionPercentage": "...",
-      "hasProfilePicture": "...",
-      "hasBio": "...",
-      "hasFollowers": "...",
-      "hasVerifiedEmail": "..."
+    "email": {
+      "type": "string"
     },
-    "createdAt": "string",
-    "updatedAt": "string"
+    "profilePic": {
+      "type": "string"
+    },
+    "bio": {
+      "type": "string"
+    }
   }
 }
 ```
 
-**400**: Bad request
+#### Responses
 
-**401**: Unauthorized
+- **200**: User profile updated successfully
+- **400**: Bad request
+- **401**: Unauthorized
 
 ---
 
 ### Change user password
 
-**Endpoint:** `PUT /api/profile/change-password`
+`PUT` **/api/profile/change-password**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "currentPassword": "string",
-  "newPassword": "string"
+  "type": "object",
+  "required": [
+    "currentPassword",
+    "newPassword"
+  ],
+  "properties": {
+    "currentPassword": {
+      "type": "string"
+    },
+    "newPassword": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| currentPassword | string | - |
-| newPassword | string | - |
-
 #### Responses
 
-**200**: Password changed successfully
-
-**400**: Bad request
-
-**401**: Unauthorized
+- **200**: Password changed successfully
+- **400**: Bad request
+- **401**: Unauthorized
 
 ---
 
 ### Delete user account
 
-**Endpoint:** `DELETE /api/profile/delete-account`
+`DELETE` **/api/profile/delete-account**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: User account deleted successfully
-
-**401**: Unauthorized
+- **200**: User account deleted successfully
+- **401**: Unauthorized
 
 ---
 
 ### Get list of followers
 
-**Endpoint:** `GET /api/profile/followers`
+`GET` **/api/profile/followers**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: List of followers retrieved successfully
+- **200**: List of followers retrieved successfully
 
 ---
 
 ### Get list of users the current user is following
 
-**Endpoint:** `GET /api/profile/following`
+`GET` **/api/profile/following**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: List of following users retrieved successfully
+- **200**: List of following users retrieved successfully
 
 ---
 
 ### Follow a user
 
-**Endpoint:** `PUT /api/profile/follow/{userId}`
+`PUT` **/api/profile/follow/{userId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| userId | path | string | Yes | - |
+| userId | path | string | Yes |  |
 
 #### Responses
 
-**200**: Successfully followed the user
+- **200**: Successfully followed the user
 
 ---
 
 ### Unfollow a user
 
-**Endpoint:** `DELETE /api/profile/unfollow/{userId}`
+`DELETE` **/api/profile/unfollow/{userId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| userId | path | string | Yes | - |
+| userId | path | string | Yes |  |
 
 #### Responses
 
-**200**: Successfully unfollowed the user
+- **200**: Successfully unfollowed the user
 
 ---
 
 ### Upload or update profile picture
 
-**Endpoint:** `PUT /api/users/profile-picture`
+`PUT` **/api/users/profile-picture**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-#### Responses
-
-**200**: Profile picture updated successfully
+**Content-Type**: `multipart/form-data`
 
 ```json
 {
-  "_id": "string",
-  "username": "string",
-  "email": "string",
-  "profilePicture": "string",
-  "status": "string",
-  "botEnabled": true,
-  "botPersonality": "string",
-  "isAdmin": true,
-  "id": "string",
-  "name": "string",
-  "bio": "string",
-  "blueTick": true,
-  "goldenTick": true,
-  "emailVerification": {
-    "isVerified": true
-  },
-  "profileCompletion": {
-    "completionPercentage": 0,
-    "hasProfilePicture": true,
-    "hasBio": true,
-    "hasFollowers": true,
-    "hasVerifiedEmail": true
-  },
-  "createdAt": "string",
-  "updatedAt": "string"
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "string",
+      "format": "binary"
+    }
+  }
 }
 ```
 
-**400**: Bad request
+#### Responses
 
-**401**: Unauthorized
-
-**500**: Server error
+- **200**: Profile picture updated successfully
+- **400**: Bad request
+- **401**: Unauthorized
+- **500**: Server error
 
 ---
 
@@ -3685,9 +3356,9 @@ Content-Type: `application/json`
 
 ### Block a user
 
-**Endpoint:** `POST /api/security/block/{userId}`
+`POST` **/api/security/block/{userId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -3697,45 +3368,34 @@ Content-Type: `application/json`
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "reason": "string"
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "description": "Optional reason for blocking"
+    }
+  }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| reason | string | Optional reason for blocking |
 
 #### Responses
 
-**200**: User blocked successfully
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "blockedUser": {}
-}
-```
-
-**400**: Bad request (cannot block yourself, user already blocked)
-
-**404**: User not found
-
-**500**: Server error
+- **200**: User blocked successfully
+- **400**: Bad request (cannot block yourself, user already blocked)
+- **404**: User not found
+- **500**: Server error
 
 ---
 
 ### Unblock a user
 
-**Endpoint:** `DELETE /api/security/block/{userId}`
+`DELETE` **/api/security/block/{userId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -3745,28 +3405,18 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: User unblocked successfully
-
-```json
-{
-  "success": true,
-  "message": "string"
-}
-```
-
-**400**: User is not blocked
-
-**404**: User not found
-
-**500**: Server error
+- **200**: User unblocked successfully
+- **400**: User is not blocked
+- **404**: User not found
+- **500**: Server error
 
 ---
 
 ### Get list of blocked users
 
-**Endpoint:** `GET /api/security/blocked`
+`GET` **/api/security/blocked**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -3777,40 +3427,17 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: List of blocked users retrieved successfully
-
-```json
-{
-  "blockedUsers": [
-    {
-      "id": "string",
-      "username": "string",
-      "profilePicture": "string",
-      "blockedAt": "string",
-      "reason": "string"
-    }
-  ],
-  "pagination": {
-    "currentPage": 0,
-    "totalPages": 0,
-    "totalCount": 0,
-    "hasNext": true,
-    "hasPrev": true
-  }
-}
-```
-
-**404**: User not found
-
-**500**: Server error
+- **200**: List of blocked users retrieved successfully
+- **404**: User not found
+- **500**: Server error
 
 ---
 
 ### Check if a user is blocked
 
-**Endpoint:** `GET /api/security/block-status/{userId}`
+`GET` **/api/security/block-status/{userId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -3820,98 +3447,77 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Block status retrieved successfully
-
-```json
-{
-  "isBlocked": true,
-  "isBlockedBy": true,
-  "canInteract": true
-}
-```
-
-**500**: Server error
+- **200**: Block status retrieved successfully
+- **500**: Server error
 
 ---
 
 ### Update privacy settings
 
-**Endpoint:** `PUT /api/security/privacy`
+`PUT` **/api/security/privacy**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "isPrivate": true,
-  "allowFollowRequests": true,
-  "showOnlineStatus": true,
-  "allowDirectMessages": "string"
+  "type": "object",
+  "properties": {
+    "isPrivate": {
+      "type": "boolean",
+      "description": "Make account private"
+    },
+    "allowFollowRequests": {
+      "type": "boolean",
+      "description": "Allow follow requests for private accounts"
+    },
+    "showOnlineStatus": {
+      "type": "boolean",
+      "description": "Show online status to others"
+    },
+    "allowDirectMessages": {
+      "type": "string",
+      "enum": [
+        "everyone",
+        "followers",
+        "none"
+      ],
+      "description": "Who can send direct messages"
+    }
+  }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| isPrivate | boolean | Make account private |
-| allowFollowRequests | boolean | Allow follow requests for private accounts |
-| showOnlineStatus | boolean | Show online status to others |
-| allowDirectMessages | string | Who can send direct messages |
 
 #### Responses
 
-**200**: Privacy settings updated successfully
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "privacy": {}
-}
-```
-
-**400**: Invalid privacy settings
-
-**500**: Server error
+- **200**: Privacy settings updated successfully
+- **400**: Invalid privacy settings
+- **500**: Server error
 
 ---
 
 ### Get current privacy settings
 
-**Endpoint:** `GET /api/security/privacy`
+`GET` **/api/security/privacy**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: Privacy settings retrieved successfully
-
-```json
-{
-  "privacy": {
-    "isPrivate": true,
-    "allowFollowRequests": true,
-    "showOnlineStatus": true,
-    "allowDirectMessages": "string"
-  }
-}
-```
-
-**404**: User not found
-
-**500**: Server error
+- **200**: Privacy settings retrieved successfully
+- **404**: User not found
+- **500**: Server error
 
 ---
 
 ### Send a follow request
 
-**Endpoint:** `POST /api/security/follow-request/{userId}`
+`POST` **/api/security/follow-request/{userId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -3921,29 +3527,18 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Follow request sent successfully
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "type": "string"
-}
-```
-
-**400**: Bad request (already following, request already sent, etc.)
-
-**404**: User not found
-
-**500**: Server error
+- **200**: Follow request sent successfully
+- **400**: Bad request (already following, request already sent, etc.)
+- **404**: User not found
+- **500**: Server error
 
 ---
 
 ### Handle a follow request (approve or reject)
 
-**Endpoint:** `PUT /api/security/follow-request/{requesterId}`
+`PUT` **/api/security/follow-request/{requesterId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -3953,45 +3548,38 @@ Content-Type: `application/json`
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "action": "string"
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "description": "Action to take on the follow request"
+    }
+  }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| action | string | Action to take on the follow request |
 
 #### Responses
 
-**200**: Follow request handled successfully
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "action": "string"
-}
-```
-
-**400**: Invalid action or request not found
-
-**404**: User not found
-
-**500**: Server error
+- **200**: Follow request handled successfully
+- **400**: Invalid action or request not found
+- **404**: User not found
+- **500**: Server error
 
 ---
 
 ### Get follow requests
 
-**Endpoint:** `GET /api/security/follow-requests`
+`GET` **/api/security/follow-requests**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -4003,298 +3591,219 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Follow requests retrieved successfully
-
-```json
-{
-  "requests": [
-    {
-      "user": {
-        "_id": "...",
-        "username": "...",
-        "name": "...",
-        "profilePicture": "..."
-      },
-      "requestedAt": "string",
-      "status": "string"
-    }
-  ],
-  "pagination": {
-    "currentPage": 0,
-    "totalPages": 0,
-    "totalRequests": 0,
-    "hasNextPage": true,
-    "hasPrevPage": true
-  }
-}
-```
-
-**404**: User not found
-
-**500**: Server error
+- **200**: Follow requests retrieved successfully
+- **404**: User not found
+- **500**: Server error
 
 ---
 
 ### Initialize 2FA setup
 
-**Endpoint:** `POST /api/security/2fa/setup`
+`POST` **/api/security/2fa/setup**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: 2FA setup initialized successfully
-
-```json
-{
-  "success": true,
-  "secret": "string",
-  "qrCode": "string",
-  "manualEntryKey": "string"
-}
-```
-
-**400**: 2FA already enabled
-
-**500**: Server error
+- **200**: 2FA setup initialized successfully
+- **400**: 2FA already enabled
+- **500**: Server error
 
 ---
 
 ### Complete 2FA setup with verification
 
-**Endpoint:** `POST /api/security/2fa/verify-setup`
+`POST` **/api/security/2fa/verify-setup**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "secret": "string",
-  "token": "string"
-}
-```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| secret | string | The secret key from setup |
-| token | string | 6-digit TOTP token from authenticator app |
-
-#### Responses
-
-**200**: 2FA enabled successfully
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "backupCodes": [
-    "string"
+  "type": "object",
+  "properties": {
+    "secret": {
+      "type": "string",
+      "description": "The secret key from setup"
+    },
+    "token": {
+      "type": "string",
+      "description": "6-digit TOTP token from authenticator app"
+    }
+  },
+  "required": [
+    "secret",
+    "token"
   ]
 }
 ```
 
-**400**: Invalid token or 2FA already enabled
+#### Responses
 
-**500**: Server error
+- **200**: 2FA enabled successfully
+- **400**: Invalid token or 2FA already enabled
+- **500**: Server error
 
 ---
 
 ### Verify 2FA token during login
 
-**Endpoint:** `POST /api/security/2fa/verify`
+`POST` **/api/security/2fa/verify**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "token": "string"
+  "type": "object",
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "6-digit TOTP token from authenticator app"
+    }
+  },
+  "required": [
+    "token"
+  ]
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| token | string | 6-digit TOTP token from authenticator app |
 
 #### Responses
 
-**200**: 2FA verification successful
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "verified": true
-}
-```
-
-**400**: Invalid token or 2FA not enabled
-
-**500**: Server error
+- **200**: 2FA verification successful
+- **400**: Invalid token or 2FA not enabled
+- **500**: Server error
 
 ---
 
 ### Disable 2FA
 
-**Endpoint:** `DELETE /api/security/2fa`
+`DELETE` **/api/security/2fa**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "password": "string",
-  "token": "string"
+  "type": "object",
+  "properties": {
+    "password": {
+      "type": "string",
+      "description": "Current account password"
+    },
+    "token": {
+      "type": "string",
+      "description": "6-digit TOTP token from authenticator app"
+    }
+  },
+  "required": [
+    "password",
+    "token"
+  ]
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| password | string | Current account password |
-| token | string | 6-digit TOTP token from authenticator app |
 
 #### Responses
 
-**200**: 2FA disabled successfully
-
-```json
-{
-  "success": true,
-  "message": "string"
-}
-```
-
-**400**: Invalid password/token or 2FA not enabled
-
-**500**: Server error
+- **200**: 2FA disabled successfully
+- **400**: Invalid password/token or 2FA not enabled
+- **500**: Server error
 
 ---
 
 ### Generate new backup codes
 
-**Endpoint:** `POST /api/security/2fa/backup-codes`
+`POST` **/api/security/2fa/backup-codes**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "token": "string"
-}
-```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| token | string | 6-digit TOTP token from authenticator app |
-
-#### Responses
-
-**200**: Backup codes generated successfully
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "backupCodes": [
-    "string"
+  "type": "object",
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "6-digit TOTP token from authenticator app"
+    }
+  },
+  "required": [
+    "token"
   ]
 }
 ```
 
-**400**: Invalid token or 2FA not enabled
+#### Responses
 
-**500**: Server error
+- **200**: Backup codes generated successfully
+- **400**: Invalid token or 2FA not enabled
+- **500**: Server error
 
 ---
 
 ### Verify backup code for emergency access
 
-**Endpoint:** `POST /api/security/2fa/backup-verify`
+`POST` **/api/security/2fa/backup-verify**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "code": "string"
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "8-character backup code"
+    }
+  },
+  "required": [
+    "code"
+  ]
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| code | string | 8-character backup code |
 
 #### Responses
 
-**200**: Backup code verification result
-
-```json
-{
-  "success": true,
-  "message": "string",
-  "verified": true
-}
-```
-
-**400**: Invalid backup code or 2FA not enabled
-
-**500**: Server error
+- **200**: Backup code verification result
+- **400**: Invalid backup code or 2FA not enabled
+- **500**: Server error
 
 ---
 
 ### Get 2FA status
 
-**Endpoint:** `GET /api/security/2fa/status`
+`GET` **/api/security/2fa/status**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: 2FA status retrieved successfully
-
-```json
-{
-  "isEnabled": true,
-  "enabledAt": "string",
-  "lastUsed": "string",
-  "backupCodesCount": 0
-}
-```
-
-**500**: Server error
+- **200**: 2FA status retrieved successfully
+- **500**: Server error
 
 ---
 
 ### Get user's security events
 
-**Endpoint:** `GET /api/security/events`
+`GET` **/api/security/events**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -4308,38 +3817,16 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Security events retrieved successfully
-
-```json
-{
-  "events": [
-    {
-      "_id": "string",
-      "eventType": "string",
-      "targetUser": {},
-      "metadata": {},
-      "timestamp": "string",
-      "success": true
-    }
-  ],
-  "pagination": {
-    "page": 0,
-    "limit": 0,
-    "total": 0,
-    "pages": 0
-  }
-}
-```
-
-**500**: Server error
+- **200**: Security events retrieved successfully
+- **500**: Server error
 
 ---
 
 ### Get user's security statistics
 
-**Endpoint:** `GET /api/security/stats`
+`GET` **/api/security/stats**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -4349,19 +3836,8 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Security statistics retrieved successfully
-
-```json
-[
-  {
-    "_id": "string",
-    "count": 0,
-    "lastOccurrence": "string"
-  }
-]
-```
-
-**500**: Server error
+- **200**: Security statistics retrieved successfully
+- **500**: Server error
 
 ---
 
@@ -4369,46 +3845,41 @@ Content-Type: `application/json`
 
 ### Create a Live Audio Space
 
-**Endpoint:** `POST /api/spaces/create`
+`POST` **/api/spaces/create**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "title": "string"
+  "type": "object",
+  "required": [
+    "title"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the space"
+    }
+  }
 }
 ```
-
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| title | string | Title of the space |
 
 #### Responses
 
-**200**: Space created successfully
-
-```json
-{
-  "success": true,
-  "space": {}
-}
-```
-
-**400**: Bad request
+- **200**: Space created successfully
+- **400**: Bad request
 
 ---
 
 ### End a Live Audio Space
 
-**Endpoint:** `PATCH /api/spaces/{spaceId}/end`
+`PATCH` **/api/spaces/{spaceId}/end**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -4418,19 +3889,17 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: Space ended successfully
-
-**403**: Only host can end space
-
-**404**: Space not found
+- **200**: Space ended successfully
+- **403**: Only host can end space
+- **404**: Space not found
 
 ---
 
 ### Add a video highlight to a space
 
-**Endpoint:** `PUT /api/spaces/{spaceId}/highlight`
+`PUT` **/api/spaces/{spaceId}/highlight**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -4440,25 +3909,27 @@ Content-Type: `application/json`
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "videoUrl": "string"
+  "type": "object",
+  "required": [
+    "videoUrl"
+  ],
+  "properties": {
+    "videoUrl": {
+      "type": "string",
+      "description": "URL of the highlight video"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| videoUrl | string | URL of the highlight video |
-
 #### Responses
 
-**200**: Highlight added successfully
-
-**404**: Space not found
+- **200**: Highlight added successfully
+- **404**: Space not found
 
 ---
 
@@ -4466,115 +3937,107 @@ Content-Type: `application/json`
 
 ### Create a new status (image, text, or video)
 
-**Endpoint:** `POST /api/status`
+`POST` **/api/status**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "type": "string",
-  "content": "string"
+  "type": "object",
+  "required": [
+    "type",
+    "content"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "text",
+        "image",
+        "video"
+      ]
+    },
+    "content": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| type | string | - |
-| content | string | - |
-
 #### Responses
 
-**201**: Status created successfully
-
-**400**: Bad request
+- **201**: Status created successfully
+- **400**: Bad request
 
 ---
 
 ### Get active statuses from followers
 
-**Endpoint:** `GET /api/status`
+`GET` **/api/status**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: List of active statuses
-
-```json
-{
-  "success": true,
-  "statuses": [
-    {
-      "_id": "string",
-      "userId": {},
-      "type": "string",
-      "content": "string",
-      "sharedPostData": {
-        "originalPost": "...",
-        "shareInfo": "..."
-      }
-    }
-  ]
-}
-```
+- **200**: List of active statuses
 
 ---
 
 ### Delete a status
 
-**Endpoint:** `DELETE /api/status/{id}`
+`DELETE` **/api/status/{id}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| id | path | string | Yes | - |
+| id | path | string | Yes |  |
 
 #### Responses
 
-**200**: Status deleted successfully
+- **200**: Status deleted successfully
 
 ---
 
 ### React to a status
 
-**Endpoint:** `POST /api/status/{id}/react`
+`POST` **/api/status/{id}/react**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| id | path | string | Yes | - |
+| id | path | string | Yes |  |
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "emoji": "string"
+  "type": "object",
+  "required": [
+    "emoji"
+  ],
+  "properties": {
+    "emoji": {
+      "type": "string"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| emoji | string | - |
-
 #### Responses
 
-**200**: Reaction added successfully
+- **200**: Reaction added successfully
 
 ---
 
@@ -4582,37 +4045,40 @@ Content-Type: `application/json`
 
 ### Subscribe to Golden Tick
 
-**Endpoint:** `POST /api/subscription/subscribe`
+`POST` **/api/subscription/subscribe**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "userId": "string",
-  "paymentSuccess": true
+  "type": "object",
+  "required": [
+    "userId",
+    "paymentSuccess"
+  ],
+  "properties": {
+    "userId": {
+      "type": "string",
+      "description": "Unique identifier of the user"
+    },
+    "paymentSuccess": {
+      "type": "boolean",
+      "description": "Status of payment transaction"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| userId | string | Unique identifier of the user |
-| paymentSuccess | boolean | Status of payment transaction |
-
 #### Responses
 
-**200**: Golden Tick activated successfully
-
-**400**: Bad request, invalid input
-
-**401**: Unauthorized, authentication required
-
-**500**: Internal server error
+- **200**: Golden Tick activated successfully
+- **400**: Bad request, invalid input
+- **401**: Unauthorized, authentication required
+- **500**: Internal server error
 
 ---
 
@@ -4620,51 +4086,31 @@ Content-Type: `application/json`
 
 ### System health check
 
-**Endpoint:** `GET /health`
+`GET` **/health**
 
 Get system health status and feature availability
 
 #### Responses
 
-**200**: System health information
-
-```json
-{
-  "status": "OK",
-  "timestamp": "string",
-  "services": {
-    "mongodb": "Connected",
-    "socket": "Active",
-    "chat": "Enhanced Chat System Ready",
-    "ai": "AI Bot Integrated"
-  },
-  "features": [
-    "string"
-  ]
-}
-```
+- **200**: System health information
 
 ---
 
 ### Get enhanced chat system information
 
-**Endpoint:** `GET /api/chat-info`
+`GET` **/api/chat-info**
 
 Retrieve detailed information about the enhanced chat system capabilities and statistics
 
 #### Responses
 
-**200**: Chat system information
-
-```json
-null
-```
+- **200**: Chat system information
 
 ---
 
 ### WebSocket (Socket.IO) API Documentation
 
-**Endpoint:** `GET /websocket`
+`GET` **/websocket**
 
 
 Connect to the WebSocket server for real-time features (chat, video/voice calls, notifications, etc.).
@@ -4701,7 +4147,7 @@ socket.emit('send-message', { chatId, content });
 
 #### Responses
 
-**200**: WebSocket documentation page (Markdown)
+- **200**: WebSocket documentation page (Markdown)
 
 ---
 
@@ -4709,71 +4155,67 @@ socket.emit('send-message', { chatId, content });
 
 ### Get user's interests
 
-**Endpoint:** `GET /api/user/interests`
+`GET` **/api/user/interests**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Responses
 
-**200**: User's interests
-
-```json
-[
-  {}
-]
-```
+- **200**: User's interests
 
 ---
 
 ### Update user's interests
 
-**Endpoint:** `POST /api/user/interests`
+`POST` **/api/user/interests**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "interestIds": [
-    "string"
-  ]
+  "type": "object",
+  "required": [
+    "interestIds"
+  ],
+  "properties": {
+    "interestIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of interest IDs"
+    }
+  }
 }
 ```
 
-**Schema Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| interestIds | array | Array of interest IDs |
-
 #### Responses
 
-**200**: Interests updated successfully
-
-**400**: Invalid interest IDs
+- **200**: Interests updated successfully
+- **400**: Invalid interest IDs
 
 ---
 
 ### Remove an interest from user's interests
 
-**Endpoint:** `DELETE /api/user/interests/{interestId}`
+`DELETE` **/api/user/interests/{interestId}**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| interestId | path | string | Yes | - |
+| interestId | path | string | Yes |  |
 
 #### Responses
 
-**200**: Interest removed successfully
-
-**404**: Interest not found in user's interests
+- **200**: Interest removed successfully
+- **404**: Interest not found in user's interests
 
 ---
 
@@ -4781,29 +4223,27 @@ Content-Type: `application/json`
 
 ### Get user by ID
 
-**Endpoint:** `GET /api/users/{id}`
+`GET` **/api/users/{id}**
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| id | path | string | Yes | - |
+| id | path | string | Yes |  |
 
 #### Responses
 
-**200**: User retrieved
-
-**404**: User not found
-
-**500**: Server error
+- **200**: User retrieved
+- **404**: User not found
+- **500**: Server error
 
 ---
 
 ### Get all users
 
-**Endpoint:** `GET /api/users`
+`GET` **/api/users**
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
@@ -4815,45 +4255,9 @@ Content-Type: `application/json`
 
 #### Responses
 
-**200**: List of users retrieved successfully
-
-```json
-{
-  "success": true,
-  "users": [
-    {
-      "_id": "...",
-      "username": "...",
-      "email": "...",
-      "profilePicture": "...",
-      "status": "...",
-      "botEnabled": "...",
-      "botPersonality": "...",
-      "isAdmin": "...",
-      "id": "...",
-      "name": "...",
-      "bio": "...",
-      "blueTick": "...",
-      "goldenTick": "...",
-      "emailVerification": "...",
-      "profileCompletion": "...",
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
-  ],
-  "pagination": {
-    "currentPage": 0,
-    "totalPages": 0,
-    "totalUsers": 0,
-    "hasNext": true,
-    "hasPrev": true
-  }
-}
-```
-
-**401**: Unauthorized
-
-**500**: Server error
+- **200**: List of users retrieved successfully
+- **401**: Unauthorized
+- **500**: Server error
 
 ---
 
@@ -4861,33 +4265,44 @@ Content-Type: `application/json`
 
 ### Apply an effect to a video
 
-**Endpoint:** `POST /api/video/edit`
+`POST` **/api/video/edit**
 
 Upload a video and apply an effect (grayscale, negate, blur). Returns the URL to the edited video.
 
 #### Request Body
 
+**Content-Type**: `multipart/form-data`
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "video": {
+      "type": "string",
+      "format": "binary",
+      "description": "Video file to upload"
+    },
+    "effect": {
+      "type": "string",
+      "enum": [
+        "grayscale",
+        "negate",
+        "blur"
+      ],
+      "description": "Type of effect to apply"
+    }
+  },
+  "required": [
+    "video",
+    "effect"
+  ]
+}
+```
+
 #### Responses
 
-**200**: Edited video URL
-
-```json
-{
-  "success": true,
-  "url": "string",
-  "error": "string"
-}
-```
-
-**500**: Error editing video
-
-```json
-{
-  "success": true,
-  "url": "string",
-  "error": "string"
-}
-```
+- **200**: Edited video URL
+- **500**: Error editing video
 
 ---
 
@@ -4895,24 +4310,24 @@ Upload a video and apply an effect (grayscale, negate, blur). Returns the URL to
 
 ### Upload a voice message
 
-**Endpoint:** `POST /api/enhanced-chat/upload-voice`
+`POST` **/api/enhanced-chat/upload-voice**
 
 Upload recorded voice message with waveform data and automatic duration detection
 
-**Security:** [{"bearerAuth":[]}]
+**Security**: [{"bearerAuth":[]}]
 
 #### Parameters
 
 | Name | In | Type | Required | Description |
 |------|----|------|----------|-------------|
-| voice | formData | string | Yes | - |
-| receiverId | formData | string | Yes | - |
-| chatId | formData | string | Yes | - |
-| duration | formData | string | Yes | - |
+| voice | formData | string | Yes |  |
+| receiverId | formData | string | Yes |  |
+| chatId | formData | string | Yes |  |
+| duration | formData | string | Yes |  |
 
 #### Responses
 
-**200**: Voice message uploaded successfully
+- **200**: Voice message uploaded successfully
 
 ---
 
@@ -4920,7 +4335,7 @@ Upload recorded voice message with waveform data and automatic duration detectio
 
 ### WebRTC signaling event (socket.io)
 
-**Endpoint:** `POST /socket.io/webrtc-signaling`
+`POST` **/socket.io/webrtc-signaling**
 
 
                     Use socket.io to emit and listen for the following events for video/voice calls:
@@ -4938,32 +4353,23 @@ Upload recorded voice message with waveform data and automatic duration detectio
 
 #### Request Body
 
-Content-Type: `application/json`
+**Content-Type**: `application/json`
 
 ```json
 {
-  "target": "string",
-  "offer": {},
-  "answer": {},
-  "candidate": {}
+  "$ref": "#/components/schemas/WebRTCSignal"
 }
 ```
 
 #### Responses
 
-**200**: Signal relayed successfully (socket.io emits to target)
-
-```json
-{
-  "success": true
-}
-```
+- **200**: Signal relayed successfully (socket.io emits to target)
 
 ---
 
 ### WebSocket (Socket.IO) API Documentation
 
-**Endpoint:** `GET /websocket`
+`GET` **/websocket**
 
 
 Connect to the WebSocket server for real-time features (chat, video/voice calls, notifications, etc.).
@@ -5000,7 +4406,7 @@ socket.emit('send-message', { chatId, content });
 
 #### Responses
 
-**200**: WebSocket documentation page (Markdown)
+- **200**: WebSocket documentation page (Markdown)
 
 ---
 

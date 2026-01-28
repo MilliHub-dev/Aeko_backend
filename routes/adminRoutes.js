@@ -177,6 +177,53 @@ router.put('/users/:userId/verify', adminAuth, twoFactorMiddleware.requireTwoFac
   }
 });
 
+/**
+ * @swagger
+ * /api/admin/users/{userId}:
+ *   delete:
+ *     summary: Delete a user permanently
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the user to delete
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.delete('/users/:userId', adminAuth, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
+  try {
+    // Delete user (cascading delete handled by database schema)
+    const user = await prisma.user.delete({
+      where: { id: req.params.userId }
+    });
+    
+    res.json({ success: true, message: `User ${user.username} deleted successfully`, user });
+  } catch (error) {
+    if (error.code === 'P2025') {
+        return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    // Handle foreign key constraint violations if cascade isn't working perfectly
+    if (error.code === 'P2003') {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Cannot delete user due to existing references. Please ensure all related data is cleaned up.', 
+            error: error.message 
+        });
+    }
+    res.status(500).json({ success: false, message: 'Failed to delete user', error: error.message });
+  }
+});
+
 // ===== CONTENT MODERATION =====
 router.delete('/posts/:postId', adminAuth, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {

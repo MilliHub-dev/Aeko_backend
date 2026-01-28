@@ -28,23 +28,23 @@ model Ad {
   frequency Json?
   createdAt DateTime @default(now())
   updatedAt DateTime
-  user User @relation(fields: [advertiserId], references: [id])
+  user User @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
 }
 
 model Bookmark {
- @@map("bookmarks")
+  @@map("bookmarks")
   id String @id
   savedAt DateTime @default(now())
   userId String
   postId String
-  post Post @relation(fields: [postId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
- @@unique([userId, postId])
+  @@unique([userId, postId])
 }
 
 model BotConversation {
- @@map("bot_conversations")
+  @@map("bot_conversations")
   id String @id
   userId String
   userMessage String
@@ -60,11 +60,11 @@ model BotConversation {
   metadata Json?
   createdAt DateTime @default(now())
   updatedAt DateTime
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model BotSettings {
- @@map("bot_settings")
+  @@map("bot_settings")
   id String @id
   userId String @unique
   botEnabled Boolean @default(false)
@@ -81,11 +81,11 @@ model BotSettings {
   analytics Json?
   createdAt DateTime @default(now())
   updatedAt DateTime
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Challenge {
- @@map("challenges")
+  @@map("challenges")
   id String @id
   creatorId String
   videoUrl String
@@ -97,23 +97,23 @@ model Challenge {
   updatedAt DateTime
   votes Json?
   winner String?
-  user User @relation(fields: [creatorId], references: [id])
+  user User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 }
 
 model ChatMember {
- @@map("chat_members")
+  @@map("chat_members")
   id String @id
   chatId String
   userId String
   joinedAt DateTime @default(now())
-  chat Chat @relation(fields: [chatId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
- @@unique([chatId, userId])
+  @@unique([chatId, userId])
 }
 
 model Chat {
- @@map("chats")
+  @@map("chats")
   id String @id
   isGroup Boolean @default(false)
   groupName String?
@@ -124,8 +124,8 @@ model Chat {
   isCommunityChat Boolean @default(false)
   lastMessageId String?
   chat_members ChatMember[]
-  communities Community? @relation(fields: [communityId], references: [id])
-  users User? @relation(fields: [groupAdminId], references: [id])
+  communities Community? @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  users User? @relation(fields: [groupAdminId], references: [id], onDelete: SetNull)
   enhanced_messages_chats_lastMessageIdToenhanced_messages EnhancedMessage? @relation("chats_lastMessageIdToenhanced_messages", fields: [lastMessageId], references: [id])
   enhanced_messages_enhanced_messages_chatIdTochats EnhancedMessage[] @relation("enhanced_messages_chatIdTochats")
   live_streams LiveStream?
@@ -133,7 +133,7 @@ model Chat {
 }
 
 model Comment {
- @@map("comments")
+  @@map("comments")
   id String @id
   text String
   userId String
@@ -141,12 +141,12 @@ model Comment {
   likes Json?
   createdAt DateTime @default(now())
   updatedAt DateTime
-  post Post @relation(fields: [postId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Community {
- @@map("communities")
+  @@map("communities")
   id String @id
   name String
   description String?
@@ -161,7 +161,7 @@ model Community {
   isPrivate Boolean @default(false)
   tags String[]
   chats Chat?
-  users User? @relation(fields: [ownerId], references: [id])
+  users User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   community_followers CommunityFollower[]
   community_members CommunityMember[]
   posts Post[]
@@ -169,33 +169,33 @@ model Community {
 }
 
 model CommunityFollower {
- @@map("community_followers")
+  @@map("community_followers")
   id String @id
   communityId String
   userId String
   followedAt DateTime @default(now())
-  community Community @relation(fields: [communityId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
- @@unique([communityId, userId])
+  @@unique([communityId, userId])
 }
 
 model CommunityMember {
- @@map("community_members")
+  @@map("community_members")
   id String @id
   communityId String
   userId String
   role String @default("member")
   status String @default("active")
   joinedAt DateTime @default(now())
-  community Community @relation(fields: [communityId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
- @@unique([communityId, userId])
+  @@unique([communityId, userId])
 }
 
 model Debate {
- @@map("debates")
+  @@map("debates")
   id String @id
   topic String
   participants Json?
@@ -208,11 +208,11 @@ model Debate {
   status String @default("active")
   updatedAt DateTime
   winner String?
-  user User @relation(fields: [creatorId], references: [id])
+  user User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 }
 
 model EnhancedMessage {
- @@map("enhanced_messages")
+  @@map("enhanced_messages")
   id String @id
   senderId String
   receiverId String
@@ -240,11 +240,11 @@ model EnhancedMessage {
   createdAt DateTime @default(now())
   updatedAt DateTime
   chats_chats_lastMessageIdToenhanced_messages Chat[] @relation("chats_lastMessageIdToenhanced_messages")
-  chats_enhanced_messages_chatIdTochat Chat @relation("enhanced_messages_chatIdTochats", fields: [chatId], references: [id])
-  users_enhanced_messages_receiverIdTouser User @relation("enhanced_messages_receiverIdTousers", fields: [receiverId], references: [id])
+  chats_enhanced_messages_chatIdTochat Chat @relation("enhanced_messages_chatIdTochats", fields: [chatId], references: [id], onDelete: Cascade)
+  users_enhanced_messages_receiverIdTouser User @relation("enhanced_messages_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
   enhanced_messages EnhancedMessage? @relation("enhanced_messagesToenhanced_messages", fields: [replyToId], references: [id])
   other_enhanced_messages EnhancedMessage[] @relation("enhanced_messagesToenhanced_messages")
-  users_enhanced_messages_senderIdTouser User @relation("enhanced_messages_senderIdTousers", fields: [senderId], references: [id])
+  users_enhanced_messages_senderIdTouser User @relation("enhanced_messages_senderIdTousers", fields: [senderId], references: [id], onDelete: Cascade)
 }
 
 model Interest {
@@ -296,11 +296,11 @@ model LiveStream {
   metadata Json?
   tags String[]
   chats Chat? @relation(fields: [chatId], references: [id])
-  user User @relation(fields: [hostId], references: [id])
+  user User @relation(fields: [hostId], references: [id], onDelete: Cascade)
 }
 
 model Message {
- @@map("messages")
+  @@map("messages")
   id String @id
   message String
   read Boolean @default(false)
@@ -311,13 +311,13 @@ model Message {
   chatId String?
   createdAt DateTime @default(now())
   updatedAt DateTime
-  chat Chat? @relation(fields: [chatId], references: [id])
-  users_messages_receiverIdTouser User @relation("messages_receiverIdTousers", fields: [receiverId], references: [id])
-  users_messages_senderIdTouser User @relation("messages_senderIdTousers", fields: [senderId], references: [id])
+  chat Chat? @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  users_messages_receiverIdTouser User @relation("messages_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
+  users_messages_senderIdTouser User @relation("messages_senderIdTousers", fields: [senderId], references: [id], onDelete: Cascade)
 }
 
 model Post {
- @@map("posts")
+  @@map("posts")
   id String @id
   text String?
   type String
@@ -339,16 +339,16 @@ model Post {
   media Json?
   bookmarks Bookmark[]
   comments Comment[]
-  communities Community? @relation(fields: [communityId], references: [id])
-  users_posts_originalOwnerIdTousers User? @relation("posts_originalOwnerIdTousers", fields: [originalOwnerId], references: [id])
+  communities Community? @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  users_posts_originalOwnerIdTousers User? @relation("posts_originalOwnerIdTousers", fields: [originalOwnerId], references: [id], onDelete: SetNull)
   posts Post? @relation("postsToposts", fields: [originalPostId], references: [id])
   other_posts Post[] @relation("postsToposts")
-  users_posts_userIdTouser User @relation("posts_userIdTousers", fields: [userId], references: [id])
+  users_posts_userIdTouser User @relation("posts_userIdTousers", fields: [userId], references: [id], onDelete: Cascade)
   statuses Status[]
 }
 
 model SecurityEvent {
- @@map("security_events")
+  @@map("security_events")
   id String @id
   userId String
   eventType String
@@ -361,12 +361,12 @@ model SecurityEvent {
   errorMessage String?
   createdAt DateTime @default(now())
   updatedAt DateTime
-  users_security_events_targetUserIdTousers User? @relation("security_events_targetUserIdTousers", fields: [targetUserId], references: [id])
-  users_security_events_userIdTouser User @relation("security_events_userIdTousers", fields: [userId], references: [id])
+  users_security_events_targetUserIdTousers User? @relation("security_events_targetUserIdTousers", fields: [targetUserId], references: [id], onDelete: SetNull)
+  users_security_events_userIdTouser User @relation("security_events_userIdTousers", fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Space {
- @@map("spaces")
+  @@map("spaces")
   id String @id
   hostId String
   title String
@@ -374,11 +374,11 @@ model Space {
   isLive Boolean @default(true)
   highlights Json?
   createdAt DateTime @default(now())
-  user User @relation(fields: [hostId], references: [id])
+  user User @relation(fields: [hostId], references: [id], onDelete: Cascade)
 }
 
 model Status {
- @@map("status")
+  @@map("status")
   id String @id
   userId String
   type String
@@ -390,12 +390,12 @@ model Status {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime
-  Post Post? @relation(fields: [sharedPostId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  posts Post? @relation(fields: [sharedPostId], references: [id], onDelete: SetNull)
+  users User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Transaction {
- @@map("transactions")
+  @@map("transactions")
   id String @id
   amount Float
   currency String @default("USD")
@@ -414,7 +414,7 @@ model Transaction {
   createdAt DateTime @default(now())
   updatedAt DateTime
   community Community @relation(fields: [communityId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model User {
