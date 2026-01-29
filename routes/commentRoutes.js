@@ -178,6 +178,52 @@ router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInte
     }
 });
 
+// Get replies for a comment
+router.get("/replies/:commentId", authMiddleware, async (req, res) => {
+    try {
+        const { commentId } = req.params;
+        
+        const replies = await prisma.comment.findMany({
+            where: { parentId: commentId },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        username: true,
+                        profilePicture: true
+                    }
+                }
+            },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        // Apply blocking filter
+        const BlockingService = (await import('../services/blockingService.js')).default;
+        const currentUserId = req.user?.id || req.user?._id;
+        
+        let finalReplies = replies;
+        if (currentUserId) {
+             const filtered = [];
+             for (const reply of replies) {
+                 const authorId = reply.user?.id || reply.userId;
+                 if (authorId) {
+                     const canInteract = await BlockingService.enforceBlockingRules(currentUserId, authorId);
+                     if (canInteract) filtered.push(reply);
+                 } else {
+                     filtered.push(reply);
+                 }
+             }
+             finalReplies = filtered;
+        }
+
+        res.json(finalReplies);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get comments for a post
 router.get("/:postId", authMiddleware, async (req, res) => {
     try {
