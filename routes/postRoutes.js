@@ -446,13 +446,44 @@ router.get("/feed", authMiddleware, async (req, res) => {
         // Map relation back to 'user' for frontend compatibility
         const mappedPosts = allPosts.map(post => {
             const likes = Array.isArray(post.likes) ? post.likes : [];
+            
+            // Map media field to mediaUrl/mediaUrls for frontend compatibility
+            let mediaUrl = null;
+            let mediaUrls = [];
+            
+            if (post.media) {
+                if (typeof post.media === 'string' && post.media.length > 0) {
+                    mediaUrl = post.media;
+                    mediaUrls = [post.media];
+                } else if (Array.isArray(post.media) && post.media.length > 0) {
+                     mediaUrls = post.media;
+                     mediaUrl = post.media[0];
+                } else if (typeof post.media === 'object' && post.media !== null) {
+                     // Handle case where media might be a JSON object with url property
+                     if (post.media.url) {
+                         mediaUrl = post.media.url;
+                         mediaUrls = [post.media.url];
+                     } else {
+                         // Fallback: try to find any string property that looks like a URL
+                         const values = Object.values(post.media);
+                         const url = values.find(v => typeof v === 'string' && (v.startsWith('http') || v.startsWith('/')));
+                         if (url) {
+                             mediaUrl = url;
+                             mediaUrls = [url];
+                         }
+                     }
+                }
+            }
+
             return {
                 ...post,
                 user: post.users_posts_userIdTouser,
                 users_posts_userIdTouser: undefined,
                 likesCount: likes.length,
                 commentsCount: post._count?.comments || 0,
-                isLiked: likes.includes(requestingUserId)
+                isLiked: likes.includes(requestingUserId),
+                mediaUrl,
+                mediaUrls
             };
         });
         
@@ -484,7 +515,37 @@ router.get("/:postId", authMiddleware, async (req, res) => {
              return res.status(404).json({ error: "Post not found" }); // Hide existence
         }
 
-        res.json(post);
+        // Map media field
+        let mediaUrl = null;
+        let mediaUrls = [];
+        
+        if (post.media) {
+            if (typeof post.media === 'string' && post.media.length > 0) {
+                mediaUrl = post.media;
+                mediaUrls = [post.media];
+            } else if (Array.isArray(post.media) && post.media.length > 0) {
+                    mediaUrls = post.media;
+                    mediaUrl = post.media[0];
+            } else if (typeof post.media === 'object' && post.media !== null) {
+                    if (post.media.url) {
+                        mediaUrl = post.media.url;
+                        mediaUrls = [post.media.url];
+                    } else {
+                        const values = Object.values(post.media);
+                        const url = values.find(v => typeof v === 'string' && (v.startsWith('http') || v.startsWith('/')));
+                        if (url) {
+                            mediaUrl = url;
+                            mediaUrls = [url];
+                        }
+                    }
+            }
+        }
+
+        res.json({
+            ...post,
+            mediaUrl,
+            mediaUrls
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
