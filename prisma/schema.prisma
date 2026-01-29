@@ -134,13 +134,13 @@ model Chat {
 
 model Comment {
   @@map("comments")
-  id String @id
+  id String @id @default(uuid())
   text String
   userId String
   postId String
   likes Json?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   parentId String?
@@ -340,7 +340,7 @@ model Notification {
 
 model Post {
   @@map("posts")
-  id String @id
+  id String @id @default(uuid())
   text String?
   type String
   userId String
@@ -348,7 +348,7 @@ model Post {
   privacy Json?
   engagement Json?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   ad Json?
   likes Json?
   originalPostId String?

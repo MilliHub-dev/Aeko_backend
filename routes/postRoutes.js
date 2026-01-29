@@ -270,7 +270,7 @@ router.post("/create", authMiddleware,
     const newPost = await prisma.post.create({
         data: postData,
         include: {
-            user: {
+            users_posts_userIdTouser: {
                 select: { name: true, email: true, username: true, profilePicture: true }
             }
         }
@@ -415,7 +415,8 @@ router.get("/feed", authMiddleware, async (req, res) => {
                 ]
             },
             include: {
-                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
+                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } },
+                _count: { select: { comments: true } }
             },
             orderBy: { createdAt: 'desc' },
             take: 50
@@ -433,7 +434,8 @@ router.get("/feed", authMiddleware, async (req, res) => {
                     ]
                 },
                 include: {
-                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
+                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } },
+                    _count: { select: { comments: true } }
                 },
                 orderBy: { createdAt: 'desc' },
                 take: remainingSlots
@@ -442,11 +444,17 @@ router.get("/feed", authMiddleware, async (req, res) => {
         }
         
         // Map relation back to 'user' for frontend compatibility
-        const mappedPosts = allPosts.map(post => ({
-            ...post,
-            user: post.users_posts_userIdTouser,
-            users_posts_userIdTouser: undefined
-        }));
+        const mappedPosts = allPosts.map(post => {
+            const likes = Array.isArray(post.likes) ? post.likes : [];
+            return {
+                ...post,
+                user: post.users_posts_userIdTouser,
+                users_posts_userIdTouser: undefined,
+                likesCount: likes.length,
+                commentsCount: post._count?.comments || 0,
+                isLiked: likes.includes(requestingUserId)
+            };
+        });
         
         res.json(mappedPosts);
     } catch (error) {

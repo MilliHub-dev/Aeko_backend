@@ -20,7 +20,7 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
         userId: true,
         comments: true,
         likes: true,
-        reposts: true,
+        other_posts: true,
         engagement: true,
         media: true // For thumbnail
       }
@@ -59,7 +59,7 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
     // Update post engagement
     const engagement = post.engagement || {};
     const totalLikes = Array.isArray(post.likes) ? post.likes.length : 0;
-    const totalShares = post.reposts ? post.reposts.length : 0;
+    const totalShares = post.other_posts ? post.other_posts.length : 0;
     
     // We'll update the engagement JSON
     await prisma.post.update({
