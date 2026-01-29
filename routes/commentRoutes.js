@@ -17,10 +17,12 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
       where: { id: postId },
       select: {
         id: true,
+        userId: true,
         comments: true,
         likes: true,
         reposts: true,
-        engagement: true
+        engagement: true,
+        media: true // For thumbnail
       }
     });
 
@@ -70,6 +72,40 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
           totalShares
         }
       }
+    });
+
+    // Process mentions in comment text
+    try {
+        const { processMentions } = await import('../services/notificationService.js');
+        await processMentions({
+            text,
+            senderId: userId,
+            entityId: newComment.id,
+            entityType: 'COMMENT',
+            postId: postId
+        });
+    } catch (notifError) {
+        console.error('Failed to process mentions in comment:', notifError);
+    }
+
+    // Create notification for comment
+    const { createNotification } = await import('../services/notificationService.js');
+    // Get user info
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, name: true } });
+    
+    await createNotification({
+        recipientId: post.userId,
+        senderId: userId,
+        type: 'COMMENT',
+        title: 'New Comment',
+        message: `${user?.username || user?.name || 'Someone'} commented on your post`,
+        entityId: postId,
+        entityType: 'POST',
+        metadata: {
+            commentId: newComment.id,
+            text: text.substring(0, 50),
+            postImage: post.media?.[0]?.url
+        }
     });
 
     res.status(201).json({
@@ -122,6 +158,39 @@ router.post("/reply/:commentId", authMiddleware, BlockingMiddleware.checkPostInt
             }
         });
 
+        // Process mentions in reply text
+        try {
+            const { processMentions } = await import('../services/notificationService.js');
+            await processMentions({
+                text,
+                senderId: userId,
+                entityId: reply.id,
+                entityType: 'COMMENT',
+                postId: parentComment.postId
+            });
+        } catch (notifError) {
+            console.error('Failed to process mentions in reply:', notifError);
+        }
+
+        // Create notification for reply
+        const { createNotification } = await import('../services/notificationService.js');
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, name: true } });
+
+        await createNotification({
+            recipientId: parentComment.userId,
+            senderId: userId,
+            type: 'REPLY',
+            title: 'New Reply',
+            message: `${user?.username || user?.name || 'Someone'} replied to your comment`,
+            entityId: parentComment.postId, // Link to post
+            entityType: 'POST',
+            metadata: {
+                commentId: reply.id,
+                parentCommentId: commentId,
+                text: text.substring(0, 50)
+            }
+        });
+
         // Update post engagement (optional, but good for total comment count)
         // ... (similar to add comment logic if needed)
 
@@ -169,6 +238,25 @@ router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInte
                 where: { id: commentId },
                 data: { likes: likes }
             });
+            
+            // Create notification for comment like
+            const { createNotification } = await import('../services/notificationService.js');
+            const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, name: true } });
+
+            await createNotification({
+                recipientId: comment.userId,
+                senderId: userId,
+                type: 'LIKE_COMMENT',
+                title: 'Comment Liked',
+                message: `${user?.username || user?.name || 'Someone'} liked your comment`,
+                entityId: comment.postId,
+                entityType: 'POST',
+                metadata: {
+                    commentId: comment.id,
+                    text: comment.text.substring(0, 50)
+                }
+            });
+
             return res.json(updatedComment);
         }
         

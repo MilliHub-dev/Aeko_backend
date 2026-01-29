@@ -276,6 +276,19 @@ router.post("/create", authMiddleware,
         }
     });
     
+    // Process mentions in post text
+    try {
+        const { processMentions } = await import('../services/notificationService.js');
+        await processMentions({
+            text,
+            senderId: userId,
+            entityId: newPost.id,
+            entityType: 'POST'
+        });
+    } catch (notifError) {
+        console.error('Failed to process mentions:', notifError);
+    }
+
     res.status(201).json({
       ...newPost,
       likesCount: 0,
@@ -495,6 +508,24 @@ router.post("/:postId/like", authMiddleware, async (req, res) => {
         } else {
             // Like
             likes.push(userId);
+            
+            // Create notification for like
+            const { createNotification } = await import('../services/notificationService.js');
+            // Get user info for notification message
+            const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, name: true } });
+            
+            await createNotification({
+                recipientId: post.userId,
+                senderId: userId,
+                type: 'LIKE',
+                title: 'New Like',
+                message: `${user?.username || user?.name || 'Someone'} liked your post`,
+                entityId: postId,
+                entityType: 'POST',
+                metadata: {
+                    postImage: post.media?.[0]?.url // Include thumbnail if available
+                }
+            });
         }
 
         const totalLikes = likes.length;
@@ -547,7 +578,7 @@ router.post("/:postId/share-to-status", authMiddleware, async (req, res) => {
     const { postId } = req.params;
     const originalPost = await prisma.post.findUnique({ 
         where: { id: postId },
-        include: { user: { select: { username: true, profilePicture: true } } }
+        include: { users_posts_userIdTouser: { select: { username: true, profilePicture: true, name: true } } }
     });
     if (!originalPost) return res.status(404).json({ error: "Post not found" });
 
@@ -556,9 +587,11 @@ router.post("/:postId/share-to-status", authMiddleware, async (req, res) => {
     // For now, allow sharing.
 
     const { additionalContent = '' } = req.body;
+    
+    // Map the awkward Prisma relation name to a cleaner object for storage
+    const creator = originalPost.users_posts_userIdTouser || {};
 
     // Create status
-    // Assuming Status model has 'userId', 'type', 'content', 'sharedPostId', 'expiresAt'
     const sharedStatus = await prisma.status.create({
         data: {
             userId,
@@ -567,19 +600,23 @@ router.post("/:postId/share-to-status", authMiddleware, async (req, res) => {
             sharedPostId: postId,
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
             originalContent: {
-                creator: originalPost.user,
+                creator: creator,
                 post: originalPost
             }
         },
         include: {
-            user: { select: { username: true, profilePicture: true } }
+            users: { select: { username: true, profilePicture: true } }
         }
     });
 
     res.status(201).json({
       success: true,
       message: "Post shared to status successfully",
-      status: sharedStatus
+      status: {
+          ...sharedStatus,
+          user: sharedStatus.users, // Map for frontend consistency
+          users: undefined
+      }
     });
 
   } catch (error) {

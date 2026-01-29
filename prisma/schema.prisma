@@ -319,6 +319,25 @@ model Message {
   users_messages_senderIdTouser User @relation("messages_senderIdTousers", fields: [senderId], references: [id], onDelete: Cascade)
 }
 
+model Notification {
+  @@map("notifications")
+  id String @id @default(uuid())
+  recipientId String
+  senderId String?
+  type String // FOLLOW, LIKE, COMMENT, REPLY, MENTION, SYSTEM, ADMIN
+  title String?
+  message String?
+  entityId String? // ID of the related entity (post, comment, user, etc.)
+  entityType String? // POST, COMMENT, USER, AD, etc.
+  read Boolean @default(false)
+  metadata Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  recipient User @relation("receivedNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
+  sender User? @relation("sentNotifications", fields: [senderId], references: [id], onDelete: SetNull)
+}
+
 model Post {
   @@map("posts")
   id String @id
@@ -476,6 +495,8 @@ model User {
   posts_posts_userIdTousers Post[] @relation("posts_userIdTousers")
   security_events_security_events_targetUserIdTousers SecurityEvent[] @relation("security_events_targetUserIdTousers")
   security_events_security_events_userIdTousers SecurityEvent[] @relation("security_events_userIdTousers")
+  receivedNotifications Notification[] @relation("receivedNotifications")
+  sentNotifications Notification[] @relation("sentNotifications")
   spaces Space[]
   status Status[]
   transactions Transaction[]

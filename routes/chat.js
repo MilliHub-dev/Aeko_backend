@@ -92,6 +92,29 @@ router.post("/send-message", authMiddleware, BlockingMiddleware.checkMessagingAc
           data: { lastMessageId: chatMessage.id }
       });
 
+      // Create notification for new message
+      try {
+          const { createNotification } = await import('../services/notificationService.js');
+          const sender = await prisma.user.findUnique({ where: { id: req.userId }, select: { username: true, name: true } });
+          
+          await createNotification({
+              recipientId: recipientId,
+              senderId: req.userId,
+              type: 'MESSAGE',
+              title: 'New Message',
+              message: `${sender?.username || sender?.name || 'Someone'} sent you a message`,
+              entityId: chat.id,
+              entityType: 'CHAT',
+              metadata: {
+                  messageId: chatMessage.id,
+                  preview: message.substring(0, 50)
+              }
+          });
+      } catch (notifError) {
+          console.error('Failed to create notification for message:', notifError);
+          // Continue execution, don't fail message sending
+      }
+
       // If recipient has Smart Bot enabled, auto-reply using enhanced bot
       try {
         const botResponse = await enhancedBot.generateResponse(recipientId, message);

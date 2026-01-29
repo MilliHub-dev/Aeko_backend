@@ -484,6 +484,16 @@ router.put('/follow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess()
     ]);
 
     // TODO: Create notification for the target user
+    const { createNotification } = await import('../services/notificationService.js');
+    await createNotification({
+        recipientId: targetId,
+        senderId: userId,
+        type: 'FOLLOW',
+        title: 'New Follower',
+        message: `${user.username || user.name || 'Someone'} started following you`,
+        entityId: userId,
+        entityType: 'USER'
+    });
 
     res.json({ success: true, message: 'Followed user successfully' });
   } catch (error) {

@@ -44,6 +44,7 @@ import communityProfileRoutes from "./routes/communityProfileRoutes.js";
 import communityPaymentRoutes from "./routes/communityPaymentRoutes.js";
 import securityRoutes from "./routes/security.js";
 import exploreRoutes from "./routes/explore.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
@@ -154,6 +155,7 @@ app.use("/api/security", securityRateLimit, securityRoutes);
 
 // Explore route
 app.use("/api/explore", apiRateLimit, blockingMiddleware.checkPostInteraction(), privacyMiddleware.filterResponsePosts, exploreRoutes);
+app.use("/api/notifications", apiRateLimit, notificationRoutes);
 
 // Admin API Routes with 2FA protection for sensitive operations
 // Expose admin REST endpoints such as /api/admin/setup/first-admin
