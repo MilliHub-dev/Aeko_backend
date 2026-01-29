@@ -87,6 +87,51 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
   }
 });
 
+// Add a reply to a comment
+router.post("/reply/:commentId", authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
+    try {
+        const { text } = req.body;
+        const commentId = req.params.commentId;
+        const userId = req.userId;
+
+        // Verify parent comment exists
+        const parentComment = await prisma.comment.findUnique({
+            where: { id: commentId }
+        });
+
+        if (!parentComment) return res.status(404).json({ error: "Comment not found" });
+
+        // Create reply
+        const reply = await prisma.comment.create({
+            data: {
+                text,
+                postId: parentComment.postId,
+                userId,
+                parentId: commentId,
+                likes: []
+            },
+            include: {
+                user: {
+                    select: {
+                        name: true,
+                        email: true,
+                        username: true,
+                        profilePicture: true
+                    }
+                }
+            }
+        });
+
+        // Update post engagement (optional, but good for total comment count)
+        // ... (similar to add comment logic if needed)
+
+        res.status(201).json(reply);
+    } catch (error) {
+        console.error("Error creating reply:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Like a comment
 router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
     try {
@@ -137,7 +182,10 @@ router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInte
 router.get("/:postId", authMiddleware, async (req, res) => {
     try {
         const comments = await prisma.comment.findMany({
-            where: { postId: req.params.postId },
+            where: { 
+                postId: req.params.postId,
+                parentId: null // Only fetch top-level comments
+            },
             include: {
                 user: {
                     select: {
@@ -147,6 +195,20 @@ router.get("/:postId", authMiddleware, async (req, res) => {
                         username: true,
                         profilePicture: true
                     }
+                },
+                replies: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                                username: true,
+                                profilePicture: true
+                            }
+                        }
+                    },
+                    orderBy: { createdAt: 'asc' }
                 }
             },
             orderBy: { createdAt: 'desc' }
