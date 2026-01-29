@@ -106,17 +106,17 @@ router.get('/', authMiddleware, async (req, res) => {
     const requestingUserId = req.userId;
     
     // Find active statuses and populate user information
-    const statuses = await prisma.status.findMany({
+    const statusesRaw = await prisma.status.findMany({
       where: { 
           expiresAt: { gt: new Date() } 
       },
       include: {
-          user: {
+          users: {
               select: { id: true, username: true, profilePicture: true, name: true }
           },
-          sharedPost: {
+          posts: {
               include: {
-                  user: {
+                  users_posts_userIdTouser: {
                       select: { id: true, username: true, profilePicture: true, name: true }
                   }
               }
@@ -124,6 +124,19 @@ router.get('/', authMiddleware, async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
+
+    // Map Prisma relations to expected frontend structure
+    const statuses = statusesRaw.map(status => ({
+        ...status,
+        user: status.users,
+        users: undefined,
+        sharedPost: status.posts ? {
+            ...status.posts,
+            user: status.posts.users_posts_userIdTouser,
+            users_posts_userIdTouser: undefined
+        } : null,
+        posts: undefined
+    }));
 
     // Apply blocking filter
     const BlockingService = (await import('../services/blockingService.js')).default;
