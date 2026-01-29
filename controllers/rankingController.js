@@ -1,4 +1,4 @@
-import prisma from "../config/db.js";
+import { prisma } from "../config/db.js";
 
 // Get ranked profiles
 export const getRankedProfiles = async (req, res) => {

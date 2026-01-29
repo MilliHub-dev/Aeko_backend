@@ -1,4 +1,4 @@
-import prisma from '../config/db.js';
+import { prisma } from '../config/db.js';
 
 // Helper to get age range (matching Mongoose logic)
 const getAgeRange = (age) => {
