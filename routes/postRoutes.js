@@ -348,6 +348,100 @@ router.put("/:postId/privacy", authMiddleware, async (req, res) => {
   }
 });
 
+// Search posts
+router.get("/search", authMiddleware, async (req, res) => {
+    try {
+        const { q, page = 1, limit = 20 } = req.query;
+        if (!q) return res.status(400).json({ error: "Search query is required" });
+
+        const requestingUserId = req.user.id || req.user._id;
+        const privacyWhere = await getPrivacyWhereClause(requestingUserId);
+        
+        const posts = await prisma.post.findMany({
+            where: {
+                AND: [
+                    { text: { contains: q, mode: 'insensitive' } },
+                    privacyWhere
+                ]
+            },
+            include: {
+                user: { select: { name: true, email: true, username: true, profilePicture: true } },
+                communities: { select: { id: true, name: true } }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: parseInt(limit),
+            skip: (parseInt(page) - 1) * parseInt(limit)
+        });
+
+        res.json(posts);
+    } catch (error) {
+        console.error('Search error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Feed
+router.get("/feed", authMiddleware, async (req, res) => {
+    try {
+        const requestingUserId = req.user.id || req.user._id;
+        const privacyWhere = await getPrivacyWhereClause(requestingUserId);
+        
+        // Get following IDs for prioritization
+        const user = await prisma.user.findUnique({
+            where: { id: requestingUserId },
+            select: { following: true }
+        });
+        const followingIds = Array.isArray(user?.following) ? user.following : [];
+
+        // 1. Get posts from followed users (Prioritized)
+        const followedPosts = await prisma.post.findMany({
+            where: {
+                AND: [
+                    privacyWhere,
+                    { userId: { in: followingIds } }
+                ]
+            },
+            include: {
+                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+        });
+
+        // 2. If we need more posts to fill the feed, get other visible posts
+        let allPosts = [...followedPosts];
+        if (allPosts.length < 50) {
+            const remainingSlots = 50 - allPosts.length;
+            const otherPosts = await prisma.post.findMany({
+                where: {
+                    AND: [
+                        privacyWhere,
+                        { userId: { notIn: followingIds } }
+                    ]
+                },
+                include: {
+                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
+                },
+                orderBy: { createdAt: 'desc' },
+                take: remainingSlots
+            });
+            allPosts = [...allPosts, ...otherPosts];
+        }
+        
+        // Map relation back to 'user' for frontend compatibility
+        const mappedPosts = allPosts.map(post => ({
+            ...post,
+            user: post.users_posts_userIdTouser,
+            users_posts_userIdTouser: undefined
+        }));
+        
+        res.json(mappedPosts);
+    } catch (error) {
+        console.error('Feed error:', error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // Get single post
 router.get("/:postId", authMiddleware, async (req, res) => {
     try {
@@ -682,28 +776,6 @@ router.post("/repost/:postId", authMiddleware, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-});
-
-// Feed
-router.get("/feed", authMiddleware, async (req, res) => {
-    try {
-        const requestingUserId = req.user.id || req.user._id;
-        const privacyWhere = await getPrivacyWhereClause(requestingUserId);
-        
-        const posts = await prisma.post.findMany({
-            where: privacyWhere,
-            include: {
-                user: { select: { name: true, email: true, username: true, profilePicture: true } }
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 50
-        });
-        
-        res.json(posts);
-    } catch (error) {
-        console.error('Feed error:', error);
-        res.status(500).json({ error: "Internal server error" });
-    }
 });
 
 export default router;
