@@ -257,10 +257,18 @@ router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInte
                 }
             });
 
-            return res.json(updatedComment);
+            return res.json({
+                ...updatedComment,
+                likesCount: likes.length,
+                isLiked: true
+            });
         }
         
-        res.json(comment);
+        res.json({
+            ...comment,
+            likesCount: likes.length,
+            isLiked: true
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -306,7 +314,17 @@ router.get("/replies/:commentId", authMiddleware, async (req, res) => {
              finalReplies = filtered;
         }
 
-        res.json(finalReplies);
+        // Add likes count and isLiked status
+        const repliesWithCounts = finalReplies.map(reply => {
+            const likes = Array.isArray(reply.likes) ? reply.likes : [];
+            return {
+                ...reply,
+                likesCount: likes.length,
+                isLiked: currentUserId ? likes.includes(currentUserId) : false
+            };
+        });
+
+        res.json(repliesWithCounts);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -365,7 +383,32 @@ router.get("/:postId", authMiddleware, async (req, res) => {
              finalComments = filtered;
         }
 
-        res.json(finalComments);
+        // Add likes count and isLiked status to comments and their replies
+        const commentsWithCounts = finalComments.map(comment => {
+            const likes = Array.isArray(comment.likes) ? comment.likes : [];
+            
+            // Process nested replies if they exist
+            let processedReplies = [];
+            if (comment.replies && Array.isArray(comment.replies)) {
+                processedReplies = comment.replies.map(reply => {
+                    const replyLikes = Array.isArray(reply.likes) ? reply.likes : [];
+                    return {
+                        ...reply,
+                        likesCount: replyLikes.length,
+                        isLiked: currentUserId ? replyLikes.includes(currentUserId) : false
+                    };
+                });
+            }
+
+            return {
+                ...comment,
+                replies: processedReplies,
+                likesCount: likes.length,
+                isLiked: currentUserId ? likes.includes(currentUserId) : false
+            };
+        });
+
+        res.json(commentsWithCounts);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
