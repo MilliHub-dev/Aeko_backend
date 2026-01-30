@@ -407,8 +407,8 @@ const admin = new AdminJS({
             },
           }
         },
-        listProperties: ['title', 'host', 'status', 'category', 'currentViewers', 'totalViews', 'createdAt'],
-        showProperties: ['title', 'description', 'host', 'status', 'category', 'currentViewers', 'peakViewers', 'totalViews', 'createdAt'],
+        listProperties: ['title', 'user', 'status', 'category', 'currentViewers', 'totalViews', 'createdAt'],
+        showProperties: ['title', 'description', 'user', 'status', 'category', 'currentViewers', 'peakViewers', 'totalViews', 'createdAt'],
         editProperties: ['title', 'description', 'status', 'category'],
       },
     },
@@ -424,8 +424,8 @@ const admin = new AdminJS({
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
         },
-        listProperties: ['userId', 'botEnabled', 'botPersonality', 'aiProvider'],
-        showProperties: ['userId', 'botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'customInstructions'],
+        listProperties: ['user', 'botEnabled', 'botPersonality', 'aiProvider'],
+        showProperties: ['user', 'botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'customInstructions'],
         editProperties: ['botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'customInstructions'],
       },
     },
@@ -536,7 +536,7 @@ const admin = new AdminJS({
             },
           }
         },
-        listProperties: ['title', 'mediaType', 'status', 'advertiserId', 'createdAt'],
+        listProperties: ['title', 'mediaType', 'Status', 'user', 'createdAt'],
       },
     },
 
@@ -633,7 +633,7 @@ const admin = new AdminJS({
           name: "User Activity",
           icon: "Activity"
         },
-        listProperties: ['userId', 'content', 'createdAt'],
+        listProperties: ['users', 'content', 'createdAt'],
       },
     },
 
