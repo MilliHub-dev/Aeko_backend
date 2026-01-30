@@ -456,8 +456,19 @@ router.get("/feed", authMiddleware, async (req, res) => {
                     mediaUrl = post.media;
                     mediaUrls = [post.media];
                 } else if (Array.isArray(post.media) && post.media.length > 0) {
-                     mediaUrls = post.media;
-                     mediaUrl = post.media[0];
+                     // Check if array elements are strings or objects
+                     if (typeof post.media[0] === 'string') {
+                         mediaUrls = post.media;
+                         mediaUrl = post.media[0];
+                     } else if (typeof post.media[0] === 'object' && post.media[0].url) {
+                         // Extract URLs from objects
+                         mediaUrls = post.media.map(m => m.url).filter(url => url);
+                         mediaUrl = mediaUrls[0] || null;
+                     } else {
+                         // Fallback for mixed or unknown array content
+                         mediaUrls = post.media;
+                         mediaUrl = post.media[0];
+                     }
                 } else if (typeof post.media === 'object' && post.media !== null) {
                      // Handle case where media might be a JSON object with url property
                      if (post.media.url) {
@@ -531,8 +542,19 @@ router.get("/:postId", authMiddleware, async (req, res) => {
                 mediaUrl = post.media;
                 mediaUrls = [post.media];
             } else if (Array.isArray(post.media) && post.media.length > 0) {
-                    mediaUrls = post.media;
-                    mediaUrl = post.media[0];
+                    // Check if array elements are strings or objects
+                    if (typeof post.media[0] === 'string') {
+                        mediaUrls = post.media;
+                        mediaUrl = post.media[0];
+                    } else if (typeof post.media[0] === 'object' && post.media[0].url) {
+                        // Extract URLs from objects
+                        mediaUrls = post.media.map(m => m.url).filter(url => url);
+                        mediaUrl = mediaUrls[0] || null;
+                    } else {
+                        // Fallback
+                        mediaUrls = post.media;
+                        mediaUrl = post.media[0];
+                    }
             } else if (typeof post.media === 'object' && post.media !== null) {
                     if (post.media.url) {
                         mediaUrl = post.media.url;
@@ -561,6 +583,37 @@ router.get("/:postId", authMiddleware, async (req, res) => {
 });
 
 // Like/Unlike a post
+router.post("/:postId/view", authMiddleware, async (req, res) => {
+    try {
+        const { postId } = req.params;
+        const userId = req.user.id || req.user._id;
+
+        const post = await prisma.post.findUnique({ where: { id: postId } });
+        if (!post) {
+            return res.status(404).json({ message: "Post not found" });
+        }
+
+        // Check blocking
+        const canInteract = await BlockingService.enforceBlockingRules(userId, post.userId);
+        if (!canInteract) {
+             return res.status(404).json({ error: "Post not found" });
+        }
+
+        const updatedPost = await prisma.post.update({
+            where: { id: postId },
+            data: { views: { increment: 1 } }
+        });
+
+        res.json({
+            success: true,
+            views: updatedPost.views
+        });
+    } catch (error) {
+        console.error("View Post Error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
 router.post("/:postId/like", authMiddleware, async (req, res) => {
     try {
         const { postId } = req.params;
