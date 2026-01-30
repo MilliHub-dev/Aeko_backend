@@ -168,7 +168,7 @@ export const getCommunity = async (req, res) => {
     const community = await prisma.community.findUnique({
       where: { id },
       include: {
-        owner: {
+        users: {
           select: {
             name: true,
             username: true,
@@ -239,6 +239,8 @@ export const getCommunity = async (req, res) => {
       success: true,
       data: {
         ...community,
+        owner: community.users,
+        users: undefined,
         moderators: moderators.map(m => m.user)
       }
     });

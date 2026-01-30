@@ -1,6 +1,5 @@
 import BlockingService from '../services/blockingService.js';
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from "../config/db.js";
 
 /**
  * Middleware to enforce blocking relationships across all endpoints

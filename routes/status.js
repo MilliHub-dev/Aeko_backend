@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
+import { generalUpload } from "../middleware/upload.js";
 
 const router = express.Router();
 
@@ -17,12 +18,23 @@ const router = express.Router();
  *     requestBody:
  *       required: true
  *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *               type:
+ *                 type: string
+ *                 enum: [text, image, video]
+ *               content:
+ *                 type: string
  *         application/json:
  *           schema:
  *             type: object
  *             required:
  *               - type
- *               - content
  *             properties:
  *               type:
  *                 type: string
@@ -35,10 +47,29 @@ const router = express.Router();
  *       400:
  *         description: Bad request
  */
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, generalUpload.single('file'), async (req, res) => {
   try {
     const userId = req.userId; // authMiddleware guarantees this
-    const { type, content } = req.body;
+    let { type, content } = req.body;
+
+    // Handle file upload if present
+    if (req.file) {
+      content = req.file.path;
+      // Infer type if not provided
+      if (!type) {
+        if (req.file.mimetype.startsWith('image/')) type = 'image';
+        else if (req.file.mimetype.startsWith('video/')) type = 'video';
+      }
+    }
+
+    // Default to text if still undefined
+    if (!type && content) {
+        type = 'text';
+    }
+
+    if (!type || !content) {
+        return res.status(400).json({ error: "Type and content (or file) are required" });
+    }
     
     // Default expiration: 24 hours from now
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -56,6 +87,7 @@ router.post('/', authMiddleware, async (req, res) => {
     });
     res.status(201).json({ success: true, status: newStatus });
   } catch (error) {
+    console.error('Create status error:', error);
     res.status(500).json({ error: error.message });
   }
 });

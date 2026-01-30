@@ -1,10 +1,9 @@
 import express from "express";
-import { PrismaClient } from '@prisma/client';
+import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Add a comment to a post
 router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(), async (req, res) => {
@@ -89,24 +88,24 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
     }
 
     // Create notification for comment
-    const { createNotification } = await import('../services/notificationService.js');
-    // Get user info
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, name: true } });
-    
-    await createNotification({
-        recipientId: post.userId,
-        senderId: userId,
-        type: 'COMMENT',
-        title: 'New Comment',
-        message: `${user?.username || user?.name || 'Someone'} commented on your post`,
-        entityId: postId,
-        entityType: 'POST',
-        metadata: {
-            commentId: newComment.id,
-            text: text.substring(0, 50),
-            postImage: post.media?.[0]?.url
-        }
-    });
+    try {
+      const { createNotification } = await import('../services/notificationService.js');
+      // Get user info
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, name: true } });
+      
+      await createNotification({
+          recipientId: post.userId,
+          senderId: userId,
+          type: 'COMMENT',
+          title: 'New Comment',
+          message: `${user?.username || 'Someone'} commented on your post`,
+          entityId: newComment.id,
+          entityType: 'COMMENT',
+          metadata: { postId: post.id, commentId: newComment.id }
+      });
+    } catch (notifError) {
+      console.error('Failed to create comment notification:', notifError);
+    }
 
     res.status(201).json({
       comment: newComment,
@@ -118,7 +117,7 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
       }
     });
   } catch (error) {
-    console.error("Error creating comment:", error);
+    console.error('Create comment error:', error);
     res.status(500).json({ error: error.message });
   }
 });
