@@ -496,7 +496,8 @@ router.get("/feed", authMiddleware, async (req, res) => {
                 media: mediaUrls.length > 1 ? mediaUrls : mediaUrl,
                 mediaUrl,
                 mediaUrls,
-                views: post.views
+                views: post.views,
+                type: ((post.type === 'image' || post.type === 'video') && !mediaUrl) ? 'text' : post.type
             };
         });
         
@@ -578,7 +579,8 @@ router.get("/:postId", authMiddleware, async (req, res) => {
             users_posts_userIdTouser: undefined,
             media: mediaUrls.length > 1 ? mediaUrls : mediaUrl,
             mediaUrl,
-            mediaUrls
+            mediaUrls,
+            type: ((post.type === 'image' || post.type === 'video') && !mediaUrl) ? 'text' : post.type
         });
     } catch (error) {
         res.status(500).json({ error: error.message });

@@ -448,6 +448,7 @@ model User {
   name String
   avatar String?
   profilePicture String?
+  coverPicture String?
   bio String?
   blueTick Boolean @default(false)
   goldenTick Boolean @default(false)

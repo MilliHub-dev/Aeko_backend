@@ -236,7 +236,7 @@ router.get('/', authMiddleware, async (req, res) => {
 router.put('/update', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-    const { username, email, profilePic, bio } = req.body;
+    const { username, email, profilePic, coverPic, bio } = req.body;
     
     const user = await prisma.user.update({
       where: { id: userId },
@@ -244,6 +244,7 @@ router.put('/update', authMiddleware, twoFactorMiddleware.requireTwoFactor(), as
         username, 
         email, 
         profilePicture: profilePic, // Map profilePic to profilePicture
+        coverPicture: coverPic, // Map coverPic to coverPicture
         bio 
       }
     });
