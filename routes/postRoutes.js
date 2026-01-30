@@ -503,7 +503,7 @@ router.get("/:postId", authMiddleware, async (req, res) => {
         const post = await prisma.post.findUnique({
             where: { id: postId },
             include: {
-                user: { select: { id: true, username: true, profilePicture: true } }
+                users_posts_userIdTouser: { select: { id: true, username: true, profilePicture: true, name: true } }
             }
         });
         
@@ -514,6 +514,13 @@ router.get("/:postId", authMiddleware, async (req, res) => {
         if (!canInteract) {
              return res.status(404).json({ error: "Post not found" }); // Hide existence
         }
+
+        // Increment views
+        await prisma.post.update({
+            where: { id: postId },
+            data: { views: { increment: 1 } }
+        });
+        post.views = (post.views || 0) + 1;
 
         // Map media field
         let mediaUrl = null;
@@ -543,6 +550,8 @@ router.get("/:postId", authMiddleware, async (req, res) => {
 
         res.json({
             ...post,
+            user: post.users_posts_userIdTouser,
+            users_posts_userIdTouser: undefined,
             mediaUrl,
             mediaUrls
         });
