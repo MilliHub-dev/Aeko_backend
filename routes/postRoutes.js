@@ -493,8 +493,10 @@ router.get("/feed", authMiddleware, async (req, res) => {
                 likesCount: likes.length,
                 commentsCount: post._count?.comments || 0,
                 isLiked: likes.includes(requestingUserId),
+                media: mediaUrls.length > 1 ? mediaUrls : mediaUrl,
                 mediaUrl,
-                mediaUrls
+                mediaUrls,
+                views: post.views
             };
         });
         
@@ -574,6 +576,7 @@ router.get("/:postId", authMiddleware, async (req, res) => {
             ...post,
             user: post.users_posts_userIdTouser,
             users_posts_userIdTouser: undefined,
+            media: mediaUrls.length > 1 ? mediaUrls : mediaUrl,
             mediaUrl,
             mediaUrls
         });
