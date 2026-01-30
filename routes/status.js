@@ -25,6 +25,7 @@ const router = express.Router();
  *               file:
  *                 type: string
  *                 format: binary
+ *                 description: The media file (accepts 'file', 'media', 'image', or 'video' field names)
  *               type:
  *                 type: string
  *                 enum: [text, image, video]
@@ -47,18 +48,47 @@ const router = express.Router();
  *       400:
  *         description: Bad request
  */
-router.post('/', authMiddleware, generalUpload.single('file'), async (req, res) => {
+router.post('/', authMiddleware, (req, res, next) => {
+    // Support multiple field names for flexibility
+    const uploadMiddleware = generalUpload.fields([
+        { name: 'file', maxCount: 1 },
+        { name: 'media', maxCount: 1 },
+        { name: 'image', maxCount: 1 },
+        { name: 'video', maxCount: 1 }
+    ]);
+
+    uploadMiddleware(req, res, (err) => {
+        if (err) {
+            console.error("Upload middleware error:", err);
+            // Handle Multer errors specifically
+            if (err.name === 'MulterError') {
+                return res.status(400).json({ error: `Upload error: ${err.message}` });
+            }
+            return res.status(500).json({ error: "File upload failed" });
+        }
+        next();
+    });
+}, async (req, res) => {
   try {
     const userId = req.userId; // authMiddleware guarantees this
     let { type, content } = req.body;
 
-    // Handle file upload if present
-    if (req.file) {
-      content = req.file.path;
+    // Handle file upload if present (check all possible field names)
+    let uploadedFile = null;
+    if (req.files) {
+        uploadedFile = 
+            (req.files.file && req.files.file[0]) || 
+            (req.files.media && req.files.media[0]) || 
+            (req.files.image && req.files.image[0]) || 
+            (req.files.video && req.files.video[0]);
+    }
+
+    if (uploadedFile) {
+      content = uploadedFile.path;
       // Infer type if not provided
       if (!type) {
-        if (req.file.mimetype.startsWith('image/')) type = 'image';
-        else if (req.file.mimetype.startsWith('video/')) type = 'video';
+        if (uploadedFile.mimetype.startsWith('image/')) type = 'image';
+        else if (uploadedFile.mimetype.startsWith('video/')) type = 'video';
       }
     }
 
