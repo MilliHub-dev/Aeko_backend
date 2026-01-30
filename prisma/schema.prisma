@@ -416,6 +416,19 @@ model Status {
   users User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model VerificationSettings {
+  @@map("verification_settings")
+  id String @id @default(uuid())
+  minFollowers Int @default(1000)
+  minPosts Int @default(10)
+  requiresProfilePic Boolean @default(true)
+  requiresCoverPic Boolean @default(true)
+  requiresBio Boolean @default(true)
+  autoApprove Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
 model Transaction {
   @@map("transactions")
   id String @id

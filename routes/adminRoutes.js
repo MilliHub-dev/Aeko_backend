@@ -481,4 +481,112 @@ router.delete('/admins/:userId', superAdminAuth, twoFactorMiddleware.requireTwoF
   }
 });
 
+// ===== VERIFICATION SETTINGS =====
+
+/**
+ * @swagger
+ * /api/admin/verification-settings:
+ *   get:
+ *     summary: Get verification settings
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Verification settings
+ * */
+router.get('/verification-settings', adminAuth, async (req, res) => {
+  try {
+    let settings = await prisma.verificationSettings.findFirst();
+    if (!settings) {
+      // Create default settings if not exists
+      settings = await prisma.verificationSettings.create({
+        data: {} // Uses defaults
+      });
+    }
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/admin/verification-settings:
+ *   put:
+ *     summary: Update verification settings
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               minFollowers:
+ *                 type: integer
+ *               minPosts:
+ *                 type: integer
+ *               requiresProfilePic:
+ *                 type: boolean
+ *               requiresCoverPic:
+ *                 type: boolean
+ *               requiresBio:
+ *                 type: boolean
+ *               autoApprove:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Settings updated
+ * */
+router.put('/verification-settings', adminAuth, async (req, res) => {
+  try {
+    const { 
+      minFollowers, 
+      minPosts, 
+      requiresProfilePic, 
+      requiresCoverPic, 
+      requiresBio,
+      autoApprove 
+    } = req.body;
+
+    // Upsert settings (update if exists, create if not)
+    // Since we don't have a known ID, we use findFirst then update or create
+    let settings = await prisma.verificationSettings.findFirst();
+
+    if (settings) {
+      settings = await prisma.verificationSettings.update({
+        where: { id: settings.id },
+        data: {
+          minFollowers,
+          minPosts,
+          requiresProfilePic,
+          requiresCoverPic,
+          requiresBio,
+          autoApprove,
+          updatedBy: req.admin.id
+        }
+      });
+    } else {
+      settings = await prisma.verificationSettings.create({
+        data: {
+          minFollowers,
+          minPosts,
+          requiresProfilePic,
+          requiresCoverPic,
+          requiresBio,
+          autoApprove,
+          updatedBy: req.admin.id
+        }
+      });
+    }
+
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

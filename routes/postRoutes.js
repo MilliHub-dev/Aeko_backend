@@ -198,6 +198,50 @@ router.get("/user/bookmarks", authMiddleware, async (req, res) => {
     }
 });
 
+// Get liked posts
+router.get("/user/liked", authMiddleware, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+        const userId = req.user.id || req.user._id;
+
+        // Find posts where likes array contains userId
+        const where = {
+            likes: {
+                array_contains: userId
+            }
+        };
+
+        const [posts, total] = await Promise.all([
+            prisma.post.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    user: { select: { name: true, email: true, username: true, profilePicture: true } }
+                }
+            }),
+            prisma.post.count({ where })
+        ]);
+
+        res.status(200).json({
+            posts,
+            pagination: {
+                total,
+                page,
+                pages: Math.ceil(total / limit),
+                limit
+            }
+        });
+
+    } catch (error) {
+        console.error("Get Liked Posts Error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
 // Create Post
 router.post("/create", authMiddleware, 
   (req, res, next) => {
@@ -802,6 +846,9 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
   try {
     const { userId } = req.params;
     const requestingUserId = req.user.id || req.user._id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
     
     // Check blocking
     const canInteract = await BlockingService.enforceBlockingRules(requestingUserId, userId);
@@ -822,25 +869,52 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
     // If viewing own profile, skip privacy check (already covered by OR logic but to be safe/optimized)
     if (userId === requestingUserId) {
          // simplified query for own posts
-         const posts = await prisma.post.findMany({
-             where: { userId },
-             include: {
-                 user: { select: { name: true, email: true, username: true, profilePicture: true } }
-             },
-             orderBy: { createdAt: 'desc' }
+         const [posts, total] = await Promise.all([
+             prisma.post.findMany({
+                 where: { userId },
+                 skip,
+                 take: limit,
+                 include: {
+                     user: { select: { name: true, email: true, username: true, profilePicture: true } }
+                 },
+                 orderBy: { createdAt: 'desc' }
+             }),
+             prisma.post.count({ where: { userId } })
+         ]);
+
+         return res.json({
+            posts,
+            pagination: {
+                total,
+                page,
+                pages: Math.ceil(total / limit),
+                limit
+            }
          });
-         return res.json(posts);
     }
 
-    const posts = await prisma.post.findMany({
-        where,
-        include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true } }
-        },
-        orderBy: { createdAt: 'desc' }
-    });
+    const [posts, total] = await Promise.all([
+        prisma.post.findMany({
+            where,
+            skip,
+            take: limit,
+            include: {
+                user: { select: { name: true, email: true, username: true, profilePicture: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        }),
+        prisma.post.count({ where })
+    ]);
     
-    res.json(posts);
+    res.json({
+        posts,
+        pagination: {
+            total,
+            page,
+            pages: Math.ceil(total / limit),
+            limit
+        }
+    });
   } catch (error) {
     console.error('User posts endpoint error:', error);
     res.status(500).json({ error: error.message });

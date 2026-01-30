@@ -550,15 +550,66 @@ router.put('/unfollow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess
 
 // Verify user and give Blue Tick
 router.post("/verify", authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
-    const { userId } = req.body;
+    const { userId, force } = req.body;
   
     try {
+      // 1. Get verification settings
+      let settings = await prisma.verificationSettings.findFirst();
+      if (!settings) {
+         settings = {
+             minFollowers: 1000,
+             minPosts: 10,
+             requiresProfilePic: true,
+             requiresCoverPic: true,
+             requiresBio: true,
+             autoApprove: true
+         };
+      }
+
+      // 2. Get user with details
+      const userToCheck = await prisma.user.findUnique({
+          where: { id: userId },
+          include: {
+              _count: {
+                  select: { posts_posts_userIdTousers: true } // Count posts
+              }
+          }
+      });
+
+      if (!userToCheck) {
+          return res.status(404).json({ message: "User not found" });
+      }
+
+      // 3. Check conditions
+      const followerCount = Array.isArray(userToCheck.followers) ? userToCheck.followers.length : 0;
+      const postCount = userToCheck._count.posts_posts_userIdTousers;
+      
+      const errors = [];
+      if (followerCount < settings.minFollowers) errors.push(`Not enough followers (Has: ${followerCount}, Required: ${settings.minFollowers})`);
+      if (postCount < settings.minPosts) errors.push(`Not enough posts (Has: ${postCount}, Required: ${settings.minPosts})`);
+      if (settings.requiresProfilePic && !userToCheck.profilePicture) errors.push("Missing profile picture");
+      if (settings.requiresCoverPic && !userToCheck.coverPicture) errors.push("Missing cover picture");
+      if (settings.requiresBio && !userToCheck.bio) errors.push("Missing bio");
+
+      // 4. Enforce conditions unless forced
+      if (errors.length > 0 && !force) {
+          return res.status(400).json({ 
+              message: "User does not meet verification criteria", 
+              errors,
+              canForce: true // Tell frontend it can be forced
+          });
+      }
+
+      // 5. Update user
       const user = await prisma.user.update({
           where: { id: userId },
           data: { blueTick: true }
       });
   
-      res.status(200).json({ message: "User verified with Blue Tick ✅" });
+      res.status(200).json({ 
+          message: "User verified with Blue Tick ✅", 
+          forced: errors.length > 0 
+      });
     } catch (error) {
       if (error.code === 'P2025') {
         return res.status(404).json({ message: "User not found" });
@@ -566,5 +617,66 @@ router.post("/verify", authMiddleware, twoFactorMiddleware.requireTwoFactor(), a
       res.status(500).json({ message: "Server error", error: error.message });
     }
   });
+
+/**
+ * @swagger
+ * /api/profile/eligibility:
+ *   get:
+ *     summary: Check verification eligibility for current user
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Eligibility status
+ */
+router.get("/eligibility", authMiddleware, async (req, res) => {
+    try {
+        const userId = req.userId || req.user?.id || req.user?._id;
+
+        // 1. Get verification settings
+        let settings = await prisma.verificationSettings.findFirst();
+        if (!settings) {
+            settings = {
+                minFollowers: 1000,
+                minPosts: 10,
+                requiresProfilePic: true,
+                requiresCoverPic: true,
+                requiresBio: true,
+                autoApprove: true
+            };
+        }
+
+        // 2. Get user with details
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                _count: {
+                    select: { posts_posts_userIdTousers: true }
+                }
+            }
+        });
+
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        // 3. Check conditions
+        const followerCount = Array.isArray(user.followers) ? user.followers.length : 0;
+        const postCount = user._count.posts_posts_userIdTousers;
+
+        const criteria = {
+            followers: { met: followerCount >= settings.minFollowers, current: followerCount, required: settings.minFollowers },
+            posts: { met: postCount >= settings.minPosts, current: postCount, required: settings.minPosts },
+            profilePicture: { met: !settings.requiresProfilePic || !!user.profilePicture, required: settings.requiresProfilePic },
+            coverPicture: { met: !settings.requiresCoverPic || !!user.coverPicture, required: settings.requiresCoverPic },
+            bio: { met: !settings.requiresBio || !!user.bio, required: settings.requiresBio }
+        };
+
+        const eligible = Object.values(criteria).every(c => c.met);
+
+        res.json({ eligible, criteria });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 export default router;

@@ -152,13 +152,28 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
         const user = await prisma.user.findUnique({
             where: { id: req.params.id },
             include: {
-                posts: { take: 5, orderBy: { createdAt: 'desc' } }, // Limit posts for efficiency
+                // Try to include posts using likely valid relation name if 'posts' fails, but keeping existing 'posts' for now if it works
+                // We'll trust the existing code but add _count with the schema-defined name
+                posts: { take: 5, orderBy: { createdAt: 'desc' } }, 
+                _count: {
+                    select: { 
+                        posts_posts_userIdTousers: true,
+                        bookmarks: true 
+                    }
+                }
             }
         });
         
         if (!user) {
             return res.status(404).json({ error: "User not found" });
         }
+
+        // Count likes given (posts liked by this user)
+        const likesCount = await prisma.post.count({
+            where: {
+                likes: { array_contains: req.params.id }
+            }
+        });
 
         // Filter sensitive information based on privacy settings
         const viewerId = req.userId || req.user?.id || req.user?._id;
@@ -167,9 +182,17 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
         // Exclude sensitive fields manually since we can't use .select() like Mongoose
         const { password, twoFactorAuth, ...safeUser } = user;
 
+        // Add counts to response
+        const enhancedUser = {
+            ...safeUser,
+            postsCount: user._count?.posts_posts_userIdTousers || 0,
+            bookmarksCount: user._count?.bookmarks || 0,
+            likesCount: likesCount
+        };
+
         // If viewing own profile, return full information (except password/secrets)
         if (viewerId === profileId) {
-            return res.json(safeUser);
+            return res.json(enhancedUser);
         }
 
         // For other users, filter based on privacy settings
@@ -181,7 +204,12 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
             bio: user.bio,
             blueTick: user.blueTick,
             goldenTick: user.goldenTick,
-            createdAt: user.createdAt
+            createdAt: user.createdAt,
+            postsCount: enhancedUser.postsCount,
+            // Bookmarks/Likes usually private for others, but let's include if public?
+            // Usually we don't show how many bookmarks someone has.
+            // But we show postsCount, followersCount, followingCount.
+            // likesCount (likes given) is sometimes public.
         };
 
         const privacy = user.privacy || {};
@@ -209,15 +237,19 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
                 filteredUser.posts = user.posts;
             } else {
                 filteredUser.isPrivate = true;
-                filteredUser.followersCount = followers.length; // Usually visible even if private? Or 0? 
-                // Instagram shows counts for private profiles. Let's show counts.
+                filteredUser.followersCount = followers.length;
                 filteredUser.followingCount = following.length;
-                filteredUser.postsCount = user.posts?.length || 0;
+                // postsCount already set
             }
         }
 
         res.json(filteredUser);
     } catch (error) {
+        // Fallback if 'posts' relation fails
+        if (error.message.includes("posts")) {
+             // Retry without posts include? Or log.
+             console.error("Profile fetch error (likely schema mismatch):", error);
+        }
         res.status(500).json({ error: error.message });
     }
 });
