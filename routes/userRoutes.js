@@ -423,5 +423,60 @@ router.put("/profile-picture", authMiddleware, twoFactorMiddleware.requireTwoFac
     }
 });
 
+/**
+ * @swagger
+ * /api/users/cover-picture:
+ *   put:
+ *     summary: Upload or update cover picture
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Cover picture updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+router.put("/cover-picture", authMiddleware, twoFactorMiddleware.requireTwoFactor(), upload.single("image"), async (req, res) => {
+    try {
+        const userId = req.userId || req.user?.id || req.user?._id;
+        
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file provided' });
+        }
+
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: { coverPicture: req.file.path }
+        });
+        
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(user);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
 
