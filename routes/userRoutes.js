@@ -8,6 +8,8 @@ import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 import privacyFilterMiddleware from "../middleware/privacyMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
+import BlockingService from "../services/blockingService.js";
+import PrivacyManager from "../services/privacyManager.js";
 
 /**
  * @swagger
@@ -505,6 +507,249 @@ router.put("/cover-picture", authMiddleware, twoFactorMiddleware.requireTwoFacto
         res.json(user);
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * @swagger
+ * /api/users/{id}/followers:
+ *   get:
+ *     summary: Get a user's followers
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: List of followers
+ */
+router.get("/:id/followers", authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const viewerId = req.user.id || req.user._id;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        // 1. Check blocking (Viewer vs Target User)
+        const canInteract = await BlockingService.enforceBlockingRules(viewerId, id);
+        if (!canInteract) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        // 2. Get target user and their followers list
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: { followers: true, privacy: true }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        // 3. Privacy Check: Can viewer see the follower list?
+        // Rules: 
+        // - If viewing self: Always YES
+        // - If public profile: YES
+        // - If private profile: YES only if viewer is a follower
+        
+        let canView = false;
+        if (viewerId === id) {
+            canView = true;
+        } else {
+            const isPrivate = user.privacy?.isPrivate || false;
+            if (!isPrivate) {
+                canView = true;
+            } else {
+                // Check if viewer is in the followers list
+                // Note: user.followers is the list we are about to return, so checking it is efficient
+                const followersList = Array.isArray(user.followers) ? user.followers : [];
+                if (followersList.includes(viewerId)) {
+                    canView = true;
+                }
+            }
+        }
+
+        if (!canView) {
+            return res.status(403).json({ error: "This account is private" });
+        }
+
+        // 4. Pagination
+        const allFollowerIds = Array.isArray(user.followers) ? user.followers : [];
+        const total = allFollowerIds.length;
+        const paginatedIds = allFollowerIds.slice(skip, skip + limit);
+
+        if (paginatedIds.length === 0) {
+             return res.json({
+                users: [],
+                pagination: { total, page, pages: Math.ceil(total / limit), limit }
+            });
+        }
+
+        // 5. Fetch details of followers
+        const followers = await prisma.user.findMany({
+            where: { id: { in: paginatedIds } },
+            select: {
+                id: true,
+                username: true,
+                name: true,
+                profilePicture: true,
+                bio: true,
+                blueTick: true,
+                goldenTick: true
+            }
+        });
+
+        // 6. Filter blocked users (optional but recommended)
+        // We filter out users who blocked the viewer or are blocked by the viewer
+        // Since we only fetched a page, we filter within this page. 
+        // This might result in fewer than 'limit' items.
+        const filteredFollowers = [];
+        for (const follower of followers) {
+            const canSee = await BlockingService.enforceBlockingRules(viewerId, follower.id);
+            if (canSee) {
+                filteredFollowers.push(follower);
+            }
+        }
+
+        res.json({
+            users: filteredFollowers,
+            pagination: {
+                total,
+                page,
+                pages: Math.ceil(total / limit),
+                limit
+            }
+        });
+
+    } catch (error) {
+        console.error("Get Followers Error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+/**
+ * @swagger
+ * /api/users/{id}/following:
+ *   get:
+ *     summary: Get a user's following list
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: List of following
+ */
+router.get("/:id/following", authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const viewerId = req.user.id || req.user._id;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        // 1. Check blocking
+        const canInteract = await BlockingService.enforceBlockingRules(viewerId, id);
+        if (!canInteract) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        // 2. Get target user
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: { following: true, followers: true, privacy: true }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        // 3. Privacy Check
+        let canView = false;
+        if (viewerId === id) {
+            canView = true;
+        } else {
+            const isPrivate = user.privacy?.isPrivate || false;
+            if (!isPrivate) {
+                canView = true;
+            } else {
+                // Private account: allow only if viewer is a follower
+                const followersList = Array.isArray(user.followers) ? user.followers : [];
+                if (followersList.includes(viewerId)) {
+                    canView = true;
+                }
+            }
+        }
+
+        if (!canView) {
+            return res.status(403).json({ error: "This account is private" });
+        }
+
+        // 4. Pagination
+        const allFollowingIds = Array.isArray(user.following) ? user.following : [];
+        const total = allFollowingIds.length;
+        const paginatedIds = allFollowingIds.slice(skip, skip + limit);
+
+        if (paginatedIds.length === 0) {
+             return res.json({
+                users: [],
+                pagination: { total, page, pages: Math.ceil(total / limit), limit }
+            });
+        }
+
+        // 5. Fetch details
+        const following = await prisma.user.findMany({
+            where: { id: { in: paginatedIds } },
+            select: {
+                id: true,
+                username: true,
+                name: true,
+                profilePicture: true,
+                bio: true,
+                blueTick: true,
+                goldenTick: true
+            }
+        });
+
+        // 6. Filter blocked
+        const filteredFollowing = [];
+        for (const followedUser of following) {
+            const canSee = await BlockingService.enforceBlockingRules(viewerId, followedUser.id);
+            if (canSee) {
+                filteredFollowing.push(followedUser);
+            }
+        }
+
+        res.json({
+            users: filteredFollowing,
+            pagination: {
+                total,
+                page,
+                pages: Math.ceil(total / limit),
+                limit
+            }
+        });
+
+    } catch (error) {
+        console.error("Get Following Error:", error);
+        res.status(500).json({ error: "Internal server error" });
     }
 });
 
