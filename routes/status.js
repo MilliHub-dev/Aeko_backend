@@ -34,6 +34,12 @@ const router = express.Router();
  *               caption:
  *                 type: string
  *                 description: Optional caption/description for the status
+ *               backgroundColor:
+ *                 type: string
+ *                 description: Tailwind gradient class for background
+ *               font:
+ *                 type: string
+ *                 description: Tailwind font class
  *         application/json:
  *           schema:
  *             type: object
@@ -48,6 +54,12 @@ const router = express.Router();
  *               caption:
  *                 type: string
  *                 description: Optional caption/description for the status
+ *               backgroundColor:
+ *                 type: string
+ *                 description: Tailwind gradient class for background
+ *               font:
+ *                 type: string
+ *                 description: Tailwind font class
  *     responses:
  *       201:
  *         description: Status created successfully
@@ -77,7 +89,7 @@ router.post('/', authMiddleware, (req, res, next) => {
 }, async (req, res) => {
   try {
     const userId = req.userId; // authMiddleware guarantees this
-    let { type, content, caption, description } = req.body;
+    let { type, content, caption, description, backgroundColor, font } = req.body;
     
     // Normalize caption/description
     const statusCaption = caption || description || null;
@@ -119,6 +131,8 @@ router.post('/', authMiddleware, (req, res, next) => {
             type,
             content,
             caption: statusCaption,
+            backgroundColor: backgroundColor || null,
+            font: font || null,
             expiresAt,
             reactions: [],
             originalContent: {},
@@ -166,6 +180,10 @@ router.post('/', authMiddleware, (req, res, next) => {
  *                       content:
  *                         type: string
  *                       caption:
+ *                         type: string
+ *                       backgroundColor:
+ *                         type: string
+ *                       font:
  *                         type: string
  *                       sharedPostData:
  *                         type: object
@@ -266,14 +284,18 @@ router.get('/', authMiddleware, async (req, res) => {
           sharedBy: statusObj.sharedPostData.shareInfo.sharedBy,
           sharedAt: statusObj.sharedPostData.shareInfo.sharedAt,
           additionalContent: statusObj.sharedPostData.shareInfo.additionalContent,
-          caption: status.caption
+          caption: status.caption,
+          backgroundColor: status.backgroundColor,
+          font: status.font
         };
       } else {
         // For regular statuses
         statusObj.displayContent = {
           type: status.type,
           content: status.content,
-          caption: status.caption
+          caption: status.caption,
+          backgroundColor: status.backgroundColor,
+          font: status.font
         };
       }
       
@@ -383,6 +405,125 @@ router.post('/:id/react', authMiddleware, BlockingMiddleware.checkPostInteractio
 
     res.json({ success: true, message: 'Reaction added' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/status/{id}/reshare:
+ *   post:
+ *     summary: Reshare a status to your own story
+ *     tags:
+ *       - Status
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the status to reshare
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               caption:
+ *                 type: string
+ *                 description: Optional caption/commentary for the reshare
+ *               backgroundColor:
+ *                 type: string
+ *               font:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Status reshared successfully
+ *       404:
+ *         description: Original status not found
+ */
+router.post('/:id/reshare', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { caption, backgroundColor, font } = req.body;
+    
+    // Fetch original status with author info
+    const originalStatus = await prisma.status.findUnique({
+        where: { id: req.params.id },
+        include: {
+            users: {
+                select: { id: true, username: true, profilePicture: true, name: true, blueTick: true, goldenTick: true }
+            }
+        }
+    });
+    
+    if (!originalStatus) {
+        return res.status(404).json({ error: 'Status not found' });
+    }
+
+    // Check expiration
+    if (new Date(originalStatus.expiresAt) < new Date()) {
+        return res.status(400).json({ error: 'Cannot reshare expired status' });
+    }
+
+    // Verify privacy/blocking
+    const BlockingService = (await import('../services/blockingService.js')).default;
+    const canInteract = await BlockingService.enforceBlockingRules(userId, originalStatus.userId);
+    
+    if (!canInteract) {
+        return res.status(403).json({ error: 'Cannot reshare this status due to privacy settings' });
+    }
+
+    // Prepare original content snapshot
+    // Determine media/text based on type
+    let originalMedia = null;
+    let originalText = null;
+
+    if (originalStatus.type === 'text') {
+        originalText = originalStatus.content;
+    } else {
+        originalMedia = originalStatus.content;
+        originalText = originalStatus.caption; // Use caption as text for media posts
+    }
+
+    const originalContent = {
+        creator: originalStatus.users,
+        text: originalText,
+        media: originalMedia,
+        type: originalStatus.type,
+        createdAt: originalStatus.createdAt,
+        originalId: originalStatus.id
+    };
+
+    const shareMetadata = {
+        sharedBy: userId,
+        sharedAt: new Date(),
+        originalStatusId: originalStatus.id
+    };
+
+    // Create new status
+    const newStatus = await prisma.status.create({
+        data: {
+            userId,
+            type: 'shared_post', // Using shared_post type for compatibility
+            content: caption || '', // The user's commentary becomes the content
+            caption: null, // We use content for the new commentary
+            backgroundColor: backgroundColor || originalStatus.backgroundColor,
+            font: font || originalStatus.font,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            reactions: [],
+            originalContent,
+            shareMetadata,
+            sharedPostId: null // It's a status, not a permanent post
+        }
+    });
+
+    res.status(201).json({ success: true, status: newStatus });
+  } catch (error) {
+    console.error('Reshare status error:', error);
     res.status(500).json({ error: error.message });
   }
 });

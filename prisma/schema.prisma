@@ -406,6 +406,8 @@ model Status {
   type String
   content String
   caption String?
+  backgroundColor String?
+  font String?
   reactions Json?
   sharedPostId String?
   originalContent Json?
