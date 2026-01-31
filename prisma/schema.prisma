@@ -405,6 +405,7 @@ model Status {
   userId String
   type String
   content String
+  caption String?
   reactions Json?
   sharedPostId String?
   originalContent Json?

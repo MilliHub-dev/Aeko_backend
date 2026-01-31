@@ -31,6 +31,9 @@ const router = express.Router();
  *                 enum: [text, image, video]
  *               content:
  *                 type: string
+ *               caption:
+ *                 type: string
+ *                 description: Optional caption/description for the status
  *         application/json:
  *           schema:
  *             type: object
@@ -42,6 +45,9 @@ const router = express.Router();
  *                 enum: [text, image, video]
  *               content:
  *                 type: string
+ *               caption:
+ *                 type: string
+ *                 description: Optional caption/description for the status
  *     responses:
  *       201:
  *         description: Status created successfully
@@ -71,7 +77,10 @@ router.post('/', authMiddleware, (req, res, next) => {
 }, async (req, res) => {
   try {
     const userId = req.userId; // authMiddleware guarantees this
-    let { type, content } = req.body;
+    let { type, content, caption, description } = req.body;
+    
+    // Normalize caption/description
+    const statusCaption = caption || description || null;
 
     // Handle file upload if present (check all possible field names)
     let uploadedFile = null;
@@ -109,6 +118,7 @@ router.post('/', authMiddleware, (req, res, next) => {
             userId,
             type,
             content,
+            caption: statusCaption,
             expiresAt,
             reactions: [],
             originalContent: {},
@@ -154,6 +164,8 @@ router.post('/', authMiddleware, (req, res, next) => {
  *                         type: string
  *                         enum: [text, image, video, shared_post]
  *                       content:
+ *                         type: string
+ *                       caption:
  *                         type: string
  *                       sharedPostData:
  *                         type: object
@@ -253,13 +265,15 @@ router.get('/', authMiddleware, async (req, res) => {
           originalCreatedAt: statusObj.sharedPostData.originalPost.createdAt,
           sharedBy: statusObj.sharedPostData.shareInfo.sharedBy,
           sharedAt: statusObj.sharedPostData.shareInfo.sharedAt,
-          additionalContent: statusObj.sharedPostData.shareInfo.additionalContent
+          additionalContent: statusObj.sharedPostData.shareInfo.additionalContent,
+          caption: status.caption
         };
       } else {
         // For regular statuses
         statusObj.displayContent = {
           type: status.type,
-          content: status.content
+          content: status.content,
+          caption: status.caption
         };
       }
       
