@@ -847,7 +847,8 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
     const { userId } = req.params;
     const requestingUserId = req.user.id || req.user._id;
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    let limit = parseInt(req.query.limit) || 20; // Increased default limit
+    if (limit > 100) limit = 100; // Cap limit
     const skip = (page - 1) * limit;
     
     // Check blocking

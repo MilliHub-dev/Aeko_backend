@@ -152,12 +152,10 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
         const user = await prisma.user.findUnique({
             where: { id: req.params.id },
             include: {
-                // Try to include posts using likely valid relation name if 'posts' fails, but keeping existing 'posts' for now if it works
-                // We'll trust the existing code but add _count with the schema-defined name
                 posts: { take: 5, orderBy: { createdAt: 'desc' } }, 
                 _count: {
                     select: { 
-                        posts_posts_userIdTousers: true,
+                        posts: true,
                         bookmarks: true 
                     }
                 }
@@ -185,7 +183,7 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
         // Add counts to response
         const enhancedUser = {
             ...safeUser,
-            postsCount: user._count?.posts_posts_userIdTousers || 0,
+            postsCount: user._count?.posts || 0,
             bookmarksCount: user._count?.bookmarks || 0,
             likesCount: likesCount
         };
