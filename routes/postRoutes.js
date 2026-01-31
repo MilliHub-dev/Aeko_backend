@@ -170,7 +170,7 @@ router.get("/user/bookmarks", authMiddleware, async (req, res) => {
                 include: {
                     post: {
                         include: {
-                            user: {
+                            users_posts_userIdTouser: {
                                 select: { username: true, name: true, profilePicture: true, blueTick: true, goldenTick: true }
                             }
                         }
@@ -180,7 +180,14 @@ router.get("/user/bookmarks", authMiddleware, async (req, res) => {
             prisma.bookmark.count({ where: { userId } })
         ]);
 
-        const posts = bookmarks.map(b => b.post).filter(p => p);
+        const posts = bookmarks.map(b => {
+            if (!b.post) return null;
+            return {
+                ...b.post,
+                user: b.post.users_posts_userIdTouser,
+                users_posts_userIdTouser: undefined
+            };
+        }).filter(p => p);
 
         res.status(200).json({
             posts,
@@ -220,14 +227,20 @@ router.get("/user/liked", authMiddleware, async (req, res) => {
                 take: limit,
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    user: { select: { name: true, email: true, username: true, profilePicture: true } }
+                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
                 }
             }),
             prisma.post.count({ where })
         ]);
 
+        const mappedPosts = posts.map(post => ({
+            ...post,
+            user: post.users_posts_userIdTouser,
+            users_posts_userIdTouser: undefined
+        }));
+
         res.status(200).json({
-            posts,
+            posts: mappedPosts,
             pagination: {
                 total,
                 page,
@@ -422,7 +435,7 @@ router.get("/search", authMiddleware, async (req, res) => {
                 ]
             },
             include: {
-                user: { select: { name: true, email: true, username: true, profilePicture: true } },
+                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } },
                 communities: { select: { id: true, name: true } }
             },
             orderBy: { createdAt: 'desc' },
@@ -430,7 +443,13 @@ router.get("/search", authMiddleware, async (req, res) => {
             skip: (parseInt(page) - 1) * parseInt(limit)
         });
 
-        res.json(posts);
+        const mappedPosts = posts.map(post => ({
+            ...post,
+            user: post.users_posts_userIdTouser,
+            users_posts_userIdTouser: undefined
+        }));
+
+        res.json(mappedPosts);
     } catch (error) {
         console.error('Search error:', error);
         res.status(500).json({ error: error.message });
@@ -876,15 +895,21 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
                  skip,
                  take: limit,
                  include: {
-                     user: { select: { name: true, email: true, username: true, profilePicture: true } }
+                     users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
                  },
                  orderBy: { createdAt: 'desc' }
              }),
              prisma.post.count({ where: { userId } })
          ]);
 
+         const mappedPosts = posts.map(post => ({
+             ...post,
+             user: post.users_posts_userIdTouser,
+             users_posts_userIdTouser: undefined
+         }));
+
          return res.json({
-            posts,
+            posts: mappedPosts,
             pagination: {
                 total,
                 page,
@@ -900,15 +925,21 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
             skip,
             take: limit,
             include: {
-                user: { select: { name: true, email: true, username: true, profilePicture: true } }
+                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
             },
             orderBy: { createdAt: 'desc' }
         }),
         prisma.post.count({ where })
     ]);
     
+    const mappedPosts = posts.map(post => ({
+        ...post,
+        user: post.users_posts_userIdTouser,
+        users_posts_userIdTouser: undefined
+    }));
+
     res.json({
-        posts,
+        posts: mappedPosts,
         pagination: {
             total,
             page,
