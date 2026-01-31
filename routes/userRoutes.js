@@ -154,10 +154,10 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
         const user = await prisma.user.findUnique({
             where: { id: req.params.id },
             include: {
-                posts: { take: 5, orderBy: { createdAt: 'desc' } }, 
+                posts_posts_userIdTousers: { take: 5, orderBy: { createdAt: 'desc' } }, 
                 _count: {
                     select: { 
-                        posts: true,
+                        posts_posts_userIdTousers: true,
                         bookmarks: true 
                     }
                 }
@@ -166,6 +166,15 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
         
         if (!user) {
             return res.status(404).json({ error: "User not found" });
+        }
+
+        // Map relation back to 'posts' for convenience
+        user.posts = user.posts_posts_userIdTousers;
+        delete user.posts_posts_userIdTousers;
+        
+        if (user._count) {
+            user._count.posts = user._count.posts_posts_userIdTousers;
+            delete user._count.posts_posts_userIdTousers;
         }
 
         // Count likes given (posts liked by this user)
