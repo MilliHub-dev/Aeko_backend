@@ -119,11 +119,13 @@ export const getCommunities = async (req, res) => {
       prisma.community.findMany({
         where,
         include: {
-          owner: {
+          users: {
             select: {
               name: true,
               username: true,
-              profilePicture: true
+              profilePicture: true,
+              blueTick: true,
+              goldenTick: true
             }
           }
         },
@@ -137,9 +139,15 @@ export const getCommunities = async (req, res) => {
       prisma.community.count({ where })
     ]);
 
+    const mappedCommunities = communities.map(community => ({
+      ...community,
+      owner: community.users,
+      users: undefined
+    }));
+
     res.status(200).json({
       success: true,
-      data: communities,
+      data: mappedCommunities,
       pagination: {
         total,
         page: parseInt(page),
@@ -229,7 +237,9 @@ export const getCommunity = async (req, res) => {
           select: {
             name: true,
             username: true,
-            profilePicture: true
+            profilePicture: true,
+            blueTick: true,
+            goldenTick: true
           }
         }
       }
