@@ -469,6 +469,45 @@ class EmailService {
     }
   }
 
+  // Send warning email
+  async sendWarningEmail(email, username, reason, warningCount) {
+    if (!this.isAvailable()) {
+       console.warn('Email service not available. Warning email not sent.');
+       return { success: false, message: 'Email service not configured' };
+    }
+
+    const content = `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <div style="font-size: 64px; margin-bottom: 10px;">⚠️</div>
+        <h2 style="color: #d97706; margin-bottom: 10px;">Community Warning</h2>
+      </div>
+
+      <p>We are writing to inform you that your account has received a warning for violating our Community Guidelines.</p>
+      
+      <div class="alert-box">
+        <strong>Reason:</strong> ${reason}<br>
+        <strong>Total Warnings:</strong> ${warningCount}
+      </div>
+
+      <p>Please review our guidelines to ensure your future activity complies with our rules. Repeated violations may result in account suspension.</p>
+      
+      <div style="text-align: center;">
+        <a href="${process.env.FRONTEND_URL}/guidelines" class="btn" style="background: #d97706;">Review Guidelines</a>
+      </div>
+    `;
+
+    const htmlContent = getEmailTemplate("Account Warning", content, username);
+
+    try {
+      const emailParams = this.createEmailParams(email, username, "⚠️ Account Warning - Aeko", htmlContent);
+      await this.client.sendMail(emailParams);
+      return { success: true, message: 'Warning email sent' };
+    } catch (error) {
+      console.error('Email sending error:', error);
+      return { success: false, message: 'Failed to send warning email' };
+    }
+  }
+
   // Send welcome email after verification
   async sendWelcomeEmail(email, username) {
     if (!this.isAvailable()) {

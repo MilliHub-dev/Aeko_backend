@@ -73,6 +73,38 @@ const getPrivacyWhereClause = async (requestingUserId) => {
     };
 };
 
+// Not Interested
+router.post("/:postId/not-interested", authMiddleware, async (req, res) => {
+    try {
+        const { postId } = req.params;
+        const userId = req.user.id || req.user._id;
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { notInterested: true }
+        });
+
+        let notInterested = user.notInterested || { posts: [], users: [], tags: [] };
+        // Ensure structure if it was initialized differently or null
+        if (typeof notInterested !== 'object') notInterested = { posts: [], users: [], tags: [] };
+        if (!Array.isArray(notInterested.posts)) notInterested.posts = [];
+        
+        if (!notInterested.posts.includes(postId)) {
+            notInterested.posts.push(postId);
+            
+            await prisma.user.update({
+                where: { id: userId },
+                data: { notInterested }
+            });
+        }
+
+        res.json({ success: true, message: "Post marked as not interested" });
+    } catch (error) {
+        console.error("Not Interested Error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // Bookmark a post
 router.post("/:postId/bookmark", authMiddleware, async (req, res) => {
     try {
@@ -465,15 +497,21 @@ router.get("/feed", authMiddleware, async (req, res) => {
         // Get following IDs for prioritization
         const user = await prisma.user.findUnique({
             where: { id: requestingUserId },
-            select: { following: true }
+            select: { following: true, notInterested: true }
         });
         const followingIds = Array.isArray(user?.following) ? user.following : [];
+        
+        // Filter out not interested posts
+        const notInterested = user?.notInterested || {};
+        const excludedPostIds = Array.isArray(notInterested.posts) ? notInterested.posts : [];
+        const notInExcluded = { id: { notIn: excludedPostIds } };
 
         // 1. Get posts from followed users (Prioritized)
         const followedPosts = await prisma.post.findMany({
             where: {
                 AND: [
                     privacyWhere,
+                    notInExcluded,
                     { userId: { in: followingIds } }
                 ]
             },
@@ -493,6 +531,7 @@ router.get("/feed", authMiddleware, async (req, res) => {
                 where: {
                     AND: [
                         privacyWhere,
+                        notInExcluded,
                         { userId: { notIn: followingIds } }
                     ]
                 },

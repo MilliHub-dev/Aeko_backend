@@ -46,7 +46,8 @@ router.get("/", protect, async (req, res) => {
         following: true,
         interests: true,
         blockedUsers: true,
-        communityMemberships: { select: { id: true } }
+        communityMemberships: { select: { id: true } },
+        notInterested: true
       }
     });
     
@@ -60,16 +61,22 @@ router.get("/", protect, async (req, res) => {
     
     const followingIds = Array.isArray(currentUser.following) ? currentUser.following : [];
     
+    // Parse Not Interested
+    const notInterested = currentUser.notInterested || { posts: [], users: [], tags: [] };
+    const excludedPostIds = Array.isArray(notInterested.posts) ? notInterested.posts : [];
+    const notInterestedUserIds = Array.isArray(notInterested.users) ? notInterested.users : [];
+
     // Use owned communities as excluded communities for now (as joined communities structure is unclear)
     const userCommunityIds = currentUser.communityMemberships.map(c => c.id);
 
-    // List of users to exclude (self + following + blocked)
-    const excludedUserIds = [...followingIds, userId, ...blockedUserIds];
+    // List of users to exclude (self + following + blocked + not interested users)
+    const excludedUserIds = [...followingIds, userId, ...blockedUserIds, ...notInterestedUserIds];
 
     // 1. Trending Posts (high engagement, not from followed users)
     const trendingPostsRaw = await prisma.post.findMany({
       where: {
         userId: { notIn: excludedUserIds },
+        id: { notIn: excludedPostIds },
         privacy: {
           path: ['level'],
           equals: 'public'

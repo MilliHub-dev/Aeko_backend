@@ -517,4 +517,26 @@ model User {
   spaces Space[]
   status Status[]
   transactions Transaction[]
+  reporterReports Report[] @relation("reporterReports")
+  reportedReports Report[] @relation("reportedReports")
+  location String?
+  warningCount Int @default(0)
+  notInterested Json?
+}
+
+model Report {
+  @@map("reports")
+  id String @id @default(uuid())
+  reporterId String
+  reportedId String?
+  entityId String?
+  entityType String // USER, POST, COMMENT
+  reason String
+  status String @default("pending")
+  adminNotes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  reporter User @relation("reporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported User? @relation("reportedReports", fields: [reportedId], references: [id], onDelete: SetNull)
 }
