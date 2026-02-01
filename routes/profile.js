@@ -216,7 +216,15 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
     const user = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      include: {
+        _count: {
+          select: { 
+            posts_posts_userIdTousers: true, // Count posts
+            bookmarks: true
+          }
+        }
+      }
     });
     
     if (!user) {
@@ -226,7 +234,15 @@ router.get('/', authMiddleware, async (req, res) => {
     // Remove password from response
     const { password, ...userWithoutPassword } = user;
     
-    res.json({ success: true, user: userWithoutPassword });
+    // Add flattened counts
+    const enhancedUser = {
+        ...userWithoutPassword,
+        postsCount: user._count?.posts_posts_userIdTousers || 0,
+        bookmarksCount: user._count?.bookmarks || 0,
+        _count: undefined // Clean up
+    };
+
+    res.json({ success: true, user: enhancedUser });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

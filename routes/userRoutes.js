@@ -211,6 +211,7 @@ router.get("/:id", authMiddleware, BlockingMiddleware.checkProfileAccess(), priv
             name: user.name,
             profilePicture: user.profilePicture,
             bio: user.bio,
+            location: user.location,
             blueTick: user.blueTick,
             goldenTick: user.goldenTick,
             createdAt: user.createdAt,
