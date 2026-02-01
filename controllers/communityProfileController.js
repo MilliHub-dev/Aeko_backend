@@ -489,7 +489,7 @@ export const getCommunityPosts = async (req, res) => {
         where,
         include: {
           user: {
-            select: { name: true, username: true, profilePicture: true }
+            select: { name: true, username: true, profilePicture: true, blueTick: true, goldenTick: true }
           },
           community: {
             select: { name: true, profile: true }

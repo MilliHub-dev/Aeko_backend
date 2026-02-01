@@ -259,7 +259,7 @@ router.get("/user/liked", authMiddleware, async (req, res) => {
                 take: limit,
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
+                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } }
                 }
             }),
             prisma.post.count({ where })
@@ -360,7 +360,7 @@ router.post("/create", authMiddleware,
         data: postData,
         include: {
             users_posts_userIdTouser: {
-                select: { name: true, email: true, username: true, profilePicture: true }
+                select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true }
             }
         }
     });
@@ -434,7 +434,7 @@ router.put("/:postId/privacy", authMiddleware, async (req, res) => {
         where: { id: postId },
         data: { privacy: newPrivacy },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true } }
+            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } }
         }
     });
 
@@ -467,7 +467,7 @@ router.get("/search", authMiddleware, async (req, res) => {
                 ]
             },
             include: {
-                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } },
+                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } },
                 communities: { select: { id: true, name: true } }
             },
             orderBy: { createdAt: 'desc' },
@@ -516,7 +516,7 @@ router.get("/feed", authMiddleware, async (req, res) => {
                 ]
             },
             include: {
-                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } },
+                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } },
                 _count: { select: { comments: true } }
             },
             orderBy: { createdAt: 'desc' },
@@ -536,7 +536,7 @@ router.get("/feed", authMiddleware, async (req, res) => {
                     ]
                 },
                 include: {
-                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } },
+                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } },
                     _count: { select: { comments: true } }
                 },
                 orderBy: { createdAt: 'desc' },
@@ -619,7 +619,7 @@ router.get("/:postId", authMiddleware, async (req, res) => {
         const post = await prisma.post.findUnique({
             where: { id: postId },
             include: {
-                users_posts_userIdTouser: { select: { id: true, username: true, profilePicture: true, name: true } }
+                users_posts_userIdTouser: { select: { id: true, username: true, profilePicture: true, name: true, blueTick: true, goldenTick: true } }
             }
         });
         
@@ -800,7 +800,7 @@ router.get("/:postId/reposts", authMiddleware, async (req, res) => {
     const reposts = await prisma.post.findMany({
         where: { originalPostId: postId },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true } }
+            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } }
         },
         orderBy: { createdAt: 'desc' }
     });
@@ -816,7 +816,7 @@ router.post("/:postId/share-to-status", authMiddleware, async (req, res) => {
     const { postId } = req.params;
     const originalPost = await prisma.post.findUnique({ 
         where: { id: postId },
-        include: { users_posts_userIdTouser: { select: { username: true, profilePicture: true, name: true } } }
+        include: { users_posts_userIdTouser: { select: { username: true, profilePicture: true, name: true, blueTick: true, goldenTick: true } } }
     });
     if (!originalPost) return res.status(404).json({ error: "Post not found" });
 
@@ -843,7 +843,7 @@ router.post("/:postId/share-to-status", authMiddleware, async (req, res) => {
             }
         },
         include: {
-            users: { select: { username: true, profilePicture: true } }
+            users: { select: { username: true, profilePicture: true, blueTick: true, goldenTick: true } }
         }
     });
 
@@ -934,8 +934,10 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
                  skip,
                  take: limit,
                  include: {
-                     users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
-                 },
+            users_posts_userIdTouser: {
+                select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true }
+            }
+        },
                  orderBy: { createdAt: 'desc' }
              }),
              prisma.post.count({ where: { userId } })
@@ -964,7 +966,7 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
             skip,
             take: limit,
             include: {
-                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true } }
+                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } }
             },
             orderBy: { createdAt: 'desc' }
         }),
@@ -1006,7 +1008,7 @@ router.get("/mixed", authMiddleware, async (req, res) => {
             ]
         },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true } }
+            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } }
         },
         orderBy: { createdAt: 'desc' },
         take: 50
@@ -1042,7 +1044,7 @@ router.get("/videos", authMiddleware, async (req, res) => {
             ]
         },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true } }
+            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } }
         },
         orderBy: { createdAt: 'desc' },
         take: 50
@@ -1082,7 +1084,7 @@ router.post("/repost/:postId", authMiddleware, async (req, res) => {
             media: originalPost.media || ""
         },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true } }
+            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } }
         }
     });
 
