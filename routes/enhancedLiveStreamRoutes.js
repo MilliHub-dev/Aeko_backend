@@ -55,11 +55,13 @@ router.post('/create', authMiddleware, async (req, res) => {
     });
 
     const streamData = {
+      id: uuidV4(),
       title: title.trim(),
       description: description?.trim() || '',
       category: category || 'other',
       streamType: streamType || 'public',
-      host: { connect: { id: req.user.id } },
+      // Map 'host' to 'user' relationship since Prisma schema uses 'user' for hostId
+      user: { connect: { id: req.user.id } },
       hostName: req.user.username,
       hostProfilePicture: req.user.profilePicture,
       streamKey,
@@ -87,6 +89,7 @@ router.post('/create', authMiddleware, async (req, res) => {
       },
       tags: Array.isArray(tags) ? tags.slice(0, 10) : [],
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+      updatedAt: new Date(),
       monetization: {
         ticketPrice: monetization?.ticketPrice || 0,
         currency: monetization?.currency || 'USD',
