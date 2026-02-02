@@ -242,12 +242,12 @@ model EnhancedMessage {
   metadata Json?
   createdAt DateTime @default(now())
   updatedAt DateTime
-  chats_chats_lastMessageIdToenhanced_messages Chat[] @relation("chats_lastMessageIdToenhanced_messages")
-  chats_enhanced_messages_chatIdTochat Chat @relation("enhanced_messages_chatIdTochats", fields: [chatId], references: [id], onDelete: Cascade)
-  users_enhanced_messages_receiverIdTouser User @relation("enhanced_messages_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
-  enhanced_messages EnhancedMessage? @relation("enhanced_messagesToenhanced_messages", fields: [replyToId], references: [id])
-  other_enhanced_messages EnhancedMessage[] @relation("enhanced_messagesToenhanced_messages")
-  users_enhanced_messages_senderIdTouser User @relation("enhanced_messages_senderIdTousers", fields: [senderId], references: [id], onDelete: Cascade)
+  chatsLastMessage Chat[] @relation("chats_lastMessageIdToenhanced_messages")
+  chat Chat @relation("enhanced_messages_chatIdTochats", fields: [chatId], references: [id], onDelete: Cascade)
+  receiver User @relation("enhanced_messages_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
+  replyTo EnhancedMessage? @relation("enhanced_messagesToenhanced_messages", fields: [replyToId], references: [id])
+  replies EnhancedMessage[] @relation("enhanced_messagesToenhanced_messages")
+  sender User @relation("enhanced_messages_senderIdTousers", fields: [senderId], references: [id], onDelete: Cascade)
 }
 
 model Interest {
