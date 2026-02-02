@@ -422,6 +422,7 @@ router.get('/trending', async (req, res) => {
                     username: true,
                     profilePicture: true,
                     blueTick: true,
+                    goldenTick: true,
                     // followers: true // Followers is JSON, might be heavy. Skip unless needed.
                 }
             }
@@ -484,7 +485,8 @@ router.get('/category/:category', async (req, res) => {
                 select: {
                     username: true,
                     profilePicture: true,
-                    blueTick: true
+                    blueTick: true,
+                    goldenTick: true
                 }
             }
         }
@@ -582,7 +584,8 @@ router.get('/search', async (req, res) => {
                 select: {
                     username: true,
                     profilePicture: true,
-                    blueTick: true
+                    blueTick: true,
+                    goldenTick: true
                 }
             }
         }
@@ -715,6 +718,7 @@ router.get('/:streamId', async (req, res) => {
                     username: true,
                     profilePicture: true,
                     blueTick: true,
+                    goldenTick: true,
                     createdAt: true,
                     // followers: true // Too heavy
                 }
@@ -833,7 +837,8 @@ router.get('/user/streams', authMiddleware, async (req, res) => {
                 select: {
                     username: true,
                     profilePicture: true,
-                    blueTick: true
+                    blueTick: true,
+                    goldenTick: true
                 }
             }
         }
