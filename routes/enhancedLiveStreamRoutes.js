@@ -101,7 +101,7 @@ router.post('/create', authMiddleware, async (req, res) => {
       metadata: {
         streamProtocol: 'WebRTC'
       },
-      chat: { connect: { id: chat.id } }
+      chats: { connect: { id: chat.id } }
     };
 
     const liveStream = await prisma.liveStream.create({
