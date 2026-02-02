@@ -136,7 +136,9 @@ router.get('/conversations', authenticate, async (req, res) => {
             sender: {
               select: {
                 username: true,
-                profilePicture: true
+                profilePicture: true,
+                blueTick: true,
+                goldenTick: true
               }
             }
           }
@@ -259,15 +261,15 @@ router.get('/messages/:chatId', authenticate, async (req, res) => {
       where: whereClause,
       include: {
         sender: {
-          select: { username: true, profilePicture: true }
+          select: { username: true, profilePicture: true, blueTick: true, goldenTick: true }
         },
         receiver: {
-          select: { username: true, profilePicture: true }
+          select: { username: true, profilePicture: true, blueTick: true, goldenTick: true }
         },
         replyTo: {
           include: {
             sender: {
-              select: { username: true, profilePicture: true }
+              select: { username: true, profilePicture: true, blueTick: true, goldenTick: true }
             }
           }
         }
@@ -348,7 +350,7 @@ router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAcce
       data: messageData,
       include: {
         sender: {
-          select: { username: true, profilePicture: true }
+          select: { username: true, profilePicture: true, blueTick: true, goldenTick: true }
         },
         replyTo: {
           select: { content: true, sender: true }
@@ -437,7 +439,7 @@ router.post('/upload-voice', authenticate, generalUpload.single('voice'), async 
       data: messageData,
       include: {
         sender: {
-          select: { username: true, profilePicture: true }
+          select: { username: true, profilePicture: true, blueTick: true, goldenTick: true }
         }
       }
     });
@@ -519,7 +521,7 @@ router.post('/upload-file', authenticate, generalUpload.single('file'), async (r
       data: messageData,
       include: {
         sender: {
-          select: { username: true, profilePicture: true }
+          select: { username: true, profilePicture: true, blueTick: true, goldenTick: true }
         }
       }
     });
@@ -836,7 +838,7 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
         members: {
           include: {
             user: {
-              select: { username: true, profilePicture: true, lastLoginAt: true }
+              select: { username: true, profilePicture: true, lastLoginAt: true, blueTick: true, goldenTick: true }
             }
           }
         }
@@ -981,8 +983,8 @@ router.get('/search', authenticate, async (req, res) => {
     const messages = await prisma.enhancedMessage.findMany({
       where: whereClause,
       include: {
-        sender: { select: { username: true, profilePicture: true } },
-        receiver: { select: { username: true, profilePicture: true } },
+        sender: { select: { username: true, profilePicture: true, blueTick: true, goldenTick: true } },
+        receiver: { select: { username: true, profilePicture: true, blueTick: true, goldenTick: true } },
         chat: { select: { isGroup: true, groupName: true } }
       },
       orderBy: { createdAt: 'desc' },

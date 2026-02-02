@@ -417,7 +417,7 @@ router.get('/trending', async (req, res) => {
         ],
         take: parseInt(limit),
         include: {
-            host: {
+            user: {
                 select: {
                     username: true,
                     profilePicture: true,
@@ -431,14 +431,14 @@ router.get('/trending', async (req, res) => {
 
     // Remove sensitive keys manually
     const sanitizedStreams = streams.map(s => {
-        const { streamKey, rtmpUrl, hlsUrl, webrtcUrl, ...rest } = s;
+        const { streamKey, rtmpUrl, hlsUrl, webrtcUrl, user, ...rest } = s;
         return { 
             ...rest, 
             _id: s.id,
             host: {
-                ...s.host,
+                ...user,
                 _id: s.hostId,
-                verified: s.host.blueTick // backward compat
+                verified: user?.blueTick // backward compat
             }
         };
     });
@@ -481,7 +481,7 @@ router.get('/category/:category', async (req, res) => {
         skip: skip,
         take: parseInt(limit),
         include: {
-            host: {
+            user: {
                 select: {
                     username: true,
                     profilePicture: true,
@@ -495,14 +495,14 @@ router.get('/category/:category', async (req, res) => {
     const total = await prisma.liveStream.count({ where: whereClause });
 
     const sanitizedStreams = streams.map(s => {
-        const { streamKey, rtmpUrl, hlsUrl, webrtcUrl, ...rest } = s;
+        const { streamKey, rtmpUrl, hlsUrl, webrtcUrl, user, ...rest } = s;
         return { 
             ...rest, 
             _id: s.id,
             host: {
-                ...s.host,
+                ...user,
                 _id: s.hostId,
-                verified: s.host.blueTick
+                verified: user?.blueTick
             }
         };
     });
@@ -580,7 +580,7 @@ router.get('/search', async (req, res) => {
         skip: skip,
         take: parseInt(limit),
         include: {
-            host: {
+            user: {
                 select: {
                     username: true,
                     profilePicture: true,
@@ -594,14 +594,14 @@ router.get('/search', async (req, res) => {
     const total = await prisma.liveStream.count({ where: whereClause });
 
     const sanitizedStreams = streams.map(s => {
-        const { streamKey, rtmpUrl, hlsUrl, webrtcUrl, ...rest } = s;
+        const { streamKey, rtmpUrl, hlsUrl, webrtcUrl, user, ...rest } = s;
         return { 
             ...rest, 
             _id: s.id,
             host: {
-                ...s.host,
+                ...user,
                 _id: s.hostId,
-                verified: s.host.blueTick
+                verified: user?.blueTick
             }
         };
     });
@@ -713,7 +713,7 @@ router.get('/:streamId', async (req, res) => {
     const liveStream = await prisma.liveStream.findUnique({
         where: { id: streamId },
         include: {
-            host: {
+            user: {
                 select: {
                     username: true,
                     profilePicture: true,
@@ -749,7 +749,8 @@ router.get('/:streamId', async (req, res) => {
     
     const isHost = req.user?.id === liveStream.hostId;
 
-    const sanitizedStream = { ...liveStream, _id: liveStream.id };
+    const { user, ...streamData } = liveStream;
+    const sanitizedStream = { ...streamData, host: user, _id: liveStream.id };
     
     if (!isHost) {
       sanitizedStream.rtmpUrl = undefined;
