@@ -721,6 +721,7 @@ router.post('/bot-chat', authenticate, async (req, res) => {
     const options = {};
     if (personality) options.personalityOverride = personality;
     if (instruction) options.instruction = instruction;
+    if (chatId) options.chatId = chatId;
 
     const botResponse = await enhancedBot.generateResponse(req.user.id, message, options);
 
@@ -819,13 +820,13 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
         where: {
           isGroup: false,
           AND: allParticipants.map(id => ({
-            chat_members: { some: { userId: id } }
+            members: { some: { userId: id } }
           }))
         },
-        include: { chat_members: true }
+        include: { members: true }
       });
 
-      const existingChat = existingChats.find(c => c.chat_members.length === 2);
+      const existingChat = existingChats.find(c => c.members.length === 2);
 
       if (existingChat) {
         return res.json({
@@ -841,7 +842,7 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
       updatedAt: new Date(),
       isGroup,
       groupName: isGroup ? groupName : null,
-      chat_members: {
+      members: {
         create: allParticipants.map(id => ({ userId: id }))
       }
     };
@@ -849,7 +850,7 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
     const chat = await prisma.chat.create({
       data: chatData,
       include: {
-        chat_members: {
+        members: {
           include: {
             user: {
               select: { username: true, profilePicture: true, lastLoginAt: true, blueTick: true, goldenTick: true }
@@ -860,7 +861,7 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
     });
 
     // Flatten members to match Mongoose structure
-    const formattedMembers = chat.chat_members.map(m => ({
+    const formattedMembers = chat.members.map(m => ({
         ...m.user,
         _id: m.user.id || m.userId,
         lastSeen: m.user.lastLoginAt

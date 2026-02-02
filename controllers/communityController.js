@@ -66,7 +66,8 @@ export const createCommunity = async (req, res) => {
           communityId: community.id,
           groupAdminId: userId,
           updatedAt: new Date(),
-          chat_members: {
+          chat_members: undefined, // Removed old field
+          members: {
             create: {
               userId: userId
             }

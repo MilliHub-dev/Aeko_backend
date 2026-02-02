@@ -644,7 +644,13 @@ class EnhancedChatSocket {
 
   async updateChatLastMessage(chatId, messageId) {
     try {
-      // No-op for now; Chat model does not track last message
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          lastMessageId: messageId,
+          updatedAt: new Date()
+        }
+      });
     } catch (error) {
       console.error('Update chat last message error:', error);
     }

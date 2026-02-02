@@ -123,11 +123,11 @@ model Chat {
   groupAdminId String?
   isCommunityChat Boolean @default(false)
   lastMessageId String?
-  chat_members ChatMember[]
+  members ChatMember[]
   communities Community? @relation(fields: [communityId], references: [id], onDelete: Cascade)
   users User? @relation(fields: [groupAdminId], references: [id], onDelete: SetNull)
-  enhanced_messages_chats_lastMessageIdToenhanced_messages EnhancedMessage? @relation("chats_lastMessageIdToenhanced_messages", fields: [lastMessageId], references: [id])
-  enhanced_messages_enhanced_messages_chatIdTochats EnhancedMessage[] @relation("enhanced_messages_chatIdTochats")
+  lastMessage EnhancedMessage? @relation("chats_lastMessageIdToenhanced_messages", fields: [lastMessageId], references: [id])
+  enhancedMessages EnhancedMessage[] @relation("enhanced_messages_chatIdTochats")
   live_streams LiveStream?
   messages Message[]
 }

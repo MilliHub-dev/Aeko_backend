@@ -56,7 +56,7 @@ class EnhancedAIBot {
       contextAwareness: true,
       learningMode: true,
       multiLanguage: true,
-      imageGeneration: false, // Can be enabled later
+      imageGeneration: true, 
       voiceResponse: false    // Can be enabled later
     };
   }
@@ -353,6 +353,36 @@ class EnhancedAIBot {
         timestamp: conv.createdAt
       }));
     } catch (error) {
+      console.error('Error getting conversation context:', error);
+      return [];
+    }
+  }
+
+  async getChatContext(chatId, limit = 10) {
+    try {
+      const messages = await prisma.enhancedMessage.findMany({
+        where: { 
+          chatId,
+          deleted: false
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        include: {
+          sender: {
+            select: { username: true, id: true }
+          }
+        }
+      });
+
+      return messages.reverse().map(m => ({
+        sender: m.sender?.username || 'Unknown',
+        senderId: m.sender?.id,
+        content: m.content,
+        isBot: m.isBot,
+        timestamp: m.createdAt
+      }));
+    } catch (error) {
+      console.error('Error getting chat context:', error);
       return [];
     }
   }

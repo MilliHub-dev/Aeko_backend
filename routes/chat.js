@@ -17,8 +17,8 @@ const getConversation = async (userId1, userId2) => {
       where: {
           isGroup: false,
           AND: [
-              { chat_members: { some: { userId: userId1 } } },
-              { chat_members: { some: { userId: userId2 } } }
+              { members: { some: { userId: userId1 } } },
+              { members: { some: { userId: userId2 } } }
           ]
       }
   });
@@ -29,7 +29,7 @@ const getConversation = async (userId1, userId2) => {
               id: uuidv4(),
               updatedAt: new Date(),
               isGroup: false,
-              chat_members: {
+              members: {
                   create: [
                       { userId: userId1 },
                       { userId: userId2 }
