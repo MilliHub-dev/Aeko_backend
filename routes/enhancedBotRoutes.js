@@ -334,7 +334,10 @@ router.get("/conversation-history", authMiddleware, async (req, res) => {
  */
 router.get("/analytics", authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('botAnalytics');
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { botAnalytics: true }
+    });
     
     // Get recent conversation statistics
     const thirtyDaysAgo = new Date();
@@ -342,35 +345,43 @@ router.get("/analytics", authMiddleware, async (req, res) => {
 
     const [
       recentConversations,
-      sentimentStats,
-      personalityStats,
-      providerStats
+      sentimentGroups,
+      personalityGroups,
+      providerGroups
     ] = await Promise.all([
-      BotConversation.countDocuments({
-        userId: req.userId,
-        createdAt: { $gte: thirtyDaysAgo }
+      prisma.botConversation.count({
+        where: {
+          userId: req.userId,
+          createdAt: { gte: thirtyDaysAgo }
+        }
       }),
-      BotConversation.aggregate([
-        { $match: { userId: req.userId } },
-        { $group: { _id: '$sentiment', count: { $sum: 1 } } }
-      ]),
-      BotConversation.aggregate([
-        { $match: { userId: req.userId } },
-        { $group: { _id: '$personality', count: { $sum: 1 } } }
-      ]),
-      BotConversation.aggregate([
-        { $match: { userId: req.userId } },
-        { $group: { _id: '$aiProvider', count: { $sum: 1 } } }
-      ])
+      prisma.botConversation.groupBy({
+        by: ['sentiment'],
+        where: { userId: req.userId },
+        _count: { sentiment: true }
+      }),
+      prisma.botConversation.groupBy({
+        by: ['personality'],
+        where: { userId: req.userId },
+        _count: { personality: true }
+      }),
+      prisma.botConversation.groupBy({
+        by: ['aiProvider'],
+        where: { userId: req.userId },
+        _count: { aiProvider: true }
+      })
     ]);
+
+    // Transform Prisma groupBy results to match previous format
+    const formatGroups = (groups, key) => groups.map(g => ({ _id: g[key], count: g._count[key] }));
 
     res.json({
       userAnalytics: user?.botAnalytics || {},
       recentActivity: {
         conversationsLast30Days: recentConversations,
-        sentimentDistribution: sentimentStats,
-        personalityUsage: personalityStats,
-        providerUsage: providerStats
+        sentimentDistribution: formatGroups(sentimentGroups, 'sentiment'),
+        personalityUsage: formatGroups(personalityGroups, 'personality'),
+        providerUsage: formatGroups(providerGroups, 'aiProvider')
       }
     });
   } catch (error) {
@@ -498,37 +509,7 @@ router.post("/rate-response", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Valid conversation ID and rating (1-5) are required" });
     }
 
-    // Update conversation
-    // Note: Prisma update returns error if not found, unlike Mongoose returning null
-    // So we check existence or handle error
-    
-    let conversation;
-    try {
-        conversation = await prisma.botConversation.update({
-          where: { id: conversationId }, // Assuming id is unique globally. If composite key needed, this might fail, but BotConversation ID is UUID.
-          data: {
-            rating,
-            feedback,
-            // ratedAt: new Date() // ratedAt not in schema you showed, check schema
-            metadata: {
-                ratedAt: new Date(),
-                rating,
-                feedback
-            }
-          }
-        });
-        
-        // Verify user ownership if strict
-        if (conversation.userId !== req.userId) {
-            // Rollback or error?
-            // Actually, best to findFirst with userId before updating.
-        }
-    } catch (e) {
-        // If not found
-        return res.status(404).json({ error: "Conversation not found" });
-    }
-
-    // Verify ownership properly
+    // Verify ownership and existence
     const ownedConv = await prisma.botConversation.findFirst({
         where: { id: conversationId, userId: req.userId }
     });
@@ -537,14 +518,10 @@ router.post("/rate-response", authMiddleware, async (req, res) => {
          return res.status(404).json({ error: "Conversation not found or unauthorized" });
     }
     
-    // Now update
-    conversation = await prisma.botConversation.update({
+    // Update conversation metadata
+    const conversation = await prisma.botConversation.update({
         where: { id: conversationId },
         data: {
-            // rating, // Schema doesn't have rating field? Checked schema: no rating field in BotConversation model provided in context!
-            // Wait, schema has metadata Json?.
-            // The Mongoose code had rating field.
-            // If schema lacks rating field, I must store in metadata.
             metadata: {
                 ...(typeof ownedConv.metadata === 'object' ? ownedConv.metadata : {}),
                 rating,
@@ -555,7 +532,6 @@ router.post("/rate-response", authMiddleware, async (req, res) => {
     });
 
     // Update user's average satisfaction rating
-    // Calculate avg from metadata
     const conversations = await prisma.botConversation.findMany({
         where: { userId: req.userId }
     });
@@ -578,6 +554,7 @@ router.post("/rate-response", authMiddleware, async (req, res) => {
              where: { id: req.userId },
              select: { botAnalytics: true }
         });
+        
         let analytics = user?.botAnalytics || {};
         if (typeof analytics !== 'object') analytics = {};
         

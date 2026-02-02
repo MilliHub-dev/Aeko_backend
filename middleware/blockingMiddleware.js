@@ -158,7 +158,7 @@ class BlockingMiddleware {
     return async (req, res, next) => {
       try {
         const currentUserId = req.user?.id || req.user?._id;
-        const recipientId = req.params.recipientId || req.body.recipientId || req.body.recipient;
+        const recipientId = req.params.recipientId || req.body.recipientId || req.body.recipient || req.body.receiverId;
 
         if (!currentUserId || !recipientId) {
           return next();

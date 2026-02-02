@@ -415,6 +415,9 @@ class EnhancedChatSocket {
             }
           });
 
+          // Update chat's last message
+          await this.updateChatLastMessage(chatId, botMessage.id);
+
           // Send bot response to original sender
           this.io.to(senderId).emit('bot_auto_reply', {
             message: botMessage,

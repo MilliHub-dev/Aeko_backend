@@ -747,6 +747,17 @@ router.post('/bot-chat', authenticate, async (req, res) => {
       });
     }
 
+    // Update chat's last message
+    if (botMessage && chatId) {
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          lastMessageId: botMessage.id,
+          updatedAt: new Date()
+        }
+      });
+    }
+
     res.json({
       success: true,
       response: botResponse.response,
