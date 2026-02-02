@@ -1,5 +1,6 @@
 import express from "express";
 import { PrismaClient } from "@prisma/client";
+import { v4 as uuidv4 } from "uuid";
 import authMiddleware from "../middleware/authMiddleware.js";
 import getBotResponse from "../ai/bot.js";
 import enhancedBot from "../ai/enhancedBot.js";
@@ -16,8 +17,8 @@ const getConversation = async (userId1, userId2) => {
       where: {
           isGroup: false,
           AND: [
-              { members: { some: { userId: userId1 } } },
-              { members: { some: { userId: userId2 } } }
+              { chat_members: { some: { userId: userId1 } } },
+              { chat_members: { some: { userId: userId2 } } }
           ]
       }
   });
@@ -25,8 +26,10 @@ const getConversation = async (userId1, userId2) => {
   if (!chat) {
       chat = await prisma.chat.create({
           data: {
+              id: uuidv4(),
+              updatedAt: new Date(),
               isGroup: false,
-              members: {
+              chat_members: {
                   create: [
                       { userId: userId1 },
                       { userId: userId2 }

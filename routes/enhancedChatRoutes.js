@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
+import { v4 as uuidv4 } from "uuid";
 import enhancedBot from "../ai/enhancedBot.js";
 import { generalUpload } from '../middleware/upload.js';
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
@@ -807,13 +808,13 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
         where: {
           isGroup: false,
           AND: allParticipants.map(id => ({
-            members: { some: { userId: id } }
+            chat_members: { some: { userId: id } }
           }))
         },
-        include: { members: true }
+        include: { chat_members: true }
       });
 
-      const existingChat = existingChats.find(c => c.members.length === 2);
+      const existingChat = existingChats.find(c => c.chat_members.length === 2);
 
       if (existingChat) {
         return res.json({
@@ -825,9 +826,11 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
     }
 
     const chatData = {
+      id: uuidv4(),
+      updatedAt: new Date(),
       isGroup,
       groupName: isGroup ? groupName : null,
-      members: {
+      chat_members: {
         create: allParticipants.map(id => ({ userId: id }))
       }
     };
@@ -835,7 +838,7 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
     const chat = await prisma.chat.create({
       data: chatData,
       include: {
-        members: {
+        chat_members: {
           include: {
             user: {
               select: { username: true, profilePicture: true, lastLoginAt: true, blueTick: true, goldenTick: true }
@@ -846,7 +849,7 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
     });
 
     // Flatten members to match Mongoose structure
-    const formattedMembers = chat.members.map(m => ({
+    const formattedMembers = chat.chat_members.map(m => ({
         ...m.user,
         _id: m.user.id || m.userId,
         lastSeen: m.user.lastLoginAt

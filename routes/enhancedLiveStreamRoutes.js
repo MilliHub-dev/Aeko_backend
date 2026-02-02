@@ -46,9 +46,11 @@ router.post('/create', authMiddleware, async (req, res) => {
     // Create a Chat for the stream first
     const chat = await prisma.chat.create({
       data: {
+        id: uuidV4(),
         isGroup: true,
         groupName: `${title} Chat`,
-        isCommunityChat: false
+        isCommunityChat: false,
+        updatedAt: new Date()
       }
     });
 

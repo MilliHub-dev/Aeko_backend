@@ -1,5 +1,6 @@
 import { validationResult } from "express-validator";
 import { PrismaClient } from '@prisma/client';
+import { v4 as uuidv4 } from 'uuid';
 
 const prisma = new PrismaClient();
 
@@ -58,12 +59,14 @@ export const createCommunity = async (req, res) => {
       // 2. Create Community Chat
       const chat = await prisma.chat.create({
         data: {
+          id: uuidv4(),
           isGroup: true,
           groupName: name,
           isCommunityChat: true,
           communityId: community.id,
           groupAdminId: userId,
-          members: {
+          updatedAt: new Date(),
+          chat_members: {
             create: {
               userId: userId
             }
