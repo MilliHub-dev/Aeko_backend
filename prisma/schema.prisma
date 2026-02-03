@@ -27,7 +27,7 @@ model Ad {
   placement Json?
   frequency Json?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   user User @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
 }
 
@@ -59,7 +59,7 @@ model BotConversation {
   isModerated Boolean @default(false)
   metadata Json?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -80,7 +80,7 @@ model BotSettings {
   restrictions Json?
   analytics Json?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -94,7 +94,7 @@ model Challenge {
   endReason String?
   endedAt DateTime?
   status String @default("active")
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   votes Json?
   winner String?
   user User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
@@ -118,7 +118,7 @@ model Chat {
   isGroup Boolean @default(false)
   groupName String?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   communityId String? @unique
   groupAdminId String?
   isCommunityChat Boolean @default(false)
@@ -157,7 +157,7 @@ model Community {
   settings Json?
   ownerId String?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   memberCount Int @default(0)
   members Json?
   isActive Boolean @default(true)
@@ -209,7 +209,7 @@ model Debate {
   endReason String?
   endedAt DateTime?
   status String @default("active")
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   winner String?
   user User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 }
@@ -241,7 +241,7 @@ model EnhancedMessage {
   deletedAt DateTime?
   metadata Json?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   chatsLastMessage Chat[] @relation("chats_lastMessageIdToenhanced_messages")
   chat Chat @relation("enhanced_messages_chatIdTochats", fields: [chatId], references: [id], onDelete: Cascade)
   receiver User? @relation("enhanced_messages_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
@@ -259,7 +259,7 @@ model Interest {
   icon String?
   isActive Boolean @default(true)
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
 }
 
 model LiveStream {
@@ -294,7 +294,7 @@ model LiveStream {
   likedBy Json?
   monetization Json?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   chatId String? @unique
   metadata Json?
   tags String[]
@@ -313,7 +313,7 @@ model Message {
   receiverId String
   chatId String?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   chat Chat? @relation(fields: [chatId], references: [id], onDelete: Cascade)
   users_messages_receiverIdTouser User @relation("messages_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
   users_messages_senderIdTouser User @relation("messages_senderIdTousers", fields: [senderId], references: [id], onDelete: Cascade)
@@ -382,7 +382,7 @@ model SecurityEvent {
   success Boolean @default(true)
   errorMessage String?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   users_security_events_targetUserIdTousers User? @relation("security_events_targetUserIdTousers", fields: [targetUserId], references: [id], onDelete: SetNull)
   users_security_events_userIdTouser User @relation("security_events_userIdTousers", fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -450,7 +450,7 @@ model Transaction {
   isWithdrawn Boolean @default(false)
   withdrawalRequest Json?
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   community Community @relation(fields: [communityId], references: [id])
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
