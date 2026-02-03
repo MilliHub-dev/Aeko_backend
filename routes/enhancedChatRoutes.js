@@ -121,9 +121,7 @@ router.get('/conversations', authenticate, async (req, res) => {
                 name: true,
                 username: true,
                 profilePicture: true,
-                avatar: true,
-                blueTick: true,
-                goldenTick: true
+                avatar: true
               }
             }
           }
@@ -729,6 +727,17 @@ router.post('/bot-chat', authenticate, async (req, res) => {
           aiProvider: botResponse.provider,
           confidence: botResponse.confidence,
           status: 'sent'
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              profilePicture: true,
+              avatar: true
+            }
+          }
         }
       });
     }

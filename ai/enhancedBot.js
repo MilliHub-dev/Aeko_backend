@@ -367,16 +367,16 @@ class EnhancedAIBot {
         take: limit,
         include: {
           sender: {
-            select: { username: true, id: true }
+            select: { username: true, name: true, id: true }
           }
         }
       });
 
       return messages.reverse().map(m => ({
-        sender: m.sender?.username || 'Unknown',
+        senderName: m.sender?.name || m.sender?.username || 'Unknown',
         senderId: m.sender?.id,
-        content: m.content,
-        isBot: m.isBot,
+        message: m.content,
+        isUser: !m.isBot,
         timestamp: m.createdAt
       }));
     } catch (error) {

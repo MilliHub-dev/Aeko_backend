@@ -182,8 +182,11 @@ class EnhancedChatSocket {
         include: {
           sender: {
             select: {
+              id: true,
+              name: true,
               username: true,
-              profilePicture: true
+              profilePicture: true,
+              avatar: true
             }
           },
           replyTo: replyToId
@@ -203,8 +206,10 @@ class EnhancedChatSocket {
         chatId,
         sender: {
           id: socket.userId,
+          name: socket.user.name,
           username: socket.user.username,
-          profilePicture: socket.user.profilePicture
+          profilePicture: socket.user.profilePicture,
+          avatar: socket.user.avatar
         }
       });
 
@@ -280,8 +285,11 @@ class EnhancedChatSocket {
         include: {
           sender: {
             select: {
+              id: true,
+              name: true,
               username: true,
-              profilePicture: true
+              profilePicture: true,
+              avatar: true
             }
           }
         }
@@ -293,8 +301,10 @@ class EnhancedChatSocket {
         chatId,
         sender: {
           id: socket.userId,
+          name: socket.user.name,
           username: socket.user.username,
-          profilePicture: socket.user.profilePicture
+          profilePicture: socket.user.profilePicture,
+          avatar: socket.user.avatar
         }
       });
 
@@ -368,6 +378,17 @@ class EnhancedChatSocket {
           aiProvider: botResponse.provider,
           confidence: botResponse.confidence,
           status: 'sent'
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              profilePicture: true,
+              avatar: true
+            }
+          }
         }
       });
 
@@ -412,6 +433,17 @@ class EnhancedChatSocket {
               aiProvider: botResponse.provider,
               confidence: botResponse.confidence,
               status: 'sent'
+            },
+            include: {
+              sender: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  profilePicture: true,
+                  avatar: true
+                }
+              }
             }
           });
 
