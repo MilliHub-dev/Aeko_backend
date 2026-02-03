@@ -102,7 +102,7 @@ model Challenge {
 
 model ChatMember {
   @@map("chat_members")
-  id String @id
+  id String @id @default(uuid())
   chatId String
   userId String
   joinedAt DateTime @default(now())
@@ -173,7 +173,7 @@ model Community {
 
 model CommunityFollower {
   @@map("community_followers")
-  id String @id
+  id String @id @default(uuid())
   communityId String
   userId String
   followedAt DateTime @default(now())
@@ -185,7 +185,7 @@ model CommunityFollower {
 
 model CommunityMember {
   @@map("community_members")
-  id String @id
+  id String @id @default(uuid())
   communityId String
   userId String
   role String @default("member")
