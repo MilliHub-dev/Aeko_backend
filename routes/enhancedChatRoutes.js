@@ -772,6 +772,72 @@ router.post('/bot-chat', authenticate, async (req, res) => {
 
 /**
  * @swagger
+ * /api/enhanced-chat/assist:
+ *   post:
+ *     summary: Get AI assistance for chatting
+ *     tags: [Enhanced Chat, AI Bot]
+ *     description: Help user with writing messages, grammar correction, or reply suggestions
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               input:
+ *                 type: string
+ *                 description: Text to process (draft message)
+ *               type:
+ *                 type: string
+ *                 enum: [improve, grammar, suggest_reply]
+ *                 default: improve
+ *               chatId:
+ *                 type: string
+ *                 description: Optional context for reply suggestions
+ *               tone:
+ *                 type: string
+ *                 enum: [friendly, professional, sarcastic, creative]
+ *                 default: professional
+ *     responses:
+ *       200:
+ *         description: Assistance generated successfully
+ */
+router.post('/assist', authenticate, async (req, res) => {
+  try {
+    const { input, type = 'improve', chatId, tone = 'professional' } = req.body;
+
+    if (!input && type !== 'suggest_reply') {
+      return res.status(400).json({ error: 'Input text is required for this operation' });
+    }
+
+    let context = [];
+    if (chatId) {
+      // Get recent messages for context
+      context = await enhancedBot.getChatContext(chatId, 5);
+    }
+
+    const result = await enhancedBot.assistUser(req.user.id, input, { type, context, tone });
+
+    if (result.error) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    res.json({
+      success: true,
+      result: result.result,
+      type: result.type,
+      provider: result.provider
+    });
+  } catch (error) {
+    console.error('Chat assistance error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
  * /api/enhanced-chat/create-chat:
  *   post:
  *     summary: Create a new chat

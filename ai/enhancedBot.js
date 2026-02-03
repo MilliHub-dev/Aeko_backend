@@ -506,6 +506,55 @@ class EnhancedAIBot {
       return "Unable to summarize conversation history.";
     }
   }
+
+  async assistUser(userId, input, options = {}) {
+    try {
+      const { type = 'improve', context = [], tone = 'professional' } = options;
+      
+      let prompt = "";
+      
+      switch (type) {
+        case 'improve':
+          prompt = `Rewrite the following text to be more ${tone}. Keep the same meaning but improve clarity and style.\n\nText: "${input}"\n\nRewritten version:`;
+          break;
+          
+        case 'grammar':
+          prompt = `Correct the grammar and spelling of the following text. Only output the corrected text, nothing else.\n\nText: "${input}"\n\nCorrected version:`;
+          break;
+          
+        case 'suggest_reply':
+          let conversationContext = "";
+          if (context && context.length > 0) {
+            conversationContext = context.map(m => `${m.senderName || (m.isUser ? 'User' : 'Other')}: ${m.message}`).join('\n');
+          }
+          prompt = `Given the following conversation history, suggest 3 short, relevant replies for the user.\n\nConversation:\n${conversationContext}\n\nSuggested replies (numbered list):`;
+          break;
+          
+        default:
+          return { error: "Invalid assistance type" };
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+      
+      const botSettings = await prisma.botSettings.findUnique({
+        where: { userId }
+      }) || { aiProvider: 'openai' };
+
+      const provider = botSettings.aiProvider || 'openai';
+      const response = await this.providers[provider](prompt, this.personalities.friendly, { ...botSettings, maxTokens: 300 });
+
+      return {
+        result: response.content,
+        type,
+        provider
+      };
+    } catch (error) {
+      console.error('Assist user error:', error);
+      return { error: "Failed to assist user" };
+    }
+  }
 }
 
 export default new EnhancedAIBot();
