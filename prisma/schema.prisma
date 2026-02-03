@@ -218,7 +218,7 @@ model EnhancedMessage {
   @@map("enhanced_messages")
   id String @id
   senderId String
-  receiverId String
+  receiverId String?
   chatId String
   groupId String?
   messageType String @default("text")
@@ -244,7 +244,7 @@ model EnhancedMessage {
   updatedAt DateTime
   chatsLastMessage Chat[] @relation("chats_lastMessageIdToenhanced_messages")
   chat Chat @relation("enhanced_messages_chatIdTochats", fields: [chatId], references: [id], onDelete: Cascade)
-  receiver User @relation("enhanced_messages_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
+  receiver User? @relation("enhanced_messages_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
   replyTo EnhancedMessage? @relation("enhanced_messagesToenhanced_messages", fields: [replyToId], references: [id])
   replies EnhancedMessage[] @relation("enhanced_messagesToenhanced_messages")
   sender User @relation("enhanced_messages_senderIdTousers", fields: [senderId], references: [id], onDelete: Cascade)

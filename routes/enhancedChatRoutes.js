@@ -316,6 +316,7 @@ router.get('/messages/:chatId', authenticate, async (req, res) => {
  *             properties:
  *               receiverId:
  *                 type: string
+ *                 description: Optional for group chats
  *               chatId:
  *                 type: string
  *               content:
@@ -333,13 +334,13 @@ router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAcce
   try {
     const { receiverId, chatId, content, messageType = 'text', replyToId } = req.body;
 
-    if (!receiverId || !chatId || !content) {
+    if (!chatId || !content) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const messageData = {
       senderId: req.user.id,
-      receiverId: receiverId,
+      receiverId: receiverId || null,
       chatId,
       content,
       messageType,
