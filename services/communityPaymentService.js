@@ -1,8 +1,6 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from "../config/db.js";
 
 dotenv.config();
 

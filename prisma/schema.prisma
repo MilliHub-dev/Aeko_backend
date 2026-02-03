@@ -8,8 +8,8 @@ datasource db {
 }
 
 model Ad {
- @@map("ads")
-  id String @id
+  @@map("ads")
+  id String @id @default(uuid())
   title String
   description String
   mediaType String
@@ -33,7 +33,7 @@ model Ad {
 
 model Bookmark {
   @@map("bookmarks")
-  id String @id
+  id String @id @default(uuid())
   savedAt DateTime @default(now())
   userId String
   postId String
@@ -45,7 +45,7 @@ model Bookmark {
 
 model BotConversation {
   @@map("bot_conversations")
-  id String @id
+  id String @id @default(uuid())
   userId String
   userMessage String
   botResponse String
@@ -65,7 +65,7 @@ model BotConversation {
 
 model BotSettings {
   @@map("bot_settings")
-  id String @id
+  id String @id @default(uuid())
   userId String @unique
   botEnabled Boolean @default(false)
   botPersonality String @default("friendly")
@@ -86,7 +86,7 @@ model BotSettings {
 
 model Challenge {
   @@map("challenges")
-  id String @id
+  id String @id @default(uuid())
   creatorId String
   videoUrl String
   participants Json?
@@ -114,7 +114,7 @@ model ChatMember {
 
 model Chat {
   @@map("chats")
-  id String @id
+  id String @id @default(uuid())
   isGroup Boolean @default(false)
   groupName String?
   createdAt DateTime @default(now())
@@ -150,7 +150,7 @@ model Comment {
 
 model Community {
   @@map("communities")
-  id String @id
+  id String @id @default(uuid())
   name String
   description String?
   profile Json?
@@ -199,7 +199,7 @@ model CommunityMember {
 
 model Debate {
   @@map("debates")
-  id String @id
+  id String @id @default(uuid())
   topic String
   participants Json?
   scores Json?
@@ -216,7 +216,7 @@ model Debate {
 
 model EnhancedMessage {
   @@map("enhanced_messages")
-  id String @id
+  id String @id @default(uuid())
   senderId String
   receiverId String?
   chatId String
@@ -252,7 +252,7 @@ model EnhancedMessage {
 
 model Interest {
  @@map("interests")
-  id String @id
+  id String @id @default(uuid())
   name String @unique
   displayName String
   description String?
@@ -264,7 +264,7 @@ model Interest {
 
 model LiveStream {
  @@map("live_streams")
-  id String @id
+  id String @id @default(uuid())
   title String
   description String?
   thumbnail String?
@@ -304,7 +304,7 @@ model LiveStream {
 
 model Message {
   @@map("messages")
-  id String @id
+  id String @id @default(uuid())
   message String
   read Boolean @default(false)
   deleted Boolean @default(false)
@@ -371,7 +371,7 @@ model Post {
 
 model SecurityEvent {
   @@map("security_events")
-  id String @id
+  id String @id @default(uuid())
   userId String
   eventType String
   targetUserId String?
@@ -389,7 +389,7 @@ model SecurityEvent {
 
 model Space {
   @@map("spaces")
-  id String @id
+  id String @id @default(uuid())
   hostId String
   title String
   participants Json?
@@ -434,7 +434,7 @@ model VerificationSettings {
 
 model Transaction {
   @@map("transactions")
-  id String @id
+  id String @id @default(uuid())
   amount Float
   currency String @default("USD")
   paymentMethod String

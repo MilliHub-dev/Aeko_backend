@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from "../config/db.js";
 import SecurityLogger from '../services/securityLogger.js';
 
 class PrivacyMiddleware {

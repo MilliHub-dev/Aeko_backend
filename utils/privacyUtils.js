@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from "../config/db.js";
 
 /**
  * Custom validator to check if value is a valid ID (UUID or MongoDB ObjectId)

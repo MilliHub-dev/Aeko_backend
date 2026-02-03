@@ -1,8 +1,7 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+import { prisma } from "../config/db.js";
 const router = express.Router();
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";

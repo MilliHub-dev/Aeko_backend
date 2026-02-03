@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from "../config/db.js";
 
 /**
  * Middleware to check if user is a community admin (owner only)

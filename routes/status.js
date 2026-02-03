@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
+import BlockingService from "../services/blockingService.js";
 import { generalUpload } from "../middleware/upload.js";
 
 const router = express.Router();

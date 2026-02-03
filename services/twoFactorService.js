@@ -2,10 +2,8 @@ import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from "../config/db.js";
 import SecurityLogger from './securityLogger.js';
-
-const prisma = new PrismaClient();
 
 class TwoFactorService {
   constructor() {

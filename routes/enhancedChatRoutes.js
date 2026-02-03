@@ -3,39 +3,18 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../config/db.js";
 import { v4 as uuidv4 } from "uuid";
 import enhancedBot from "../ai/enhancedBot.js";
 import { generalUpload } from '../middleware/upload.js';
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
+import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient(); // Removed in favor of singleton
 
-// Authentication middleware
-const authenticate = async (req, res, next) => {
-  try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({ error: 'Access denied. No token provided.' });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id || decoded.userId }
-    });
-    
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid token.' });
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    res.status(400).json({ error: 'Invalid token.' });
-  }
-};
+// Use centralized authentication
+const authenticate = authMiddleware;
 
 /**
  * @swagger

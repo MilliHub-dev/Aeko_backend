@@ -1,5 +1,5 @@
 import express from "express";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../config/db.js";
 import { v4 as uuidv4 } from "uuid";
 import authMiddleware from "../middleware/authMiddleware.js";
 import getBotResponse from "../ai/bot.js";
@@ -7,7 +7,6 @@ import enhancedBot from "../ai/enhancedBot.js";
 import { botResponseMiddleware } from "../middleware/botMiddleware.js";
 import BlockingMiddleware from "../middleware/blockingMiddleware.js";
 
-const prisma = new PrismaClient();
 const router = express.Router();
 
 // Helper to get or create conversation

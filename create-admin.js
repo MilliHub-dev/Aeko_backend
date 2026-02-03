@@ -1,10 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
+import { prisma } from "./config/db.js";
 
 dotenv.config();
-
-const prisma = new PrismaClient();
 
 const createAdminUser = async () => {
   try {

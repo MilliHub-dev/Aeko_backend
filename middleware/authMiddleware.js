@@ -1,8 +1,6 @@
 import jwt from "jsonwebtoken";
-import { PrismaClient } from '@prisma/client';
+import { prisma } from "../config/db.js";
 import TwoFactorService from "../services/twoFactorService.js";
-
-const prisma = new PrismaClient();
 
 const authMiddleware = async (req, res, next) => {
   try {
