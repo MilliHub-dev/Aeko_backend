@@ -108,6 +108,8 @@ router.get('/conversations', authenticate, async (req, res) => {
                 username: true,
                 profilePicture: true,
                 avatar: true,
+                blueTick: true,
+                goldenTick: true,
                 lastLoginAt: true // approximating lastSeen
               }
             }
@@ -121,7 +123,9 @@ router.get('/conversations', authenticate, async (req, res) => {
                 name: true,
                 username: true,
                 profilePicture: true,
-                avatar: true
+                avatar: true,
+                blueTick: true,
+                goldenTick: true
               }
             }
           }
@@ -731,12 +735,14 @@ router.post('/bot-chat', authenticate, async (req, res) => {
         include: {
           sender: {
             select: {
-              id: true,
-              name: true,
-              username: true,
-              profilePicture: true,
-              avatar: true
-            }
+            id: true,
+            name: true,
+            username: true,
+            profilePicture: true,
+            avatar: true,
+            blueTick: true,
+            goldenTick: true
+          }
           }
         }
       });
