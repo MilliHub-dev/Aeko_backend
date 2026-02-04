@@ -519,6 +519,8 @@ model User {
   transactions Transaction[]
   reporterReports Report[] @relation("reporterReports")
   reportedReports Report[] @relation("reportedReports")
+  supportTickets SupportTicket[]
+  supportMessages SupportMessage[]
   location String?
   warningCount Int @default(0)
   notInterested Json?
@@ -539,4 +541,33 @@ model Report {
   
   reporter User @relation("reporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
   reported User? @relation("reportedReports", fields: [reportedId], references: [id], onDelete: SetNull)
+}
+
+model SupportTicket {
+  @@map("support_tickets")
+  id String @id @default(uuid())
+  userId String
+  subject String
+  description String
+  category String // billing, technical, account, other
+  priority String @default("medium") // low, medium, high
+  status String @default("open") // open, in_progress, resolved, closed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+}
+
+model SupportMessage {
+  @@map("support_messages")
+  id String @id @default(uuid())
+  ticketId String
+  senderId String
+  message String
+  attachments String[]
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
 }
