@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/db.js";
 import enhancedBot from "../ai/enhancedBot.js";
+import { sendPushNotification } from "../services/notificationService.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -219,6 +220,23 @@ class EnhancedChatSocket {
 
       // Check if receiver has bot enabled for auto-reply
       await this.checkAndTriggerBotResponse(receiverId, content, chatId, socket.userId);
+
+      // Send Push Notification
+      try {
+        await sendPushNotification(receiverId, {
+          type: 'MESSAGE',
+          title: `New message from ${socket.user.name || socket.user.username}`,
+          message: content.substring(0, 100),
+          entityId: message.id,
+          entityType: 'MESSAGE',
+          metadata: {
+              chatId,
+              senderId: socket.userId
+          }
+        });
+      } catch (err) {
+        console.error('Error sending chat push notification:', err);
+      }
 
       // Update chat's last message
       await this.updateChatLastMessage(chatId, message.id);

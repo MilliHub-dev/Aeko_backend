@@ -42,6 +42,9 @@ export const createNotification = async ({
       }
     });
 
+    // Send Push Notification
+    await sendPushNotification(recipientId, notification);
+
     return notification;
   } catch (error) {
     console.error('Error creating notification:', error);
@@ -118,4 +121,58 @@ export const processMentions = async ({ text, senderId, entityId, entityType, po
     });
 
     await Promise.all(notifications);
+};
+
+/**
+ * Send push notification (Mobile)
+ * @param {string} userId - Recipient ID
+ * @param {Object} notification - Notification object or data
+ */
+export const sendPushNotification = async (userId, notification) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { pushToken: true, notificationSettings: true }
+    });
+
+    if (!user || !user.pushToken) return;
+
+    const settings = user.notificationSettings || {};
+    
+    // Check Global Controls
+    if (settings.global?.pauseAll) return;
+    
+    // Check Categories
+    const type = notification.type; 
+    let shouldSend = true;
+
+    if (settings.interactions) {
+        if (type === 'LIKE' && settings.interactions.likes === false) shouldSend = false;
+        if (type === 'COMMENT' && settings.interactions.comments === false) shouldSend = false;
+        if (type === 'MENTION' && settings.interactions.mentions === false) shouldSend = false;
+        if (type === 'TAG' && settings.interactions.tags === false) shouldSend = false;
+    }
+    
+    if (settings.network) {
+        if (type === 'FOLLOW' && settings.network.newFollowers === false) shouldSend = false;
+    }
+
+    if (!shouldSend) return;
+
+    console.log(`[PUSH] Sending to ${userId} (${user.pushToken}): ${notification.title} - ${notification.message}`);
+    
+    // TODO: Integrate FCM/OneSignal here
+    // const payload = {
+    //   token: user.pushToken,
+    //   notification: {
+    //     title: notification.title,
+    //     body: notification.message
+    //   },
+    //   data: notification.metadata
+    // };
+    // await sendToPushProvider(payload);
+
+  } catch (error) {
+    console.error('Error sending push notification:', error);
+  }
 };

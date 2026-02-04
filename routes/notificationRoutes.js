@@ -4,6 +4,81 @@ import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
+// Get notification settings
+router.get('/settings', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.id || req.user._id;
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { notificationSettings: true }
+        });
+
+        // Default settings if not set
+        const defaultSettings = {
+            global: {
+                pauseAll: false,
+                quietMode: false
+            },
+            interactions: {
+                likes: true,
+                comments: true,
+                mentions: true,
+                tags: true
+            },
+            network: {
+                newFollowers: true,
+                recommendations: true
+            }
+        };
+
+        res.json(user.notificationSettings || defaultSettings);
+    } catch (error) {
+        console.error('Get notification settings error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update notification settings
+router.put('/settings', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.id || req.user._id;
+        const settings = req.body;
+
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data: { notificationSettings: settings },
+            select: { notificationSettings: true }
+        });
+
+        res.json(user.notificationSettings);
+    } catch (error) {
+        console.error('Update notification settings error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update push token
+router.put('/push-token', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.id || req.user._id;
+        const { pushToken } = req.body;
+
+        if (!pushToken) {
+             return res.status(400).json({ error: 'Push token is required' });
+        }
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: { pushToken }
+        });
+
+        res.json({ message: 'Push token updated successfully' });
+    } catch (error) {
+        console.error('Update push token error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 /**
  * @swagger
  * components:

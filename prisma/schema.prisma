@@ -479,6 +479,8 @@ model User {
   emailVerification Json?
   profileCompletion Json?
   privacy Json?
+  notificationSettings Json?
+  pushToken String?
   twoFactorAuth Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
