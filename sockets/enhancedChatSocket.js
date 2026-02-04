@@ -182,12 +182,14 @@ class EnhancedChatSocket {
         include: {
           sender: {
             select: {
-              id: true,
-              name: true,
-              username: true,
-              profilePicture: true,
-              avatar: true
-            }
+            id: true,
+            name: true,
+            username: true,
+            profilePicture: true,
+            avatar: true,
+            blueTick: true,
+            goldenTick: true
+          }
           },
           replyTo: replyToId
             ? {
@@ -209,7 +211,9 @@ class EnhancedChatSocket {
           name: socket.user.name,
           username: socket.user.username,
           profilePicture: socket.user.profilePicture,
-          avatar: socket.user.avatar
+          avatar: socket.user.avatar,
+          blueTick: socket.user.blueTick,
+          goldenTick: socket.user.goldenTick
         }
       });
 
@@ -285,12 +289,14 @@ class EnhancedChatSocket {
         include: {
           sender: {
             select: {
-              id: true,
-              name: true,
-              username: true,
-              profilePicture: true,
-              avatar: true
-            }
+            id: true,
+            name: true,
+            username: true,
+            profilePicture: true,
+            avatar: true,
+            blueTick: true,
+            goldenTick: true
+          }
           }
         }
       });
@@ -304,7 +310,9 @@ class EnhancedChatSocket {
           name: socket.user.name,
           username: socket.user.username,
           profilePicture: socket.user.profilePicture,
-          avatar: socket.user.avatar
+          avatar: socket.user.avatar,
+          blueTick: socket.user.blueTick,
+          goldenTick: socket.user.goldenTick
         }
       });
 
@@ -382,12 +390,14 @@ class EnhancedChatSocket {
         include: {
           sender: {
             select: {
-              id: true,
-              name: true,
-              username: true,
-              profilePicture: true,
-              avatar: true
-            }
+            id: true,
+            name: true,
+            username: true,
+            profilePicture: true,
+            avatar: true,
+            blueTick: true,
+            goldenTick: true
+          }
           }
         }
       });
@@ -437,12 +447,14 @@ class EnhancedChatSocket {
             include: {
               sender: {
                 select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  profilePicture: true,
-                  avatar: true
-                }
+            id: true,
+            name: true,
+            username: true,
+            profilePicture: true,
+            avatar: true,
+            blueTick: true,
+            goldenTick: true
+          }
               }
             }
           });
