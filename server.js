@@ -73,11 +73,21 @@ app.set('trust proxy', 1);
 
 const server = http.createServer(app);
 
+// Initialize Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  },
+  maxHttpBufferSize: 1e8, // 100MB
+  transports: ['websocket', 'polling']
+});
+
 // Initialize Enhanced Chat Socket System
-const enhancedChatSocket = new EnhancedChatSocket(server);
+const enhancedChatSocket = new EnhancedChatSocket(io);
 
 // Initialize Enhanced LiveStream Socket System
-const enhancedLiveStreamSocket = new EnhancedLiveStreamSocket(server);
+const enhancedLiveStreamSocket = new EnhancedLiveStreamSocket(io);
 
 // Note: File uploads are handled by Cloudinary in production
 

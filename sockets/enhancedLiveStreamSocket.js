@@ -1,17 +1,10 @@
-import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { v4 as uuidV4 } from "uuid";
 import { prisma } from "../config/db.js";
 
 class EnhancedLiveStreamSocket {
-  constructor(server) {
-    this.io = new Server(server, {
-      cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-      },
-      transports: ['websocket', 'polling']
-    });
+  constructor(io) {
+    this.io = io.of('/livestream');
 
     this.activeStreams = new Map(); // streamId -> stream data
     this.viewers = new Map(); // streamId -> Set of userIds

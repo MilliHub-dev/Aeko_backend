@@ -1,4 +1,3 @@
-import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/db.js";
 import enhancedBot from "../ai/enhancedBot.js";
@@ -7,14 +6,8 @@ import path from "path";
 import fs from "fs";
 
 class EnhancedChatSocket {
-  constructor(server) {
-    this.io = new Server(server, {
-      cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-      },
-      maxHttpBufferSize: 1e8 // 100MB for file uploads
-    });
+  constructor(io) {
+    this.io = io;
 
     this.connectedUsers = new Map();
     this.typingUsers = new Map();
