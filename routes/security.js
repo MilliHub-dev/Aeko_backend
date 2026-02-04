@@ -373,6 +373,10 @@ router.put('/privacy', authMiddleware, validatePrivacySettings, handleValidation
  *                       type: boolean
  *                     allowDirectMessages:
  *                       type: string
+ *                     allowComments:
+ *                       type: boolean
+ *                     allowTags:
+ *                       type: boolean
  *       404:
  *         description: User not found
  *       500:

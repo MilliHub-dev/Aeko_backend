@@ -133,11 +133,21 @@ export const validatePrivacySettings = [
     .optional()
     .isIn(PRIVACY_SETTINGS.allowDirectMessages)
     .withMessage(`allowDirectMessages must be one of: ${PRIVACY_SETTINGS.allowDirectMessages.join(', ')}`),
+
+  body('allowComments')
+    .optional()
+    .isBoolean()
+    .withMessage('allowComments must be a boolean'),
+
+  body('allowTags')
+    .optional()
+    .isBoolean()
+    .withMessage('allowTags must be a boolean'),
   
   // Validate that at least one setting is provided
   body()
     .custom((value) => {
-      const validFields = ['isPrivate', 'allowFollowRequests', 'showOnlineStatus', 'allowDirectMessages'];
+      const validFields = ['isPrivate', 'allowFollowRequests', 'showOnlineStatus', 'allowDirectMessages', 'allowComments', 'allowTags'];
       const hasValidField = validFields.some(field => value.hasOwnProperty(field));
       if (!hasValidField) {
         throw new Error('At least one privacy setting must be provided');

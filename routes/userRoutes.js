@@ -764,5 +764,53 @@ router.get("/:id/following", authMiddleware, async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   delete:
+ *     summary: Delete user account
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ */
+router.delete("/:id", authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const requesterId = req.user.id || req.user._id;
+        const isAdmin = req.user.isAdmin;
+
+        // Check authorization
+        if (id !== requesterId && !isAdmin) {
+            return res.status(403).json({ error: "Unauthorized to delete this account" });
+        }
+
+        // Check if user exists
+        const user = await prisma.user.findUnique({ where: { id } });
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        // Delete user
+        await prisma.user.delete({ where: { id } });
+
+        res.json({ message: "User account deleted successfully" });
+    } catch (error) {
+        console.error("Delete user error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 export default router;
 

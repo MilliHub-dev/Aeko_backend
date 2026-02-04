@@ -48,6 +48,14 @@ class PrivacyManager {
         validSettings.allowDirectMessages = settings.allowDirectMessages;
       }
 
+      if (typeof settings.allowComments === 'boolean') {
+        validSettings.allowComments = settings.allowComments;
+      }
+
+      if (typeof settings.allowTags === 'boolean') {
+        validSettings.allowTags = settings.allowTags;
+      }
+
       // Update user privacy settings
       const updatedUser = await prisma.user.update({
         where: { id: userId },
