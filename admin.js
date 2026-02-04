@@ -77,6 +77,66 @@ const admin = new AdminJS({
       }
     },
     
+    // ===== SUPPORT MANAGEMENT =====
+    {
+      resource: { model: modelMap.SupportTicket, client: prisma },
+      options: {
+        parent: {
+          name: 'Support',
+          icon: 'HelpCircle'
+        },
+        properties: {
+          id: { isVisible: { list: true, show: true, edit: false } },
+          description: { type: 'textarea' },
+          status: { 
+            availableValues: [
+              { value: 'open', label: 'Open' },
+              { value: 'in_progress', label: 'In Progress' },
+              { value: 'resolved', label: 'Resolved' },
+              { value: 'closed', label: 'Closed' }
+            ]
+          },
+          priority: {
+            availableValues: [
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' }
+            ]
+          },
+          category: {
+            availableValues: [
+              { value: 'billing', label: 'Billing' },
+              { value: 'technical', label: 'Technical' },
+              { value: 'account', label: 'Account' },
+              { value: 'other', label: 'Other' }
+            ]
+          },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
+          updatedAt: { isVisible: { list: true, show: true, edit: false } }
+        },
+        listProperties: ['subject', 'status', 'priority', 'category', 'userId', 'createdAt'],
+        showProperties: ['subject', 'description', 'status', 'priority', 'category', 'userId', 'createdAt', 'updatedAt'],
+        editProperties: ['status', 'priority', 'category']
+      }
+    },
+    {
+      resource: { model: modelMap.SupportMessage, client: prisma },
+      options: {
+        parent: {
+          name: 'Support',
+          icon: 'MessageSquare'
+        },
+        properties: {
+          id: { isVisible: { list: true, show: true, edit: false } },
+          message: { type: 'textarea' },
+          createdAt: { isVisible: { list: true, show: true, edit: false } }
+        },
+        listProperties: ['ticketId', 'senderId', 'message', 'createdAt'],
+        showProperties: ['ticketId', 'senderId', 'message', 'attachments', 'createdAt'],
+        editProperties: ['message']
+      }
+    },
+    
     // ===== USER MANAGEMENT =====
     {
       resource: { model: modelMap.User, client: prisma },

@@ -98,6 +98,19 @@ router.get('/stats', adminAuth, async (req, res) => {
       totalFees: group._sum.platformFee || 0
     }));
 
+    // Support statistics
+    const [openTickets, resolvedTickets, totalTickets] = await Promise.all([
+      prisma.supportTicket.count({ where: { status: 'open' } }),
+      prisma.supportTicket.count({ where: { status: 'resolved' } }),
+      prisma.supportTicket.count()
+    ]);
+    
+    const supportStats = {
+      open: openTickets,
+      resolved: resolvedTickets,
+      total: totalTickets
+    };
+
     res.json({
       success: true,
       data: {
@@ -105,7 +118,8 @@ router.get('/stats', adminAuth, async (req, res) => {
         posts: postStats,
         ads: adStats,
         streams: streamStats,
-        transactions: transactionStats
+        transactions: transactionStats,
+        support: supportStats
       }
     });
   } catch (error) {
