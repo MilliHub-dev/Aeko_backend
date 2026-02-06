@@ -90,6 +90,9 @@ const enhancedChatSocket = new EnhancedChatSocket(io);
 // Initialize Enhanced LiveStream Socket System
 const enhancedLiveStreamSocket = new EnhancedLiveStreamSocket(io);
 
+// Initialize Video Call Socket System
+setupVideoCallSocket(io);
+
 // Note: File uploads are handled by Cloudinary in production
 
 // CORS and cookie parser (keep these before AdminJS)
