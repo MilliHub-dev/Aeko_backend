@@ -1116,6 +1116,117 @@ router.get('/emoji-list', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/enhanced-chat/messages/{messageId}:
+ *   delete:
+ *     summary: Delete a message (soft delete)
+ *     tags: [Enhanced Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Message deleted successfully
+ */
+router.delete('/messages/:messageId', authenticate, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+
+    const message = await prisma.enhancedMessage.findUnique({
+      where: { id: messageId }
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    if (message.senderId !== req.user.id) {
+      return res.status(403).json({ error: 'You can only delete your own messages' });
+    }
+
+    await prisma.enhancedMessage.update({
+      where: { id: messageId },
+      data: {
+        deleted: true,
+        deletedAt: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Message deleted successfully',
+      messageId
+    });
+  } catch (error) {
+    console.error('Delete message error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/enhanced-chat/conversations/{chatId}:
+ *   delete:
+ *     summary: Delete a whole chat conversation
+ *     tags: [Enhanced Chat]
+ *     description: Permanently delete a chat and all its messages. For groups, only admin can delete.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: chatId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Chat deleted successfully
+ */
+router.delete('/conversations/:chatId', authenticate, async (req, res) => {
+  try {
+    const { chatId } = req.params;
+
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId },
+      include: { members: true }
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    // Check permissions
+    const isMember = chat.members.some(m => m.userId === req.user.id);
+    if (!isMember) {
+      return res.status(403).json({ error: 'Access denied to this chat' });
+    }
+
+    if (chat.isGroup && chat.groupAdminId !== req.user.id) {
+      return res.status(403).json({ error: 'Only group admin can delete the group' });
+    }
+
+    // Delete the chat (Cascade will handle messages and members)
+    await prisma.chat.delete({
+      where: { id: chatId }
+    });
+
+    res.json({
+      success: true,
+      message: 'Chat deleted successfully',
+      chatId
+    });
+  } catch (error) {
+    console.error('Delete chat error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Static file serving for uploads
 router.get('/uploads/:folder/:filename', (req, res) => {
   const { folder, filename } = req.params;

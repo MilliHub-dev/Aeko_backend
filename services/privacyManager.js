@@ -88,6 +88,10 @@ class PrivacyManager {
    */
   async canViewProfile(viewerId, profileId) {
     try {
+      if (!viewerId || !profileId) {
+        return false;
+      }
+
       // Users can always view their own profile
       if (viewerId === profileId) {
         return true;
@@ -135,6 +139,10 @@ class PrivacyManager {
    */
   async canViewPosts(viewerId, authorId) {
     try {
+      if (!viewerId || !authorId) {
+        return false;
+      }
+
       // Users can always view their own posts
       if (viewerId === authorId) {
         return true;
@@ -182,6 +190,10 @@ class PrivacyManager {
    */
   async canSendMessage(senderId, recipientId) {
     try {
+      if (!senderId || !recipientId) {
+        return false;
+      }
+
       // Users cannot message themselves
       if (senderId === recipientId) {
         return false;

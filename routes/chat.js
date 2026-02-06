@@ -44,6 +44,13 @@ const getConversation = async (userId1, userId2) => {
 router.post("/send-message", authMiddleware, BlockingMiddleware.checkMessagingAccess(), async (req, res) => {
   const { recipientId, message } = req.body;
 
+  if (!recipientId || !message) {
+      return res.status(400).json({
+          success: false,
+          error: "Recipient ID and message content are required"
+      });
+  }
+
   // Additional privacy check for messaging
   try {
     const privacyModule = await import('../services/privacyManager.js');
