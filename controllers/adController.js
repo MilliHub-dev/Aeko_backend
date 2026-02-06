@@ -110,7 +110,7 @@ export async function createAd(req, res) {
                 callToAction: callToAction || { type: 'learn_more' },
                 placement: placement || { feed: true },
                 advertiserId: req.user.id,
-                status: 'pending',
+                Status: 'pending',
                 analytics: {
                     impressions: 0,
                     clicks: 0,
@@ -149,10 +149,9 @@ export async function getUserAds(req, res) {
         const { status, page = 1, limit = 10 } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
+        // Build query
         const where = { advertiserId: req.user.id };
-        if (status) {
-            where.status = status;
-        }
+        if (status) where.Status = status;
 
         const [ads, total] = await Promise.all([
             prisma.ad.findMany({
@@ -172,6 +171,8 @@ export async function getUserAds(req, res) {
         // Add virtuals
         const adsWithVirtuals = ads.map(ad => ({
             ...ad,
+            status: ad.Status, // Map DB Status to API status
+            Status: undefined,
             advertiser: ad.user,
             user: undefined,
             performanceScore: calculatePerformanceScore(ad),
@@ -215,7 +216,7 @@ export async function getTargetedAds(req, res) {
         // Fetch running ads
         // Note: Complex filtering done in memory for flexibility with JSON fields
         const allRunningAds = await prisma.ad.findMany({
-            where: { status: 'running' },
+            where: { Status: 'running' },
             include: {
                 user: {
                     select: { username: true, profilePicture: true, blueTick: true }
@@ -264,6 +265,8 @@ export async function getTargetedAds(req, res) {
 
         const mappedAds = sortedAds.map(ad => ({
             ...ad,
+            status: ad.Status, // Map DB Status to API status
+            Status: undefined,
             advertiser: ad.user,
             user: undefined
         }));
@@ -306,10 +309,10 @@ export async function trackImpression(req, res) {
             });
         }
 
-        if (ad.status !== 'running') {
+        if (ad.Status !== 'running') {
             return res.status(400).json({
                 success: false,
-                message: 'Advertisement is not active'
+                message: 'Advertisement is not running'
             });
         }
 
@@ -417,7 +420,7 @@ export async function trackClick(req, res) {
             });
         }
 
-        if (ad.status !== 'running') {
+        if (ad.Status !== 'running') {
             return res.status(400).json({
                 success: false,
                 message: 'Advertisement is not active'
@@ -594,7 +597,7 @@ export async function getAdAnalytics(req, res) {
             campaign: {
                 daysRemaining: ad.campaign.schedule.endDate ? 
                     Math.ceil((new Date(ad.campaign.schedule.endDate) - new Date()) / (1000 * 60 * 60 * 24)) : 0,
-                status: ad.status,
+                status: ad.Status,
                 objective: ad.campaign.objective
             }
         };
@@ -635,11 +638,17 @@ export async function updateAd(req, res) {
             });
         }
 
-        if (ad.status === 'running' && !['paused', 'running'].includes(updates.status)) {
+        if (ad.Status === 'running' && !['paused', 'running'].includes(updates.status)) {
             return res.status(400).json({
                 success: false,
                 message: 'Cannot modify running ads. Pause the ad first.'
             });
+        }
+
+        // Map status to Status
+        if (updates.status) {
+            updates.Status = updates.status;
+            delete updates.status;
         }
 
         const updatedAd = await prisma.ad.update({
@@ -715,7 +724,7 @@ export async function getAllAdsForReview(req, res) {
 
         const [ads, total] = await Promise.all([
             prisma.ad.findMany({
-                where: { status },
+                where: { Status: status },
                 include: {
                     user: {
                         select: { username: true, profilePicture: true, blueTick: true, interests: true }
@@ -725,11 +734,13 @@ export async function getAllAdsForReview(req, res) {
                 take: parseInt(limit),
                 skip
             }),
-            prisma.ad.count({ where: { status } })
+            prisma.ad.count({ where: { Status: status } })
         ]);
 
         const mappedAds = ads.map(ad => ({
             ...ad,
+            status: ad.Status, // Map DB Status to API status
+            Status: undefined,
             advertiser: ad.user,
             user: undefined
         }));
@@ -780,7 +791,7 @@ export async function reviewAd(req, res) {
         const updatedAd = await prisma.ad.update({
             where: { id: adId },
             data: {
-                status: status === 'approved' ? 'running' : 'rejected',
+                Status: status === 'approved' ? 'running' : 'rejected',
                 review: {
                     reviewedBy: req.user.id,
                     reviewedAt: new Date(),
@@ -828,7 +839,7 @@ export async function getAdDashboard(req, res) {
         const dashboard = {
             summary: {
                 totalAds: ads.length,
-                activeAds: ads.filter(ad => ad.status === 'running').length,
+                activeAds: ads.filter(ad => ad.Status === 'running').length,
                 totalSpent: ads.reduce((sum, ad) => sum + (ad.budget?.spent || 0), 0),
                 totalImpressions: ads.reduce((sum, ad) => sum + (ad.analytics?.impressions || 0), 0),
                 totalClicks: ads.reduce((sum, ad) => sum + (ad.analytics?.clicks || 0), 0),
