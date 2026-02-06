@@ -161,7 +161,7 @@ export async function getUserAds(req, res) {
                 take: parseInt(limit),
                 skip,
                 include: {
-                    advertiser: {
+                    user: {
                         select: { username: true, profilePicture: true, blueTick: true }
                     }
                 }
@@ -172,6 +172,8 @@ export async function getUserAds(req, res) {
         // Add virtuals
         const adsWithVirtuals = ads.map(ad => ({
             ...ad,
+            advertiser: ad.user,
+            user: undefined,
             performanceScore: calculatePerformanceScore(ad),
             remainingBudget: (ad.budget?.total || 0) - (ad.budget?.spent || 0),
             daysRemaining: ad.campaign?.schedule?.endDate ? 
@@ -207,8 +209,7 @@ export async function getTargetedAds(req, res) {
         
         // Get user details for targeting
         const user = await prisma.user.findUnique({
-            where: { id: req.user.id },
-            include: { interests: true } // Assuming simple relation or handled in code
+            where: { id: req.user.id }
         });
         
         // Fetch running ads
@@ -216,7 +217,7 @@ export async function getTargetedAds(req, res) {
         const allRunningAds = await prisma.ad.findMany({
             where: { status: 'running' },
             include: {
-                advertiser: {
+                user: {
                     select: { username: true, profilePicture: true, blueTick: true }
                 }
             }
@@ -261,11 +262,17 @@ export async function getTargetedAds(req, res) {
             .sort((a, b) => (b.pricing?.bidAmount || 0) - (a.pricing?.bidAmount || 0))
             .slice(0, parseInt(limit));
 
+        const mappedAds = sortedAds.map(ad => ({
+            ...ad,
+            advertiser: ad.user,
+            user: undefined
+        }));
+
         res.json({
             success: true,
             data: {
-                ads: sortedAds,
-                count: sortedAds.length
+                ads: mappedAds,
+                count: mappedAds.length
             }
         });
 
@@ -544,7 +551,7 @@ export async function getAdAnalytics(req, res) {
         const ad = await prisma.ad.findUnique({
             where: { id: adId },
             include: {
-                advertiser: {
+                user: {
                     select: { username: true, profilePicture: true }
                 }
             }
@@ -710,7 +717,7 @@ export async function getAllAdsForReview(req, res) {
             prisma.ad.findMany({
                 where: { status },
                 include: {
-                    advertiser: {
+                    user: {
                         select: { username: true, profilePicture: true, blueTick: true }
                     }
                 },
@@ -721,10 +728,16 @@ export async function getAllAdsForReview(req, res) {
             prisma.ad.count({ where: { status } })
         ]);
 
+        const mappedAds = ads.map(ad => ({
+            ...ad,
+            advertiser: ad.user,
+            user: undefined
+        }));
+
         res.json({
             success: true,
             data: {
-                ads,
+                ads: mappedAds,
                 pagination: {
                     current: parseInt(page),
                     pages: Math.ceil(total / parseInt(limit)),
