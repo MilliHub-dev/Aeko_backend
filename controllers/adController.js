@@ -718,7 +718,7 @@ export async function getAllAdsForReview(req, res) {
                 where: { status },
                 include: {
                     user: {
-                        select: { username: true, profilePicture: true, blueTick: true }
+                        select: { username: true, profilePicture: true, blueTick: true, interests: true }
                     }
                 },
                 orderBy: { createdAt: 'desc' },

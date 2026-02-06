@@ -391,6 +391,11 @@ router.get("/", authMiddleware, async (req, res) => {
                 publicUser.isPrivate = true;
             }
 
+            // If user is admin, allow them to see interests
+            if (req.user?.isAdmin) {
+                publicUser.interests = user.interests;
+            }
+
             return publicUser;
         });
 
