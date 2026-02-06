@@ -248,6 +248,106 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/profile/activity:
+ *   get:
+ *     summary: Get user activity history (posts, comments, security events)
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *     responses:
+ *       200:
+ *         description: Activity history retrieved
+ */
+router.get('/activity', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.id || req.user._id;
+        const limit = parseInt(req.query.limit) || 20;
+        const page = parseInt(req.query.page) || 1;
+        const skip = (page - 1) * limit;
+
+        // Fetch parallel data streams
+        const [posts, comments, securityEvents] = await Promise.all([
+            prisma.post.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                take: limit,
+                select: { id: true, type: true, createdAt: true, text: true, media: true }
+            }),
+            prisma.comment.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                take: limit,
+                select: { id: true, text: true, createdAt: true, postId: true }
+            }),
+            prisma.securityEvent.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                take: limit,
+                select: { id: true, eventType: true, timestamp: true, ipAddress: true }
+            })
+        ]);
+
+        // Normalize and combine
+        const activities = [
+            ...posts.map(p => ({
+                type: 'POST_CREATED',
+                id: p.id,
+                title: 'Created a post',
+                details: p.text || (p.media ? 'Media post' : 'Post'),
+                timestamp: p.createdAt,
+                metadata: { postType: p.type }
+            })),
+            ...comments.map(c => ({
+                type: 'COMMENT_CREATED',
+                id: c.id,
+                title: 'Commented on a post',
+                details: c.text,
+                timestamp: c.createdAt,
+                metadata: { postId: c.postId }
+            })),
+            ...securityEvents.map(e => ({
+                type: 'SECURITY_EVENT',
+                id: e.id,
+                title: e.eventType,
+                details: `IP: ${e.ipAddress}`,
+                timestamp: e.timestamp,
+                metadata: {}
+            }))
+        ];
+
+        // Sort combined list by timestamp desc
+        activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Paginate the combined result (in-memory pagination for aggregated feed)
+        // Note: For true scalability, we'd need a dedicated Activity Feed table, 
+        // but this works for "My Activity" view.
+        const paginatedActivities = activities.slice(skip, skip + limit);
+
+        res.json({
+            success: true,
+            activities: paginatedActivities,
+            pagination: {
+                page,
+                limit,
+                hasMore: activities.length > skip + limit
+            }
+        });
+
+    } catch (error) {
+        console.error('Get activity error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch activity' });
+    }
+});
+
 // ✅ Update Profile
 router.put('/update', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
