@@ -69,19 +69,24 @@ router.get("/", protect, async (req, res) => {
     // Use owned communities as excluded communities for now (as joined communities structure is unclear)
     const userCommunityIds = currentUser.communityMemberships.map(c => c.id);
 
-    // List of users to exclude (self + following + blocked + not interested users)
-    const excludedUserIds = [...followingIds, userId, ...blockedUserIds, ...notInterestedUserIds];
+    // Base exclusions (Self, Blocked, Not Interested)
+    // Used for global content lists like Trending/Viral where following status shouldn't hide content
+    const baseExcludedUserIds = [userId, ...blockedUserIds, ...notInterestedUserIds];
 
-    // 1. Trending Posts (high engagement, not from followed users)
+    // Discovery exclusions (Base + Following)
+    // Used for Suggested Users and "For You" discovery where we want to show NEW people
+    const discoveryExcludedUserIds = [...followingIds, ...baseExcludedUserIds];
+
+    // 1. Trending Posts (high engagement, global visibility)
     const trendingPostsRaw = await prisma.post.findMany({
       where: {
-        userId: { notIn: excludedUserIds },
+        userId: { notIn: baseExcludedUserIds }, // Changed to allow posts from followed users
         id: { notIn: excludedPostIds },
         privacy: {
           path: ['level'],
           equals: 'public'
         },
-        createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
+        createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Extended to 30 days for better content population
       },
       orderBy: { views: 'desc' }, // Simplified sort
       take: limit,
@@ -108,7 +113,7 @@ router.get("/", protect, async (req, res) => {
     // 2. Suggested Users (not following, similar interests, verified users)
     // Build where clause
     const suggestedUsersWhere = {
-      id: { notIn: excludedUserIds },
+      id: { notIn: discoveryExcludedUserIds },
       OR: [
         { blueTick: true },
         { goldenTick: true }
@@ -213,7 +218,7 @@ router.get("/", protect, async (req, res) => {
     // 5. Viral Posts (high views)
     const viralPostsRaw = await prisma.post.findMany({
       where: {
-        userId: { notIn: excludedUserIds },
+        userId: { notIn: baseExcludedUserIds },
         privacy: {
           path: ['level'],
           equals: 'public'
@@ -250,7 +255,7 @@ router.get("/", protect, async (req, res) => {
       // We can implement a simplified version: Random public posts from last 3 days
        const interestBasedPostsRaw = await prisma.post.findMany({
           where: {
-            userId: { notIn: excludedUserIds },
+            userId: { notIn: discoveryExcludedUserIds },
             privacy: {
                path: ['level'],
                equals: 'public'
@@ -282,7 +287,7 @@ router.get("/", protect, async (req, res) => {
     // Calculate total for pagination
     const totalPosts = await prisma.post.count({
       where: {
-        userId: { notIn: excludedUserIds },
+        userId: { notIn: baseExcludedUserIds },
         privacy: {
           path: ['level'],
           equals: 'public'
