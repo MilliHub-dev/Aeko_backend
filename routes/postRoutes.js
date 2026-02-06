@@ -290,7 +290,7 @@ router.get("/user/liked", authMiddleware, async (req, res) => {
 // Create Post
 router.post("/create", authMiddleware, 
   (req, res, next) => {
-    upload.single("media")(req, res, (err) => {
+    upload.array("media", 10)(req, res, (err) => {
       if (err) {
         const status = err.name === 'MulterError' ? 400 : 500;
         return res.status(status).json({ error: err.message || 'Upload failed' });
@@ -305,8 +305,9 @@ router.post("/create", authMiddleware,
 
     let type = rawType;
     if (!type) {
-      if (req.file?.mimetype?.startsWith('image/')) type = 'image';
-      else if (req.file?.mimetype?.startsWith('video/')) type = 'video';
+      const file = req.files?.[0] || req.file;
+      if (file?.mimetype?.startsWith('image/')) type = 'image';
+      else if (file?.mimetype?.startsWith('video/')) type = 'video';
       else type = 'text';
     }
 
@@ -314,7 +315,7 @@ router.post("/create", authMiddleware,
       return res.status(400).json({ error: "Invalid type. Must be one of: text, image, video" });
     }
 
-    if ((type === 'image' || type === 'video') && !req.file) {
+    if ((type === 'image' || type === 'video') && (!req.files || req.files.length === 0) && !req.file) {
       return res.status(400).json({ error: "Media file is required for image/video posts" });
     }
 
@@ -336,13 +337,18 @@ router.post("/create", authMiddleware,
       }
     }
 
-    const mediaPath = req.file ? req.file.path : "";
+    const mediaPaths = req.files && req.files.length > 0 
+      ? req.files.map(f => f.path) 
+      : (req.file ? [req.file.path] : []);
+      
+    // If multiple files, store as array. If single file, store as string (for backward compatibility)
+    const mediaData = mediaPaths.length > 1 ? mediaPaths : (mediaPaths[0] || "");
 
     const postData = {
       userId,
       type,
       text,
-      media: mediaPath,
+      media: mediaData,
       privacy: {
         level: privacy,
         selectedUsers: privacy === 'select_users' ? selectedUsers : [],
