@@ -117,6 +117,8 @@ model Chat {
   id String @id @default(uuid())
   isGroup Boolean @default(false)
   groupName String?
+  groupIcon String?
+  inviteCode String? @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   communityId String? @unique

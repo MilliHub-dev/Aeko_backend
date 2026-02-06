@@ -1227,6 +1227,337 @@ router.delete('/conversations/:chatId', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/enhanced-chat/users:
+ *   get:
+ *     summary: Search users to add to group
+ *     tags: [Enhanced Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Search by username or name
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ */
+router.get('/users', authenticate, async (req, res) => {
+  try {
+    const { q, page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const whereClause = {
+      id: { not: req.user.id }, // Exclude self
+      banned: false
+    };
+
+    if (q) {
+      whereClause.OR = [
+        { username: { contains: q, mode: 'insensitive' } },
+        { name: { contains: q, mode: 'insensitive' } }
+      ];
+    }
+
+    const users = await prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        profilePicture: true,
+        avatar: true,
+        blueTick: true,
+        goldenTick: true
+      },
+      take: parseInt(limit),
+      skip: skip
+    });
+
+    res.json({
+      success: true,
+      users
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/enhanced-chat/groups/{chatId}/icon:
+ *   post:
+ *     summary: Update group chat icon
+ *     tags: [Enhanced Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     consumes:
+ *       - multipart/form-data
+ *     parameters:
+ *       - in: path
+ *         name: chatId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: formData
+ *         name: icon
+ *         type: file
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Group icon updated successfully
+ */
+router.post('/groups/:chatId/icon', authenticate, generalUpload.single('icon'), async (req, res) => {
+  try {
+    const { chatId } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No icon file uploaded' });
+    }
+
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId },
+      include: { members: true }
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    if (!chat.isGroup) {
+      return res.status(400).json({ error: 'Not a group chat' });
+    }
+
+    // Only admin can update group icon
+    if (chat.groupAdminId !== req.user.id) {
+      return res.status(403).json({ error: 'Only group admin can update icon' });
+    }
+
+    const updatedChat = await prisma.chat.update({
+      where: { id: chatId },
+      data: {
+        groupIcon: req.file.path,
+        updatedAt: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      groupIcon: updatedChat.groupIcon,
+      message: 'Group icon updated successfully'
+    });
+  } catch (error) {
+    console.error('Update group icon error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/enhanced-chat/groups/{chatId}/invite:
+ *   get:
+ *     summary: Get or generate group invite link
+ *     tags: [Enhanced Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: chatId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Invite link retrieved successfully
+ */
+router.get('/groups/:chatId/invite', authenticate, async (req, res) => {
+  try {
+    const { chatId } = req.params;
+
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId }
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    if (!chat.isGroup) {
+      return res.status(400).json({ error: 'Not a group chat' });
+    }
+
+    if (chat.groupAdminId !== req.user.id) {
+      return res.status(403).json({ error: 'Only group admin can generate invite link' });
+    }
+
+    let inviteCode = chat.inviteCode;
+
+    // Generate new code if not exists
+    if (!inviteCode) {
+      const crypto = await import('crypto');
+      inviteCode = crypto.randomBytes(8).toString('hex');
+      
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: { inviteCode }
+      });
+    }
+
+    // Construct invite link (assuming frontend URL structure)
+    const inviteLink = `${process.env.FRONTEND_URL || 'https://aeko.social'}/chat/join/${inviteCode}`;
+
+    res.json({
+      success: true,
+      inviteCode,
+      inviteLink
+    });
+  } catch (error) {
+    console.error('Get invite link error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/enhanced-chat/groups/join/{inviteCode}:
+ *   post:
+ *     summary: Join group via invite code
+ *     tags: [Enhanced Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: inviteCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Joined group successfully
+ */
+router.post('/groups/join/:inviteCode', authenticate, async (req, res) => {
+  try {
+    const { inviteCode } = req.params;
+
+    const chat = await prisma.chat.findUnique({
+      where: { inviteCode },
+      include: { members: true }
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: 'Invalid invite code' });
+    }
+
+    // Check if already member
+    const isMember = chat.members.some(m => m.userId === req.user.id);
+    if (isMember) {
+      return res.json({
+        success: true,
+        chatId: chat.id,
+        message: 'Already a member'
+      });
+    }
+
+    // Add user to group
+    await prisma.chatMember.create({
+      data: {
+        chatId: chat.id,
+        userId: req.user.id
+      }
+    });
+
+    // Notify group (optional: create system message)
+    await prisma.enhancedMessage.create({
+      data: {
+        chatId: chat.id,
+        senderId: req.user.id, // or system bot
+        content: 'Joined the group via invite link',
+        messageType: 'text',
+        isBot: true, // Mark as system message kind of
+        status: 'sent'
+      }
+    });
+
+    res.json({
+      success: true,
+      chatId: chat.id,
+      message: 'Joined group successfully'
+    });
+  } catch (error) {
+    console.error('Join group error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/enhanced-chat/groups/{chatId}/members/{userId}:
+ *   delete:
+ *     summary: Remove user from group
+ *     tags: [Enhanced Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: chatId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User removed successfully
+ */
+router.delete('/groups/:chatId/members/:userId', authenticate, async (req, res) => {
+  try {
+    const { chatId, userId } = req.params;
+
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId }
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    if (!chat.isGroup) {
+      return res.status(400).json({ error: 'Not a group chat' });
+    }
+
+    if (chat.groupAdminId !== req.user.id) {
+      return res.status(403).json({ error: 'Only group admin can remove users' });
+    }
+
+    if (userId === chat.groupAdminId) {
+      return res.status(400).json({ error: 'Cannot remove admin. Delete group instead.' });
+    }
+
+    // Remove member
+    await prisma.chatMember.deleteMany({
+      where: {
+        chatId,
+        userId
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'User removed from group'
+    });
+  } catch (error) {
+    console.error('Remove member error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Static file serving for uploads
 router.get('/uploads/:folder/:filename', (req, res) => {
   const { folder, filename } = req.params;
