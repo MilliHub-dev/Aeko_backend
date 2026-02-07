@@ -394,6 +394,66 @@ router.post("/create", authMiddleware,
   }
 });
 
+// Edit Post
+router.put("/:postId", authMiddleware, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { text } = req.body;
+    const userId = req.user.id || req.user._id;
+
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    if (post.userId !== userId) {
+      return res.status(403).json({ error: "Not authorized to edit this post" });
+    }
+
+    const updatedPost = await prisma.post.update({
+      where: { id: postId },
+      data: {
+        text: text !== undefined ? text : post.text
+      },
+      include: {
+        users_posts_userIdTouser: {
+            select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true }
+        }
+      }
+    });
+    
+    // Process mentions if text changed
+    if (text && text !== post.text) {
+        try {
+            const { processMentions } = await import('../services/notificationService.js');
+            await processMentions({
+                text,
+                senderId: userId,
+                entityId: updatedPost.id,
+                entityType: 'POST'
+            });
+        } catch (notifError) {
+            console.error('Failed to process mentions on edit:', notifError);
+        }
+    }
+
+    res.json({
+        success: true,
+        message: "Post updated successfully",
+        post: {
+            ...updatedPost,
+            user: updatedPost.users_posts_userIdTouser,
+            users_posts_userIdTouser: undefined
+        }
+    });
+
+  } catch (error) {
+    console.error("Edit Post Error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Update Privacy
 router.put("/:postId/privacy", authMiddleware, async (req, res) => {
   try {
