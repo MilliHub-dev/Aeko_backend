@@ -908,6 +908,7 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
       updatedAt: new Date(),
       isGroup,
       groupName: isGroup ? groupName : null,
+      groupAdminId: isGroup ? req.user.id : null,
       members: {
         create: allParticipants.map(id => ({ userId: id }))
       }
