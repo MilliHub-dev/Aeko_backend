@@ -1559,6 +1559,82 @@ router.delete('/groups/:chatId/members/:userId', authenticate, async (req, res) 
   }
 });
 
+/**
+ * @swagger
+ * /api/enhanced-chat/groups/{chatId}/leave:
+ *   delete:
+ *     summary: Leave a group chat
+ *     tags: [Enhanced Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: chatId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Left group successfully
+ */
+router.delete('/groups/:chatId/leave', authenticate, async (req, res) => {
+  try {
+    const { chatId } = req.params;
+
+    const chat = await prisma.chat.findUnique({
+      where: { id: chatId },
+      include: { members: true }
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    if (!chat.isGroup) {
+      return res.status(400).json({ error: 'Not a group chat' });
+    }
+
+    // Check if member
+    const isMember = chat.members.some(m => m.userId === req.user.id);
+    if (!isMember) {
+      return res.status(403).json({ error: 'You are not a member of this group' });
+    }
+
+    // Admin cannot leave, must delete group or transfer ownership (transfer not implemented yet)
+    if (chat.groupAdminId === req.user.id) {
+      return res.status(400).json({ error: 'Group admin cannot leave. Delete group instead.' });
+    }
+
+    // Remove self from members
+    await prisma.chatMember.deleteMany({
+      where: {
+        chatId,
+        userId: req.user.id
+      }
+    });
+
+    // Notify group (optional)
+    await prisma.enhancedMessage.create({
+      data: {
+        chatId: chat.id,
+        senderId: req.user.id,
+        content: 'Left the group',
+        messageType: 'text',
+        isBot: true,
+        status: 'sent'
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Left group successfully'
+    });
+  } catch (error) {
+    console.error('Leave group error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Static file serving for uploads
 router.get('/uploads/:folder/:filename', (req, res) => {
   const { folder, filename } = req.params;
