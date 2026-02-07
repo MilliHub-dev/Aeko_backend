@@ -141,6 +141,37 @@ export const initializeSubscriptionPayment = async ({ userId, planId, paymentMet
 };
 
 /**
+ * Handle successful payment processing (Used by Webhooks and Verification)
+ */
+export const handleSubscriptionPaymentSuccess = async (transactionId) => {
+  const transaction = await prisma.transaction.findUnique({ where: { id: transactionId } });
+
+  if (!transaction) {
+    throw new Error('Transaction not found');
+  }
+
+  if (transaction.status === 'completed') {
+    return { success: true, message: 'Transaction already processed' };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await updateUserSubscriptionWithTx({
+      userId: transaction.userId,
+      planId: transaction.planId,
+      transactionId: transaction.id,
+      tx
+    });
+
+    await tx.transaction.update({
+      where: { id: transaction.id },
+      data: { status: 'completed', verifiedAt: new Date() }
+    });
+  });
+
+  return { success: true };
+};
+
+/**
  * Verify subscription payment and update user status
  */
 export const verifySubscriptionPayment = async ({ reference, paymentMethod }) => {
@@ -177,19 +208,7 @@ export const verifySubscriptionPayment = async ({ reference, paymentMethod }) =>
     }
 
     if (verificationResult.success) {
-      await prisma.$transaction(async (tx) => {
-        await updateUserSubscriptionWithTx({
-          userId: transaction.userId,
-          planId: transaction.planId,
-          transactionId: transaction.id,
-          tx
-        });
-
-        await tx.transaction.update({
-          where: { id: transaction.id },
-          data: { status: 'completed' }
-        });
-      });
+      await handleSubscriptionPaymentSuccess(transaction.id);
     }
 
     return verificationResult;

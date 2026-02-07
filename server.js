@@ -34,6 +34,7 @@ import AdminJSExpress from "@adminjs/express";
 // import { Database, Resource } from "@adminjs/mongoose"; // REMOVED MONGO
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 import subscriptionPlanRoutes from "./routes/subscriptionPlanRoutes.js";
+import webhookRoutes from "./routes/webhookRoutes.js";
 import profileRoutes from './routes/profile.js';
 import enhancedBotRoutes from "./routes/enhancedBotRoutes.js";
 import enhancedChatRoutes from "./routes/enhancedChatRoutes.js";
@@ -112,6 +113,9 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Mount AdminJS router BEFORE body parsers to avoid WrongArgumentError
 app.use(admin.options.rootPath, adminRouter);
+
+// Webhook routes (must be before body parser to handle raw body)
+app.use('/api/webhooks', webhookRoutes);
 
 // Body parser middleware (after AdminJS router, before API routes)
 app.use(express.json({ limit: '50mb' }));

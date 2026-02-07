@@ -185,6 +185,53 @@ export const initializePayment = async ({ userId, communityId, paymentMethod }) 
 };
 
 /**
+ * Handle successful community payment (Used by Webhooks and Verification)
+ */
+export const handleCommunityPaymentSuccess = async (transactionId) => {
+  const transaction = await prisma.transaction.findUnique({ where: { id: transactionId } });
+
+  if (!transaction) {
+    throw new Error('Transaction not found');
+  }
+
+  if (transaction.status === 'completed') {
+    return { success: true, message: 'Transaction already processed' };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await updateCommunityMembershipWithTx({
+      userId: transaction.userId,
+      communityId: transaction.communityId,
+      transactionId: transaction.id,
+      paymentMethod: transaction.paymentMethod,
+      tx
+    });
+
+    await tx.transaction.update({
+      where: { id: transaction.id },
+      data: { status: 'completed', verifiedAt: new Date() }
+    });
+
+    // Update community earnings
+    const community = await tx.community.findUnique({ where: { id: transaction.communityId } });
+    const settings = community.settings || {};
+    const payment = settings.payment || {};
+
+    payment.availableForWithdrawal = (payment.availableForWithdrawal || 0) + transaction.amount;
+    payment.totalEarnings = (payment.totalEarnings || 0) + transaction.amount;
+    
+    settings.payment = payment;
+
+    await tx.community.update({
+      where: { id: transaction.communityId },
+      data: { settings }
+    });
+  });
+
+  return { success: true };
+};
+
+/**
  * Verify payment and grant community access
  * @param {Object} options - Payment verification options
  * @param {String} options.reference - Payment reference
@@ -227,36 +274,7 @@ export const verifyPayment = async ({ reference, paymentMethod }) => {
     }
 
     if (verificationResult.success) {
-      // Use a transaction to update both membership and earnings
-      await prisma.$transaction(async (tx) => {
-        await updateCommunityMembershipWithTx({
-          userId: transaction.userId,
-          communityId: transaction.communityId,
-          transactionId: transaction.id,
-          paymentMethod,
-          tx
-        });
-
-        await tx.transaction.update({
-          where: { id: transaction.id },
-          data: { status: 'completed' }
-        });
-
-        // Update community earnings
-        const community = await tx.community.findUnique({ where: { id: transaction.communityId } });
-        const settings = community.settings || {};
-        const payment = settings.payment || {};
-
-        payment.availableForWithdrawal = (payment.availableForWithdrawal || 0) + transaction.amount;
-        payment.totalEarnings = (payment.totalEarnings || 0) + transaction.amount;
-        
-        settings.payment = payment;
-
-        await tx.community.update({
-          where: { id: transaction.communityId },
-          data: { settings }
-        });
-      });
+      await handleCommunityPaymentSuccess(transaction.id);
     }
 
     return verificationResult;
