@@ -33,6 +33,7 @@ import AdminJS from "adminjs";
 import AdminJSExpress from "@adminjs/express";
 // import { Database, Resource } from "@adminjs/mongoose"; // REMOVED MONGO
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
+import subscriptionPlanRoutes from "./routes/subscriptionPlanRoutes.js";
 import profileRoutes from './routes/profile.js';
 import enhancedBotRoutes from "./routes/enhancedBotRoutes.js";
 import enhancedChatRoutes from "./routes/enhancedChatRoutes.js";
@@ -161,6 +162,7 @@ app.use('/api/photo', apiRateLimit, photoEditRoutes);
 app.use('/api/payments', apiRateLimit, paymentRoutes);
 app.use('/api/profile', apiRateLimit, profileRoutes);
 app.use('/api/subscription', apiRateLimit, subscriptionRoutes);
+app.use('/api/subscription-plans', apiRateLimit, subscriptionPlanRoutes);
 app.use("/api/enhanced-bot", apiRateLimit, enhancedBotRoutes);
 app.use("/api/enhanced-chat", apiRateLimit, blockingMiddleware.checkMessagingAccess(), enhancedChatRoutes);
 app.use("/api/livestream", apiRateLimit, blockingMiddleware.checkPostInteraction(), enhancedLiveStreamRoutes);

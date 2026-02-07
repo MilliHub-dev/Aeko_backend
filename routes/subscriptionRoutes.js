@@ -2,53 +2,16 @@ import express from "express";
 import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
-import emailService from "../services/emailService.js";
+import { initializeSubscriptionPayment, verifySubscriptionPayment } from "../services/subscriptionPaymentService.js";
 
 const router = express.Router();
 
-
-
-
-// Subscribe to Golden Tick
-router.post("/subscribe", authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
-  const { userId, paymentSuccess } = req.body; // Payment must be verified
-
-  try {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (!paymentSuccess) {
-      return res.status(400).json({ message: "Payment failed!" });
-    }
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        goldenTick: true,
-        subscriptionStatus: "active",
-        subscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // +30 days
-      }
-    });
-
-    // Send golden tick notification
-    emailService.sendGoldenTickNotification(user.email, user.name)
-      .catch(err => console.error('Failed to send golden tick email:', err));
-
-    res.status(200).json({ message: "Golden Tick activated! 🏆" });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-export default router;
-
 /**
  * @swagger
- * /api/subscription/subscribe:
+ * /api/subscription/initialize:
  *   post:
- *     summary: Subscribe to Golden Tick
- *     tags:
- *       - Subscription
+ *     summary: Initialize subscription payment
+ *     tags: [Subscription]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -58,22 +21,109 @@ export default router;
  *           schema:
  *             type: object
  *             required:
- *               - userId
- *               - paymentSuccess
+ *               - planId
+ *               - paymentMethod
  *             properties:
- *               userId:
+ *               planId:
  *                 type: string
- *                 description: Unique identifier of the user
- *               paymentSuccess:
- *                 type: boolean
- *                 description: Status of payment transaction
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [paystack, stripe]
  *     responses:
  *       200:
- *         description: Golden Tick activated successfully
- *       400:
- *         description: Bad request, invalid input
- *       401:
- *         description: Unauthorized, authentication required
- *       500:
- *         description: Internal server error
+ *         description: Payment initialized
  */
+router.post("/initialize", authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
+  try {
+    const { planId, paymentMethod } = req.body;
+    const userId = req.user.id || req.user._id;
+
+    const result = await initializeSubscriptionPayment({
+      userId,
+      planId,
+      paymentMethod
+    });
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error("Subscription Initialize Error:", error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/subscription/verify:
+ *   get:
+ *     summary: Verify subscription payment
+ *     tags: [Subscription]
+ *     parameters:
+ *       - in: query
+ *         name: reference
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: paymentMethod
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [paystack, stripe]
+ *     responses:
+ *       200:
+ *         description: Payment verified
+ */
+router.get("/verify", async (req, res) => {
+  try {
+    const { reference, paymentMethod } = req.query;
+
+    if (!reference || !paymentMethod) {
+      return res.status(400).json({ success: false, message: "Missing reference or paymentMethod" });
+    }
+
+    const result = await verifySubscriptionPayment({
+      reference,
+      paymentMethod
+    });
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error("Subscription Verify Error:", error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/subscription/status:
+ *   get:
+ *     summary: Get current user subscription status
+ *     tags: [Subscription]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Subscription status
+ */
+router.get("/status", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        subscriptionStatus: true,
+        subscriptionExpiry: true,
+        subscriptionPlanId: true,
+        subscriptionPlan: true,
+        goldenTick: true
+      }
+    });
+
+    res.json({ success: true, data: user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+export default router;

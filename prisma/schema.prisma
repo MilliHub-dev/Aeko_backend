@@ -443,7 +443,8 @@ model Transaction {
   status String @default("pending")
   paymentReference String
   userId String
-  communityId String
+  communityId String?
+  planId String?
   metadata Json?
   providerResponse Json?
   failureReason String?
@@ -453,8 +454,26 @@ model Transaction {
   withdrawalRequest Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  community Community @relation(fields: [communityId], references: [id])
+  community Community? @relation(fields: [communityId], references: [id])
+  subscriptionPlan SubscriptionPlan? @relation(fields: [planId], references: [id])
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SubscriptionPlan {
+  @@map("subscription_plans")
+  id String @id @default(uuid())
+  name String @unique
+  price Float
+  currency String @default("USD")
+  duration String @default("monthly") // monthly, yearly
+  features Json // List of features enabled
+  limits Json? // Limits like number of communities
+  targetAudience String?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users User[]
+  transactions Transaction[]
 }
 
 model User {
@@ -472,6 +491,8 @@ model User {
   goldenTick Boolean @default(false)
   subscriptionStatus String @default("inactive")
   subscriptionExpiry DateTime?
+  subscriptionPlanId String?
+  subscriptionPlan SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
   banned Boolean @default(false)
   isAdmin Boolean @default(false)
   botEnabled Boolean @default(false)
