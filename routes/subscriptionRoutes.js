@@ -1,10 +1,145 @@
 import express from "express";
 import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import adminMiddleware from "../middleware/adminMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { initializeSubscriptionPayment, verifySubscriptionPayment } from "../services/subscriptionPaymentService.js";
 
 const router = express.Router();
+
+/**
+ * @swagger
+ * /api/subscription/admin/all:
+ *   get:
+ *     summary: Get all subscribers (Admin only)
+ *     tags: [Subscription]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, inactive]
+ *     responses:
+ *       200:
+ *         description: List of subscribers
+ */
+router.get("/admin/all", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const { status } = req.query;
+
+    const where = {};
+    if (status) {
+      where.subscriptionStatus = status;
+    } else {
+      // Default to showing active subscriptions if not specified? 
+      // Or show all. Let's show all but maybe filter by "not inactive" if desired.
+      // For admin, seeing everyone is better.
+      where.subscriptionStatus = { not: 'inactive' }; 
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          subscriptionStatus: true,
+          subscriptionExpiry: true,
+          subscriptionPlan: {
+            select: { name: true, price: true }
+          }
+        },
+        skip,
+        take: limit,
+        orderBy: { subscriptionExpiry: 'desc' }
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      data: users,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error("Admin Subscribers Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/subscription/admin/stats:
+ *   get:
+ *     summary: Get subscription statistics (Admin only)
+ *     tags: [Subscription]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Subscription stats
+ */
+router.get("/admin/stats", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    // Group by plan
+    const stats = await prisma.user.groupBy({
+      by: ['subscriptionPlanId'],
+      where: {
+        subscriptionStatus: 'active'
+      },
+      _count: {
+        _all: true
+      }
+    });
+
+    // Get plan details to map names
+    const plans = await prisma.subscriptionPlan.findMany();
+    const planMap = plans.reduce((acc, plan) => {
+      acc[plan.id] = plan;
+      return acc;
+    }, {});
+
+    const formattedStats = stats.map(stat => ({
+      planId: stat.subscriptionPlanId,
+      planName: planMap[stat.subscriptionPlanId]?.name || 'Unknown',
+      count: stat._count._all,
+      estimatedRevenue: (planMap[stat.subscriptionPlanId]?.price || 0) * stat._count._all
+    }));
+
+    const totalSubscribers = formattedStats.reduce((acc, curr) => acc + curr.count, 0);
+    const totalRevenue = formattedStats.reduce((acc, curr) => acc + curr.estimatedRevenue, 0);
+
+    res.json({
+      success: true,
+      data: {
+        byPlan: formattedStats,
+        totalSubscribers,
+        totalMonthlyRevenue: totalRevenue
+      }
+    });
+  } catch (error) {
+    console.error("Admin Stats Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 /**
  * @swagger
