@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { SendMailClient } from "zeptomail";
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -225,53 +225,48 @@ const getEmailTemplate = (title, content, username = '') => {
 
 class EmailService {
   constructor() {
-    this.transporter = null;
-  }
-
-  // Lazy initialization of transporter
-  _getTransporter() {
-    if (this.transporter) return this.transporter;
-
-    if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
-      this.transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // Use STARTTLS
-        requireTLS: true,
-        family: 4, // Force IPv4
-        auth: {
-          user: process.env.GMAIL_USER,
-          pass: process.env.GMAIL_APP_PASSWORD
-        }
+    this.client = null;
+    if (process.env.ZEPTOMAIL_API_URL && process.env.ZEPTOMAIL_API_KEY) {
+      this.client = new SendMailClient({
+        url: process.env.ZEPTOMAIL_API_URL,
+        token: process.env.ZEPTOMAIL_API_KEY,
       });
-      console.log('✅ Gmail SMTP Configured (Primary - Lazy Init)');
+      console.log('✅ ZeptoMail Service Configured');
+    } else {
+      console.warn('❌ ZeptoMail credentials missing. Email service disabled.');
     }
-    return this.transporter;
   }
 
   // Check if email service is available
   isAvailable() {
-    return this._getTransporter() !== null;
+    return this.client !== null;
   }
 
-  // Send email using Gmail
-  async sendEmail(toEmail, subject, htmlContent) {
-    const transporter = this._getTransporter();
-    if (!transporter) {
+  // Send email using ZeptoMail
+  async sendEmail(toEmail, subject, htmlContent, username = '') {
+    if (!this.client) {
       throw new Error('Email service not configured');
     }
 
     const mailOptions = {
-      from: `"${process.env.EMAIL_SENDER_NAME || 'Aeko'}" <${process.env.GMAIL_USER}>`,
-      to: toEmail,
+      from: {
+        address: "noreply@aeko.social",
+        name: process.env.EMAIL_SENDER_NAME || 'Aeko'
+      },
+      to: [{
+        email_address: {
+          address: toEmail,
+          name: username || toEmail.split('@')[0]
+        }
+      }],
       subject: subject,
-      html: htmlContent
+      htmlbody: htmlContent
     };
 
     try {
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`✅ Email sent to ${toEmail}. Message ID: ${info.messageId}`);
-      return { success: true, message: 'Email sent successfully', messageId: info.messageId };
+      await this.client.sendMail(mailOptions);
+      console.log(`✅ Email sent to ${toEmail}`);
+      return { success: true, message: 'Email sent successfully' };
     } catch (error) {
       console.error(`❌ Failed to send email to ${toEmail}:`, error.message);
       throw error;
@@ -306,7 +301,7 @@ class EmailService {
     const subject = "🔐 Verify your Aeko account";
 
     try {
-      await this.sendEmail(email, subject, htmlContent);
+      await this.sendEmail(email, subject, htmlContent, username);
       return { success: true, message: 'Verification email sent successfully' };
     } catch (error) {
       console.log(`🔐 [FAILOVER] Verification code for ${email}: ${code}`);
@@ -348,7 +343,7 @@ class EmailService {
     const subject = "🔑 Reset Your Aeko Password";
 
     try {
-      await this.sendEmail(email, subject, htmlContent);
+      await this.sendEmail(email, subject, htmlContent, username);
       return { success: true, message: 'Password reset email sent successfully' };
     } catch (error) {
       return { 
@@ -390,28 +385,13 @@ class EmailService {
     const htmlContent = getEmailTemplate("New Login Detected", content, username);
     const subject = "🛡️ New Login Alert - Aeko";
 
-    // Attempt 1: ZeptoMail
-    if (this.client) {
-      try {
-        const emailParams = this.createEmailParams(email, username, subject, htmlContent);
-        await this.client.sendMail(emailParams);
-        return { success: true, message: 'Login notification sent' };
-      } catch (error) {
-        console.error('Email sending error (ZeptoMail):', error.message);
-      }
+    try {
+      await this.sendEmail(email, subject, htmlContent, username);
+      return { success: true, message: 'Login notification sent' };
+    } catch (error) {
+      console.error('Email sending error:', error.message);
+      return { success: false, message: 'Failed to send login notification' };
     }
-
-    // Attempt 2: Gmail Backup
-    if (this.gmailTransporter) {
-      try {
-        await this.sendWithGmail(email, subject, htmlContent);
-        return { success: true, message: 'Login notification sent (Backup)' };
-      } catch (error) {
-        console.error('Email sending error (Gmail):', error.message);
-      }
-    }
-
-    return { success: false, message: 'Failed to send login notification' };
   }
 
   // Send golden tick notification
@@ -448,7 +428,7 @@ class EmailService {
     const subject = "🏆 You are now a Golden Member!";
 
     try {
-      await this.sendEmail(email, subject, htmlContent);
+      await this.sendEmail(email, subject, htmlContent, username);
       return { success: true, message: 'Golden tick notification sent' };
     } catch (error) {
       console.error('Email sending error:', error.message);
@@ -484,7 +464,7 @@ class EmailService {
     const subject = "🎉 You earned the Blue Tick!";
 
     try {
-      await this.sendEmail(email, subject, htmlContent);
+      await this.sendEmail(email, subject, htmlContent, username);
       return { success: true, message: 'Blue tick notification sent' };
     } catch (error) {
       console.error('Email sending error:', error.message);
@@ -522,28 +502,13 @@ class EmailService {
     const htmlContent = getEmailTemplate("Account Warning", content, username);
     const subject = "⚠️ Account Warning - Aeko";
 
-    // Attempt 1: ZeptoMail
-    if (this.client) {
-      try {
-        const emailParams = this.createEmailParams(email, username, subject, htmlContent);
-        await this.client.sendMail(emailParams);
-        return { success: true, message: 'Warning email sent' };
-      } catch (error) {
-        console.error('Email sending error (ZeptoMail):', error.message);
-      }
+    try {
+      await this.sendEmail(email, subject, htmlContent, username);
+      return { success: true, message: 'Warning email sent' };
+    } catch (error) {
+      console.error('Email sending error:', error.message);
+      return { success: false, message: 'Failed to send warning email' };
     }
-
-    // Attempt 2: Gmail Backup
-    if (this.gmailTransporter) {
-      try {
-        await this.sendWithGmail(email, subject, htmlContent);
-        return { success: true, message: 'Warning email sent (Backup)' };
-      } catch (error) {
-        console.error('Email sending error (Gmail):', error.message);
-      }
-    }
-
-    return { success: false, message: 'Failed to send warning email' };
   }
 
   // Send welcome email after verification
@@ -597,7 +562,7 @@ class EmailService {
     const subject = "🎉 Welcome to Aeko - Your Journey Begins!";
 
     try {
-      await this.sendEmail(email, subject, htmlContent);
+      await this.sendEmail(email, subject, htmlContent, username);
       return { success: true, message: 'Welcome email sent' };
     } catch (error) {
       console.error('Email sending error:', error.message);
