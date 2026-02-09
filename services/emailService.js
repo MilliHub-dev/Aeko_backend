@@ -235,10 +235,10 @@ class EmailService {
     if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
       this.transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        family: 4, // Force IPv4 to avoid ENETUNREACH errors
-        localAddress: '0.0.0.0', // Force binding to IPv4 interface
+        port: 587,
+        secure: false, // Use STARTTLS
+        requireTLS: true,
+        family: 4, // Force IPv4
         auth: {
           user: process.env.GMAIL_USER,
           pass: process.env.GMAIL_APP_PASSWORD
