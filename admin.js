@@ -131,8 +131,8 @@ const admin = new AdminJS({
           message: { type: 'textarea' },
           createdAt: { isVisible: { list: true, show: true, edit: false } }
         },
-        listProperties: ['ticketId', 'senderId', 'message', 'createdAt'],
-        showProperties: ['ticketId', 'senderId', 'message', 'attachments', 'createdAt'],
+        listProperties: ['ticket', 'sender', 'message', 'createdAt'],
+        showProperties: ['ticket', 'sender', 'message', 'attachments', 'createdAt'],
         editProperties: ['message']
       }
     },
@@ -695,6 +695,33 @@ const admin = new AdminJS({
         },
         listProperties: ['users', 'content', 'createdAt'],
       },
+    },
+
+    // ===== SUBSCRIPTION MANAGEMENT =====
+    {
+      resource: { model: modelMap.SubscriptionPlan, client: prisma },
+      options: {
+        parent: {
+          name: 'Subscription Management',
+          icon: 'Star'
+        },
+        properties: {
+          id: { isVisible: { list: true, show: true, edit: false } },
+          features: { type: 'textarea' }, 
+          limits: { type: 'textarea' },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
+          updatedAt: { isVisible: { list: false, show: true, edit: false } }
+        },
+        actions: {
+          new: { isVisible: true },
+          edit: { isVisible: true },
+          delete: { isVisible: true },
+          bulkDelete: { isVisible: true }
+        },
+        listProperties: ['name', 'price', 'currency', 'duration', 'isActive', 'createdAt'],
+        showProperties: ['name', 'price', 'currency', 'duration', 'features', 'limits', 'targetAudience', 'isActive', 'createdAt', 'updatedAt'],
+        editProperties: ['name', 'price', 'currency', 'duration', 'features', 'limits', 'targetAudience', 'isActive']
+      }
     },
 
 
