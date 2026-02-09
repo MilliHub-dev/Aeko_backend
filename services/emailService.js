@@ -230,6 +230,7 @@ class EmailService {
     if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
+        family: 4, // Force IPv4 to avoid ENETUNREACH errors
         auth: {
           user: process.env.GMAIL_USER,
           pass: process.env.GMAIL_APP_PASSWORD

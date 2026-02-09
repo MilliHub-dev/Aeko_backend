@@ -114,8 +114,8 @@ const admin = new AdminJS({
           createdAt: { isVisible: { list: true, show: true, edit: false } },
           updatedAt: { isVisible: { list: true, show: true, edit: false } }
         },
-        listProperties: ['subject', 'status', 'priority', 'category', 'userId', 'createdAt'],
-        showProperties: ['subject', 'description', 'status', 'priority', 'category', 'userId', 'createdAt', 'updatedAt'],
+        listProperties: ['subject', 'status', 'priority', 'category', 'user', 'createdAt'],
+        showProperties: ['subject', 'description', 'status', 'priority', 'category', 'user', 'createdAt', 'updatedAt'],
         editProperties: ['status', 'priority', 'category']
       }
     },
@@ -304,7 +304,8 @@ const admin = new AdminJS({
           updatedAt: { isVisible: { list: false, show: true, edit: false } },
           likes: { isVisible: { list: false, show: true, edit: false } },
           reposts: { isVisible: { list: false, show: true, edit: false } },
-          comments: { isVisible: { list: false, show: true, edit: false } }
+          comments: { isVisible: { list: false, show: true, edit: false } },
+          users_posts_userIdTouser: { isVisible: { list: true, show: true, edit: false }, label: 'User' }
         },
         actions: {
           delete: { isVisible: true },
@@ -344,8 +345,8 @@ const admin = new AdminJS({
             },
           }
         },
-        listProperties: ['user', 'type', 'text', 'createdAt'],
-        showProperties: ['user', 'text', 'media', 'type', 'likes', 'reposts', 'comments', 'createdAt'],
+        listProperties: ['users_posts_userIdTouser', 'type', 'text', 'createdAt'],
+        showProperties: ['users_posts_userIdTouser', 'text', 'media', 'type', 'likes', 'reposts', 'comments', 'createdAt'],
       },
     },
 
@@ -497,7 +498,7 @@ const admin = new AdminJS({
           name: "AI & Bot Management",
           icon: "MessageSquare"
         },
-        listProperties: ['userId', 'userMessage', 'botResponse', 'updatedAt'],
+        listProperties: ['user', 'userMessage', 'botResponse', 'updatedAt'],
         actions: {
           delete: { isVisible: true },
           clearHistory: {
