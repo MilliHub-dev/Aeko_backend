@@ -1,4 +1,3 @@
-import { SendMailClient } from "zeptomail";
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 
@@ -226,43 +225,31 @@ const getEmailTemplate = (title, content, username = '') => {
 
 class EmailService {
   constructor() {
-    this.client = null;
-    this.gmailTransporter = null;
+    this.transporter = null;
 
-    // 1. Configure ZeptoMail (Primary)
-    if (process.env.ZEPTOMAIL_API_KEY) {
-      const url = process.env.ZEPTOMAIL_API_URL || "api.zeptomail.com/";
-      const token = process.env.ZEPTOMAIL_API_KEY;
-      this.client = new SendMailClient({ url, token });
-      console.log('✅ ZeptoMail Email Service Configured');
-    } else {
-      console.warn('ZeptoMail API key not configured.');
-    }
-
-    // 2. Configure Gmail SMTP (Backup)
     if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
-      this.gmailTransporter = nodemailer.createTransport({
+      this.transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
           user: process.env.GMAIL_USER,
           pass: process.env.GMAIL_APP_PASSWORD
         }
       });
-      console.log('✅ Gmail SMTP Backup Configured');
+      console.log('✅ Gmail SMTP Configured (Primary)');
     } else {
-      console.warn('Gmail SMTP credentials not configured (Backup disabled).');
+      console.warn('❌ Gmail credentials missing. Email service disabled.');
     }
   }
 
-  // Check if any email service is available
+  // Check if email service is available
   isAvailable() {
-    return this.client !== null || this.gmailTransporter !== null;
+    return this.transporter !== null;
   }
 
-  // Helper: Send with Gmail Backup
-  async sendWithGmail(toEmail, subject, htmlContent) {
-    if (!this.gmailTransporter) {
-      throw new Error('Gmail SMTP not configured');
+  // Send email using Gmail
+  async sendEmail(toEmail, subject, htmlContent) {
+    if (!this.transporter) {
+      throw new Error('Email service not configured');
     }
 
     const mailOptions = {
@@ -272,32 +259,18 @@ class EmailService {
       html: htmlContent
     };
 
-    return await this.gmailTransporter.sendMail(mailOptions);
-  }
-
-  // Helper to create common email params
-  createEmailParams(toEmail, toName, subject, htmlContent) {
-    return {
-      "from": {
-        "address": process.env.EMAIL_SENDER_ADDRESS || "noreply@aeko.social",
-        "name": process.env.EMAIL_SENDER_NAME || "Aeko"
-      },
-      "to": [
-        {
-          "email_address": {
-            "address": toEmail,
-            "name": toName
-          }
-        }
-      ],
-      "subject": subject,
-      "htmlbody": htmlContent
-    };
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ Email sent to ${toEmail}. Message ID: ${info.messageId}`);
+      return { success: true, message: 'Email sent successfully', messageId: info.messageId };
+    } catch (error) {
+      console.error(`❌ Failed to send email to ${toEmail}:`, error.message);
+      throw error;
+    }
   }
 
   // Send 4-digit verification code
   async sendVerificationCode(email, code, username) {
-    // Check if email service is available
     if (!this.isAvailable()) {
       console.warn('Email service not available. Verification code not sent.');
       console.log(`🔐 [MOCK EMAIL] Verification code for ${email}: ${code}`);
@@ -323,33 +296,15 @@ class EmailService {
     const htmlContent = getEmailTemplate("Verify Your Email", content, username);
     const subject = "🔐 Verify your Aeko account";
 
-    // Attempt 1: ZeptoMail
-    if (this.client) {
-      try {
-        const emailParams = this.createEmailParams(email, username, subject, htmlContent);
-        const response = await this.client.sendMail(emailParams);
-        console.log('✅ Verification email sent successfully (ZeptoMail). ID:', response);
-        return { success: true, message: 'Verification email sent successfully' };
-      } catch (error) {
-        console.error('❌ Failed to send with ZeptoMail:', error.message);
-      }
+    try {
+      await this.sendEmail(email, subject, htmlContent);
+      return { success: true, message: 'Verification email sent successfully' };
+    } catch (error) {
+      console.log(`🔐 [FAILOVER] Verification code for ${email}: ${code}`);
+      // Even if email fails, return success so the frontend moves to the code entry screen
+      // The user can find the code in the server logs (which we just printed)
+      return { success: true, message: 'Verification code generated (Email delivery failed)' };
     }
-
-    // Attempt 2: Gmail Backup
-    if (this.gmailTransporter) {
-      try {
-        console.log('🔄 Attempting Gmail backup...');
-        await this.sendWithGmail(email, subject, htmlContent);
-        console.log('✅ Verification email sent successfully (Gmail).');
-        return { success: true, message: 'Verification email sent successfully (Backup)' };
-      } catch (error) {
-        console.error('❌ Failed to send with Gmail:', error.message);
-      }
-    }
-
-    // FAILOVER: Log code if both fail
-    console.log(`🔐 [FAILOVER] Verification code for ${email}: ${code}`);
-    return { success: true, message: 'Verification code generated (Email delivery failed)' };
   }
 
   // Send password reset email
@@ -382,37 +337,17 @@ class EmailService {
 
     const htmlContent = getEmailTemplate("Reset Password", content, username);
     const subject = "🔑 Reset Your Aeko Password";
-    const userNameToUse = username || 'User';
 
-    // Attempt 1: ZeptoMail
-    if (this.client) {
-      try {
-        const emailParams = this.createEmailParams(email, userNameToUse, subject, htmlContent);
-        await this.client.sendMail(emailParams);
-        console.log('✅ Password reset email sent successfully (ZeptoMail).');
-        return { success: true, message: 'Password reset email sent successfully' };
-      } catch (error) {
-        console.error('❌ Failed to send with ZeptoMail:', error.message);
-      }
+    try {
+      await this.sendEmail(email, subject, htmlContent);
+      return { success: true, message: 'Password reset email sent successfully' };
+    } catch (error) {
+      return { 
+        success: false, 
+        message: 'Failed to send password reset email',
+        error: error.message 
+      };
     }
-
-    // Attempt 2: Gmail Backup
-    if (this.gmailTransporter) {
-      try {
-        console.log('🔄 Attempting Gmail backup...');
-        await this.sendWithGmail(email, subject, htmlContent);
-        console.log('✅ Password reset email sent successfully (Gmail).');
-        return { success: true, message: 'Password reset email sent successfully (Backup)' };
-      } catch (error) {
-        console.error('❌ Failed to send with Gmail:', error.message);
-      }
-    }
-
-    return { 
-      success: false, 
-      message: 'Failed to send password reset email',
-      error: 'All email providers failed' 
-    };
   }
 
   // Send login notification
@@ -503,28 +438,13 @@ class EmailService {
     const htmlContent = getEmailTemplate("Golden Status Awarded", content, username);
     const subject = "🏆 You are now a Golden Member!";
 
-    // Attempt 1: ZeptoMail
-    if (this.client) {
-      try {
-        const emailParams = this.createEmailParams(email, username, subject, htmlContent);
-        await this.client.sendMail(emailParams);
-        return { success: true, message: 'Golden tick notification sent' };
-      } catch (error) {
-        console.error('Email sending error (ZeptoMail):', error.message);
-      }
+    try {
+      await this.sendEmail(email, subject, htmlContent);
+      return { success: true, message: 'Golden tick notification sent' };
+    } catch (error) {
+      console.error('Email sending error:', error.message);
+      return { success: false, message: 'Failed to send golden tick notification' };
     }
-
-    // Attempt 2: Gmail Backup
-    if (this.gmailTransporter) {
-      try {
-        await this.sendWithGmail(email, subject, htmlContent);
-        return { success: true, message: 'Golden tick notification sent (Backup)' };
-      } catch (error) {
-        console.error('Email sending error (Gmail):', error.message);
-      }
-    }
-
-    return { success: false, message: 'Failed to send golden tick notification' };
   }
 
   // Send blue tick notification
@@ -554,28 +474,13 @@ class EmailService {
     const htmlContent = getEmailTemplate("Verified Status Awarded", content, username);
     const subject = "🎉 You earned the Blue Tick!";
 
-    // Attempt 1: ZeptoMail
-    if (this.client) {
-      try {
-        const emailParams = this.createEmailParams(email, username, subject, htmlContent);
-        await this.client.sendMail(emailParams);
-        return { success: true, message: 'Blue tick notification sent' };
-      } catch (error) {
-        console.error('Email sending error (ZeptoMail):', error.message);
-      }
+    try {
+      await this.sendEmail(email, subject, htmlContent);
+      return { success: true, message: 'Blue tick notification sent' };
+    } catch (error) {
+      console.error('Email sending error:', error.message);
+      return { success: false, message: 'Failed to send blue tick notification' };
     }
-
-    // Attempt 2: Gmail Backup
-    if (this.gmailTransporter) {
-      try {
-        await this.sendWithGmail(email, subject, htmlContent);
-        return { success: true, message: 'Blue tick notification sent (Backup)' };
-      } catch (error) {
-        console.error('Email sending error (Gmail):', error.message);
-      }
-    }
-
-    return { success: false, message: 'Failed to send blue tick notification' };
   }
 
   // Send warning email
@@ -680,13 +585,13 @@ class EmailService {
     `;
 
     const htmlContent = getEmailTemplate("Welcome to Aeko", content, username);
+    const subject = "🎉 Welcome to Aeko - Your Journey Begins!";
 
     try {
-      const emailParams = this.createEmailParams(email, username, "🎉 Welcome to Aeko - Your Journey Begins!", htmlContent);
-      await this.client.sendMail(emailParams);
+      await this.sendEmail(email, subject, htmlContent);
       return { success: true, message: 'Welcome email sent' };
     } catch (error) {
-      console.error('Email sending error:', error);
+      console.error('Email sending error:', error.message);
       return { success: false, message: 'Failed to send welcome email' };
     }
   }

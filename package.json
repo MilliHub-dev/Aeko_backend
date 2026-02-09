@@ -58,8 +58,7 @@
     "stripe": "^19.3.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
-    "uuid": "^11.1.0",
-    "zeptomail": "^7.0.0"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",
