@@ -226,6 +226,11 @@ const getEmailTemplate = (title, content, username = '') => {
 class EmailService {
   constructor() {
     this.transporter = null;
+  }
+
+  // Lazy initialization of transporter
+  _getTransporter() {
+    if (this.transporter) return this.transporter;
 
     if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
       this.transporter = nodemailer.createTransport({
@@ -236,20 +241,20 @@ class EmailService {
           pass: process.env.GMAIL_APP_PASSWORD
         }
       });
-      console.log('✅ Gmail SMTP Configured (Primary)');
-    } else {
-      console.warn('❌ Gmail credentials missing. Email service disabled.');
+      console.log('✅ Gmail SMTP Configured (Primary - Lazy Init)');
     }
+    return this.transporter;
   }
 
   // Check if email service is available
   isAvailable() {
-    return this.transporter !== null;
+    return this._getTransporter() !== null;
   }
 
   // Send email using Gmail
   async sendEmail(toEmail, subject, htmlContent) {
-    if (!this.transporter) {
+    const transporter = this._getTransporter();
+    if (!transporter) {
       throw new Error('Email service not configured');
     }
 
@@ -261,7 +266,7 @@ class EmailService {
     };
 
     try {
-      const info = await this.transporter.sendMail(mailOptions);
+      const info = await transporter.sendMail(mailOptions);
       console.log(`✅ Email sent to ${toEmail}. Message ID: ${info.messageId}`);
       return { success: true, message: 'Email sent successfully', messageId: info.messageId };
     } catch (error) {
