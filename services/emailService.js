@@ -238,6 +238,7 @@ class EmailService {
         port: 465,
         secure: true,
         family: 4, // Force IPv4 to avoid ENETUNREACH errors
+        localAddress: '0.0.0.0', // Force binding to IPv4 interface
         auth: {
           user: process.env.GMAIL_USER,
           pass: process.env.GMAIL_APP_PASSWORD
