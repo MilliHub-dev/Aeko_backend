@@ -251,7 +251,9 @@ router.get("/status", authMiddleware, async (req, res) => {
         subscriptionExpiry: true,
         subscriptionPlanId: true,
         subscriptionPlan: true,
-        goldenTick: true
+        goldenTick: true,
+        prideTick: true,
+        businessTick: true
       }
     });
 

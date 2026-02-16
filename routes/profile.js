@@ -359,17 +359,24 @@ router.put('/update', authMiddleware, twoFactorMiddleware.requireTwoFactor(), as
       data: { 
         username, 
         email, 
-        profilePicture: profilePic, // Map profilePic to profilePicture
-        coverPicture: coverPic, // Map coverPic to coverPicture
+        profilePicture: profilePic,
+        coverPicture: coverPic,
         bio,
         location
       }
     });
     
-    // Remove password from response
     const { password, ...userWithoutPassword } = user;
     
-    res.json({ success: true, user: userWithoutPassword });
+    res.json({ 
+      success: true, 
+      user: {
+        ...userWithoutPassword,
+        subscriptionStatus: user.subscriptionStatus,
+        prideTick: user.prideTick,
+        businessTick: user.businessTick
+      }
+    });
   } catch (error) {
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, error: 'User not found' });
