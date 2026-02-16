@@ -234,7 +234,47 @@ const admin = new AdminJS({
                 record: record.toJSON(),
                 notice: {
                   message: `Golden tick granted to ${record.params.username}!`,
-                  type: 'success',
+                  type: "success",
+                },
+              };
+            },
+          },
+          removeBlueTick: {
+            actionType: "record",
+            icon: "MinusCircle",
+            label: "Remove Blue Tick",
+            component: false,
+            handler: async (request, response, context) => {
+              const { record } = context;
+              await prisma.user.update({
+                where: { id: record.params.id },
+                data: { blueTick: false }
+              });
+              return {
+                record: record.toJSON(),
+                notice: {
+                  message: `Blue tick removed from ${record.params.username}.`,
+                  type: "success",
+                },
+              };
+            },
+          },
+          removeGoldenTick: {
+            actionType: "record",
+            icon: "MinusCircle",
+            label: "Remove Golden Tick",
+            component: false,
+            handler: async (request, response, context) => {
+              const { record } = context;
+              await prisma.user.update({
+                where: { id: record.params.id },
+                data: { goldenTick: false }
+              });
+              return {
+                record: record.toJSON(),
+                notice: {
+                  message: `Golden tick removed from ${record.params.username}.`,
+                  type: "success",
                 },
               };
             },
