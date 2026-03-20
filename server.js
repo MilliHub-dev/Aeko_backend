@@ -49,6 +49,7 @@ import exploreRoutes from "./routes/explore.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import supportRoutes from "./routes/supportRoutes.js";
+import waitlistRoutes from "./routes/waitlistRoutes.js";
 
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
@@ -179,6 +180,7 @@ app.use("/api/explore", apiRateLimit, blockingMiddleware.checkPostInteraction(),
 app.use("/api/notifications", apiRateLimit, notificationRoutes);
 app.use("/api/reports", apiRateLimit, reportRoutes);
 app.use('/api/support', apiRateLimit, supportRoutes);
+app.use('/api/waitlist', apiRateLimit, waitlistRoutes);
 
 // Admin API Routes with 2FA protection for sensitive operations
 // Expose admin REST endpoints such as /api/admin/setup/first-admin

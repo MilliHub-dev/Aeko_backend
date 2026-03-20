@@ -13,6 +13,28 @@ const modelMap = dmmf.datamodel.models.reduce((acc, model) => {
     return acc;
 }, {});
 
+const escapeCsvValue = (value) => {
+  if (value === null || value === undefined) {
+    return '""';
+  }
+
+  const stringValue = String(value).replace(/"/g, '""');
+  return `"${stringValue}"`;
+};
+
+const buildWaitlistCsv = (entries) => {
+  const header = ['Name', 'Email', 'Created At'];
+  const rows = entries.map((entry) => [
+    entry.name,
+    entry.email,
+    entry.createdAt instanceof Date ? entry.createdAt.toISOString() : entry.createdAt
+  ]);
+
+  return [header, ...rows]
+    .map((row) => row.map(escapeCsvValue).join(','))
+    .join('\n');
+};
+
 AdminJS.registerAdapter({ Database, Resource });
 
 const admin = new AdminJS({
@@ -134,6 +156,42 @@ const admin = new AdminJS({
         listProperties: ['ticket', 'sender', 'message', 'createdAt'],
         showProperties: ['ticket', 'sender', 'message', 'attachments', 'createdAt'],
         editProperties: ['message']
+      }
+    },
+
+    // ===== GROWTH MANAGEMENT =====
+    {
+      resource: { model: modelMap.WaitlistEntry, client: prisma },
+      options: {
+        parent: {
+          name: 'Growth',
+          icon: 'TrendingUp'
+        },
+        properties: {
+          id: { isVisible: { list: false, show: true, edit: false } },
+          createdAt: { isVisible: { list: true, show: true, edit: false } }
+        },
+        actions: {
+          new: { isVisible: false },
+          edit: { isVisible: false },
+          delete: { isVisible: true },
+          bulkDelete: { isVisible: true },
+          exportCsv: {
+            actionType: 'resource',
+            icon: 'Download',
+            label: 'Export CSV',
+            component: false,
+            handler: async () => ({
+              redirectUrl: `${admin.options.rootPath}/waitlist-export`,
+              notice: {
+                message: 'Preparing waitlist CSV export',
+                type: 'success',
+              },
+            }),
+          }
+        },
+        listProperties: ['name', 'email', 'createdAt'],
+        showProperties: ['id', 'name', 'email', 'createdAt']
       }
     },
     
@@ -839,6 +897,7 @@ const admin = new AdminJS({
           rejectAd: 'Reject Ad',
           endStream: 'End Stream',
           banStream: 'Ban Stream',
+          exportCsv: 'Export CSV',
           flagContent: 'Flag as Inappropriate',
           flagMessage: 'Flag Message',
           moderateComment: 'Moderate',
@@ -897,5 +956,27 @@ const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
     saveUninitialized: true,
   }
 );
+
+adminRouter.get('/waitlist-export', async (req, res) => {
+  try {
+    if (!req.session?.adminUser) {
+      return res.status(401).send('Unauthorized');
+    }
+
+    const entries = await prisma.waitlistEntry.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const csv = buildWaitlistCsv(entries);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="waitlist-${timestamp}.csv"`);
+    res.status(200).send(csv);
+  } catch (error) {
+    console.error('Waitlist CSV export error:', error);
+    res.status(500).send('Failed to export waitlist CSV');
+  }
+});
 
 export { admin, adminRouter };
