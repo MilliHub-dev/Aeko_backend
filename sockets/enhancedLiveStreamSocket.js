@@ -148,6 +148,10 @@ class EnhancedLiveStreamSocket {
     try {
       const { title, description, category, streamType, features, quality, tags, scheduledFor } = data;
 
+      if (!title || !title.trim()) {
+        return socket.emit('stream_error', { error: 'Stream title is required' });
+      }
+
       const streamKey = uuidV4();
       const roomId = uuidV4();
       
@@ -162,11 +166,11 @@ class EnhancedLiveStreamSocket {
 
       const liveStream = await prisma.liveStream.create({
         data: {
-          title,
-          description,
+          title: title.trim(),
+          description: description?.trim() || '',
           category: category || 'other',
           streamType: streamType || 'public',
-          host: { connect: { id: socket.userId } },
+          user: { connect: { id: socket.userId } },
           hostName: socket.user.username,
           hostProfilePicture: socket.user.profilePicture,
           streamKey,
@@ -191,7 +195,7 @@ class EnhancedLiveStreamSocket {
           metadata: {
             streamProtocol: 'WebRTC'
           },
-          chat: { connect: { id: chat.id } }
+          chats: { connect: { id: chat.id } }
         }
       });
 
@@ -211,10 +215,14 @@ class EnhancedLiveStreamSocket {
 
       socket.emit('stream_created', {
         streamId: liveStream.id,
+        _id: liveStream.id,
         streamKey,
         roomId,
         urls: streamUrls,
-        stream: liveStream
+        stream: {
+          ...liveStream,
+          _id: liveStream.id
+        }
       });
 
       console.log(`🎥 Stream created: ${title} by ${socket.user.username}`);
@@ -485,8 +493,7 @@ class EnhancedLiveStreamSocket {
         const chat = await prisma.chat.create({
             data: {
                 isGroup: true,
-                groupName: `${liveStream.title} Chat`,
-                liveStream: { connect: { id: liveStream.id } }
+                groupName: `${liveStream.title} Chat`
             }
         });
         chatId = chat.id;
