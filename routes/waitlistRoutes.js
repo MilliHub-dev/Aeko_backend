@@ -1,4 +1,5 @@
 import express from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db.js';
 
 const router = express.Router();
@@ -79,7 +80,31 @@ router.post('/', async (req, res) => {
       data: entry
     });
   } catch (error) {
-    console.error('Waitlist signup error:', error);
+    console.error('Waitlist signup error:', {
+      name: error?.name,
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack
+    });
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return res.status(409).json({
+        success: false,
+        message: 'This email is already on the waitlist'
+      });
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientInitializationError ||
+      error instanceof Prisma.PrismaClientRustPanicError ||
+      /Can\'t reach database server/i.test(error?.message || '')
+    ) {
+      return res.status(503).json({
+        success: false,
+        message: 'Waitlist is temporarily unavailable. Please try again shortly.'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Error joining waitlist',
