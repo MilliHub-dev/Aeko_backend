@@ -755,7 +755,7 @@ router.get('/:streamId', async (req, res) => {
     const isHost = req.user?.id === liveStream.hostId;
 
     const { user, ...streamData } = liveStream;
-    const sanitizedStream = { ...streamData, host: user, _id: liveStream.id };
+    const sanitizedStream = { ...streamData, host: user || null, _id: liveStream.id };
     
     if (!isHost) {
       sanitizedStream.rtmpUrl = undefined;
@@ -765,11 +765,18 @@ router.get('/:streamId', async (req, res) => {
     }
     
     // Transform host for frontend compatibility
-    sanitizedStream.host = {
-        ...liveStream.host,
-        _id: liveStream.hostId,
-        verified: liveStream.host.blueTick
-    };
+    sanitizedStream.host = user
+      ? {
+          ...user,
+          _id: liveStream.hostId,
+          verified: user.blueTick
+        }
+      : {
+          _id: liveStream.hostId,
+          username: liveStream.hostName,
+          profilePicture: liveStream.hostProfilePicture,
+          verified: false
+        };
 
     // Moderator details are in 'features.moderation' or 'moderation' field in Mongo.
     // In Prisma schema, I added 'moderation' as JSON? No, I don't see 'moderation' in Prisma LiveStream model explicitly.
