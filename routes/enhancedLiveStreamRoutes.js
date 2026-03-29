@@ -54,6 +54,13 @@ router.post('/create', authMiddleware, async (req, res) => {
       }
     });
 
+    await prisma.chatMember.create({
+      data: {
+        chatId: chat.id,
+        userId: req.user.id
+      }
+    });
+
     const streamData = {
       id: uuidV4(),
       title: title.trim(),

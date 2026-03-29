@@ -164,6 +164,13 @@ class EnhancedLiveStreamSocket {
         }
       });
 
+      await prisma.chatMember.create({
+        data: {
+          chatId: chat.id,
+          userId: socket.userId
+        }
+      });
+
       const liveStream = await prisma.liveStream.create({
         data: {
           title: title.trim(),
