@@ -10,6 +10,21 @@ import { uploadImage } from '../middleware/upload.js';
 
 const router = express.Router();
 
+const getCollaborationState = (features = {}) => {
+  const collaboration = features?.collaboration || {};
+
+  return {
+    coHosts: Array.isArray(collaboration.coHosts) ? collaboration.coHosts : [],
+    guests: Array.isArray(collaboration.guests) ? collaboration.guests : [],
+    pendingCoHostInvites: Array.isArray(collaboration.pendingCoHostInvites)
+      ? collaboration.pendingCoHostInvites
+      : [],
+    pendingGuestInvites: Array.isArray(collaboration.pendingGuestInvites)
+      ? collaboration.pendingGuestInvites
+      : []
+  };
+};
+
 
 // === STREAM MANAGEMENT ENDPOINTS ===
 
@@ -995,6 +1010,392 @@ function formatDuration(seconds) {
     }
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
+
+/**
+ * @route   POST /api/livestream/:streamId/co-hosts/invite
+ * @desc    Invite a user to become a co-host
+ * @access  Private
+ */
+router.post('/:streamId/co-hosts/invite', authMiddleware, async (req, res) => {
+  try {
+    const { streamId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId is required'
+      });
+    }
+
+    const liveStream = await prisma.liveStream.findUnique({
+      where: { id: streamId }
+    });
+
+    if (!liveStream) {
+      return res.status(404).json({
+        success: false,
+        message: 'Stream not found'
+      });
+    }
+
+    if (liveStream.hostId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the host can invite co-hosts'
+      });
+    }
+
+    if (userId === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Host cannot invite themselves as co-host'
+      });
+    }
+
+    const invitedUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, profilePicture: true }
+    });
+
+    if (!invitedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const collaboration = getCollaborationState(liveStream.features);
+
+    if (collaboration.coHosts.includes(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is already a co-host'
+      });
+    }
+
+    if (!collaboration.pendingCoHostInvites.some((invite) => invite.userId === userId)) {
+      collaboration.pendingCoHostInvites.push({
+        userId,
+        invitedBy: req.user.id,
+        invitedAt: new Date().toISOString()
+      });
+
+      await prisma.liveStream.update({
+        where: { id: streamId },
+        data: {
+          features: {
+            ...(liveStream.features || {}),
+            collaboration
+          }
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Co-host invite sent successfully',
+      data: {
+        streamId,
+        user: invitedUser
+      }
+    });
+  } catch (error) {
+    console.error('Invite co-host via REST error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to invite co-host',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/livestream/:streamId/co-hosts/accept
+ * @desc    Accept a co-host invite
+ * @access  Private
+ */
+router.post('/:streamId/co-hosts/accept', authMiddleware, async (req, res) => {
+  try {
+    const { streamId } = req.params;
+
+    const liveStream = await prisma.liveStream.findUnique({
+      where: { id: streamId }
+    });
+
+    if (!liveStream) {
+      return res.status(404).json({
+        success: false,
+        message: 'Stream not found'
+      });
+    }
+
+    const collaboration = getCollaborationState(liveStream.features);
+    const hasInvite = collaboration.pendingCoHostInvites.some((invite) => invite.userId === req.user.id);
+
+    if (!hasInvite) {
+      return res.status(404).json({
+        success: false,
+        message: 'No pending co-host invite found'
+      });
+    }
+
+    collaboration.pendingCoHostInvites = collaboration.pendingCoHostInvites.filter(
+      (invite) => invite.userId !== req.user.id
+    );
+
+    if (!collaboration.coHosts.includes(req.user.id)) {
+      collaboration.coHosts.push(req.user.id);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.liveStream.update({
+        where: { id: streamId },
+        data: {
+          features: {
+            ...(liveStream.features || {}),
+            collaboration
+          }
+        }
+      });
+
+      if (liveStream.chatId) {
+        const existingMember = await tx.chatMember.findUnique({
+          where: {
+            chatId_userId: {
+              chatId: liveStream.chatId,
+              userId: req.user.id
+            }
+          }
+        });
+
+        if (!existingMember) {
+          await tx.chatMember.create({
+            data: {
+              chatId: liveStream.chatId,
+              userId: req.user.id
+            }
+          });
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Co-host invite accepted successfully',
+      data: {
+        streamId,
+        role: 'co_host',
+        user: {
+          id: req.user.id,
+          username: req.user.username,
+          profilePicture: req.user.profilePicture
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Accept co-host via REST error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to accept co-host invite',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/livestream/:streamId/guests/invite
+ * @desc    Invite a user to become a guest
+ * @access  Private
+ */
+router.post('/:streamId/guests/invite', authMiddleware, async (req, res) => {
+  try {
+    const { streamId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId is required'
+      });
+    }
+
+    const liveStream = await prisma.liveStream.findUnique({
+      where: { id: streamId }
+    });
+
+    if (!liveStream) {
+      return res.status(404).json({
+        success: false,
+        message: 'Stream not found'
+      });
+    }
+
+    const collaboration = getCollaborationState(liveStream.features);
+    const isHost = liveStream.hostId === req.user.id;
+    const isCoHost = collaboration.coHosts.includes(req.user.id);
+
+    if (!isHost && !isCoHost) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the host or a co-host can invite guests'
+      });
+    }
+
+    if (userId === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot invite yourself as a guest'
+      });
+    }
+
+    const invitedUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, profilePicture: true }
+    });
+
+    if (!invitedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (collaboration.guests.includes(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is already a guest'
+      });
+    }
+
+    if (!collaboration.pendingGuestInvites.some((invite) => invite.userId === userId)) {
+      collaboration.pendingGuestInvites.push({
+        userId,
+        invitedBy: req.user.id,
+        invitedAt: new Date().toISOString()
+      });
+
+      await prisma.liveStream.update({
+        where: { id: streamId },
+        data: {
+          features: {
+            ...(liveStream.features || {}),
+            collaboration
+          }
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Guest invite sent successfully',
+      data: {
+        streamId,
+        user: invitedUser
+      }
+    });
+  } catch (error) {
+    console.error('Invite guest via REST error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to invite guest',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/livestream/:streamId/guests/accept
+ * @desc    Accept a guest invite
+ * @access  Private
+ */
+router.post('/:streamId/guests/accept', authMiddleware, async (req, res) => {
+  try {
+    const { streamId } = req.params;
+
+    const liveStream = await prisma.liveStream.findUnique({
+      where: { id: streamId }
+    });
+
+    if (!liveStream) {
+      return res.status(404).json({
+        success: false,
+        message: 'Stream not found'
+      });
+    }
+
+    const collaboration = getCollaborationState(liveStream.features);
+    const hasInvite = collaboration.pendingGuestInvites.some((invite) => invite.userId === req.user.id);
+
+    if (!hasInvite) {
+      return res.status(404).json({
+        success: false,
+        message: 'No pending guest invite found'
+      });
+    }
+
+    collaboration.pendingGuestInvites = collaboration.pendingGuestInvites.filter(
+      (invite) => invite.userId !== req.user.id
+    );
+
+    if (!collaboration.guests.includes(req.user.id)) {
+      collaboration.guests.push(req.user.id);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.liveStream.update({
+        where: { id: streamId },
+        data: {
+          features: {
+            ...(liveStream.features || {}),
+            collaboration
+          }
+        }
+      });
+
+      if (liveStream.chatId) {
+        const existingMember = await tx.chatMember.findUnique({
+          where: {
+            chatId_userId: {
+              chatId: liveStream.chatId,
+              userId: req.user.id
+            }
+          }
+        });
+
+        if (!existingMember) {
+          await tx.chatMember.create({
+            data: {
+              chatId: liveStream.chatId,
+              userId: req.user.id
+            }
+          });
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Guest invite accepted successfully',
+      data: {
+        streamId,
+        role: 'guest',
+        user: {
+          id: req.user.id,
+          username: req.user.username,
+          profilePicture: req.user.profilePicture
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Accept guest via REST error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to accept guest invite',
+      error: error.message
+    });
+  }
+});
 
 // === MODERATION ENDPOINTS ===
 

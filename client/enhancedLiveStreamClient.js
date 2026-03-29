@@ -27,6 +27,12 @@ class EnhancedLiveStreamClient {
     this.localStream = null;
     this.remoteStreams = new Map();
     this.peerConnections = new Map();
+    this.streamParticipants = {
+      hostId: null,
+      coHosts: [],
+      guests: []
+    };
+    this.currentRole = null;
     
     // Event handlers
     this.eventHandlers = new Map();
@@ -67,6 +73,7 @@ class EnhancedLiveStreamClient {
     this.currentStream = null;
     this.isHost = false;
     this.isViewer = false;
+    this.currentRole = null;
   }
 
   setupSocketEventHandlers() {
@@ -95,9 +102,14 @@ class EnhancedLiveStreamClient {
     this.socket.on('stream_error', (data) => this.emit('stream_error', data));
 
     // Viewer management events
-    this.socket.on('viewer_joined', (data) => this.emit('viewer_joined', data));
+    this.socket.on('viewer_joined', (data) => this.handleViewerJoined(data));
     this.socket.on('viewer_left', (data) => this.emit('viewer_left', data));
     this.socket.on('viewer_count_update', (data) => this.emit('viewer_count_update', data));
+    this.socket.on('broadcast_ready', (data) => this.handleBroadcastReady(data));
+    this.socket.on('broadcast_stopped', (data) => this.emit('broadcast_stopped', data));
+    this.socket.on('broadcaster_started', (data) => this.emit('broadcaster_started', data));
+    this.socket.on('broadcaster_stopped', (data) => this.handleBroadcasterStopped(data));
+    this.socket.on('stream_participants_updated', (data) => this.handleParticipantsUpdated(data));
 
     // WebRTC signaling events
     this.socket.on('webrtc_offer', (data) => this.handleWebRTCOffer(data));
@@ -120,6 +132,22 @@ class EnhancedLiveStreamClient {
     // Moderation events
     this.socket.on('user_banned', (data) => this.emit('user_banned', data));
     this.socket.on('banned_from_stream', (data) => this.emit('banned_from_stream', data));
+
+    // Co-host and guest events
+    this.socket.on('co_host_invited', (data) => this.emit('co_host_invited', data));
+    this.socket.on('co_host_invite_sent', (data) => this.emit('co_host_invite_sent', data));
+    this.socket.on('co_host_added', (data) => this.handleCoHostAdded(data));
+    this.socket.on('co_host_joined', (data) => this.emit('co_host_joined', data));
+    this.socket.on('co_host_accepted', (data) => this.emit('co_host_accepted', data));
+    this.socket.on('co_host_removed', (data) => this.emit('co_host_removed', data));
+    this.socket.on('removed_as_co_host', (data) => this.emit('removed_as_co_host', data));
+    this.socket.on('guest_invited', (data) => this.emit('guest_invited', data));
+    this.socket.on('guest_invite_sent', (data) => this.emit('guest_invite_sent', data));
+    this.socket.on('guest_added', (data) => this.handleGuestAdded(data));
+    this.socket.on('guest_joined', (data) => this.emit('guest_joined', data));
+    this.socket.on('guest_accepted', (data) => this.emit('guest_accepted', data));
+    this.socket.on('guest_removed', (data) => this.emit('guest_removed', data));
+    this.socket.on('removed_as_guest', (data) => this.emit('removed_as_guest', data));
 
     // Discovery events
     this.socket.on('trending_streams', (data) => this.emit('trending_streams', data));
@@ -146,6 +174,7 @@ class EnhancedLiveStreamClient {
         clearTimeout(timeout);
         this.currentStream = data.stream;
         this.isHost = true;
+        this.currentRole = 'host';
         resolve(data);
       });
 
@@ -201,8 +230,10 @@ class EnhancedLiveStreamClient {
         if (this.currentStream) {
           this.currentStream.status = 'ended';
         }
+        this.stopPublishingCurrentStream();
         this.cleanupWebRTC();
         this.isHost = false;
+        this.currentRole = null;
         resolve(data);
       });
 
@@ -239,8 +270,153 @@ class EnhancedLiveStreamClient {
     });
   }
 
+  async inviteCoHost(streamId, userId) {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('Not connected to livestream server');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.socket.emit('invite_co_host', { streamId, userId });
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Invite co-host timeout'));
+      }, 10000);
+
+      this.socket.once('co_host_invite_sent', (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      });
+
+      this.socket.once('stream_error', (error) => {
+        clearTimeout(timeout);
+        reject(new Error(error.error));
+      });
+    });
+  }
+
+  async acceptCoHost(streamId) {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('Not connected to livestream server');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.socket.emit('accept_co_host', { streamId });
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Accept co-host timeout'));
+      }, 10000);
+
+      this.socket.once('co_host_added', (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      });
+
+      this.socket.once('stream_error', (error) => {
+        clearTimeout(timeout);
+        reject(new Error(error.error));
+      });
+    });
+  }
+
+  async removeCoHost(streamId, userId) {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('Not connected to livestream server');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.socket.emit('remove_co_host', { streamId, userId });
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Remove co-host timeout'));
+      }, 10000);
+
+      this.socket.once('co_host_removed', (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      });
+
+      this.socket.once('stream_error', (error) => {
+        clearTimeout(timeout);
+        reject(new Error(error.error));
+      });
+    });
+  }
+
+  async inviteGuest(streamId, userId) {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('Not connected to livestream server');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.socket.emit('invite_guest', { streamId, userId });
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Invite guest timeout'));
+      }, 10000);
+
+      this.socket.once('guest_invite_sent', (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      });
+
+      this.socket.once('stream_error', (error) => {
+        clearTimeout(timeout);
+        reject(new Error(error.error));
+      });
+    });
+  }
+
+  async acceptGuestInvite(streamId) {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('Not connected to livestream server');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.socket.emit('accept_guest_invite', { streamId });
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Accept guest invite timeout'));
+      }, 10000);
+
+      this.socket.once('guest_added', (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      });
+
+      this.socket.once('stream_error', (error) => {
+        clearTimeout(timeout);
+        reject(new Error(error.error));
+      });
+    });
+  }
+
+  async removeGuest(streamId, userId) {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('Not connected to livestream server');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.socket.emit('remove_guest', { streamId, userId });
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Remove guest timeout'));
+      }, 10000);
+
+      this.socket.once('guest_removed', (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      });
+
+      this.socket.once('stream_error', (error) => {
+        clearTimeout(timeout);
+        reject(new Error(error.error));
+      });
+    });
+  }
+
   leaveStream(streamId) {
     if (this.socket && this.socket.connected) {
+      this.stopPublishingCurrentStream();
       this.socket.emit('leave_stream', { streamId });
     }
     
@@ -274,6 +450,10 @@ class EnhancedLiveStreamClient {
 
       if (videoElement) {
         videoElement.srcObject = this.localStream;
+      }
+
+      if (this.currentStream) {
+        this.publishCurrentStream();
       }
 
       this.emit('local_stream_ready', this.localStream);
@@ -333,6 +513,55 @@ class EnhancedLiveStreamClient {
     }
 
     this.emit('screen_share_stopped');
+  }
+
+  isCurrentUserBroadcaster() {
+    return ['host', 'co_host', 'guest'].includes(this.currentRole) || this.currentStream?.hostId === this.userId;
+  }
+
+  publishCurrentStream() {
+    if (!this.socket || !this.socket.connected || !this.currentStream || !this.localStream) {
+      return;
+    }
+
+    this.socket.emit('begin_broadcast', {
+      streamId: this.currentStream._id || this.currentStream.id
+    });
+  }
+
+  stopPublishingCurrentStream() {
+    if (!this.socket || !this.socket.connected || !this.currentStream) {
+      return;
+    }
+
+    this.socket.emit('stop_broadcast', {
+      streamId: this.currentStream._id || this.currentStream.id
+    });
+  }
+
+  async createOfferForUser(userId) {
+    const streamId = this.currentStream?._id || this.currentStream?.id;
+    if (!streamId || !this.localStream || !userId || userId === this.userId) {
+      return;
+    }
+
+    let pc = this.peerConnections.get(userId);
+    if (!pc) {
+      pc = await this.createPeerConnection(userId);
+    }
+
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      this.socket.emit('offer', {
+        streamId,
+        offer,
+        targetUserId: userId
+      });
+    } catch (error) {
+      console.error('Error creating WebRTC offer:', error);
+    }
   }
 
   async createPeerConnection(userId) {
@@ -603,7 +832,94 @@ class EnhancedLiveStreamClient {
   handleStreamJoined(data) {
     this.currentStream = data.stream;
     this.isViewer = true;
+    this.currentRole = data.role || null;
+    this.streamParticipants = {
+      hostId: data.stream?.hostId || null,
+      coHosts: data.collaboration?.coHosts || [],
+      guests: data.collaboration?.guests || []
+    };
+
+    if (this.localStream && this.isCurrentUserBroadcaster()) {
+      this.publishCurrentStream();
+    }
+
     this.emit('stream_joined', data);
+  }
+
+  handleBroadcastReady(data) {
+    this.currentRole = data.role || this.currentRole;
+    const audienceUserIds = Array.isArray(data.audienceUserIds) ? data.audienceUserIds : [];
+
+    audienceUserIds.forEach((userId) => {
+      this.createOfferForUser(userId);
+    });
+
+    this.emit('broadcast_ready', data);
+  }
+
+  handleViewerJoined(data) {
+    if (this.localStream && this.isCurrentUserBroadcaster() && data?.userId) {
+      this.createOfferForUser(data.userId);
+    }
+
+    this.emit('viewer_joined', data);
+  }
+
+  handleBroadcasterStopped(data) {
+    const { userId } = data;
+    const pc = this.peerConnections.get(userId);
+    if (pc) {
+      pc.close();
+      this.peerConnections.delete(userId);
+    }
+
+    if (this.remoteStreams.has(userId)) {
+      this.remoteStreams.delete(userId);
+    }
+
+    this.emit('broadcaster_stopped', data);
+  }
+
+  handleCoHostAdded(data) {
+    if (data?.user?.userId === this.userId) {
+      this.currentRole = 'co_host';
+      if (this.localStream && this.currentStream && (this.currentStream._id || this.currentStream.id) === data.streamId) {
+        this.publishCurrentStream();
+      }
+    }
+
+    this.emit('co_host_added', data);
+  }
+
+  handleGuestAdded(data) {
+    if (data?.user?.userId === this.userId) {
+      this.currentRole = 'guest';
+      if (this.localStream && this.currentStream && (this.currentStream._id || this.currentStream.id) === data.streamId) {
+        this.publishCurrentStream();
+      }
+    }
+
+    this.emit('guest_added', data);
+  }
+
+  handleParticipantsUpdated(data) {
+    this.streamParticipants = {
+      hostId: data.hostId || null,
+      coHosts: data.coHosts || [],
+      guests: data.guests || []
+    };
+
+    if (this.userId === data.hostId) {
+      this.currentRole = 'host';
+    } else if ((data.coHosts || []).includes(this.userId)) {
+      this.currentRole = 'co_host';
+    } else if ((data.guests || []).includes(this.userId)) {
+      this.currentRole = 'guest';
+    } else if (this.currentRole !== 'viewer') {
+      this.currentRole = this.currentStream ? 'viewer' : null;
+    }
+
+    this.emit('stream_participants_updated', data);
   }
 
   getCurrentStream() {

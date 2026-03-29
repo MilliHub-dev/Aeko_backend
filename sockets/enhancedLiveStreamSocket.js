@@ -15,6 +15,101 @@ class EnhancedLiveStreamSocket {
     this.setupSocket();
   }
 
+  getCollaborationState(features = {}) {
+    const collaboration = features?.collaboration || {};
+
+    return {
+      coHosts: Array.isArray(collaboration.coHosts) ? collaboration.coHosts : [],
+      guests: Array.isArray(collaboration.guests) ? collaboration.guests : [],
+      pendingCoHostInvites: Array.isArray(collaboration.pendingCoHostInvites)
+        ? collaboration.pendingCoHostInvites
+        : [],
+      pendingGuestInvites: Array.isArray(collaboration.pendingGuestInvites)
+        ? collaboration.pendingGuestInvites
+        : []
+    };
+  }
+
+  async getLiveStream(streamId) {
+    return prisma.liveStream.findUnique({
+      where: { id: streamId }
+    });
+  }
+
+  isCoHost(userId, liveStream) {
+    const collaboration = this.getCollaborationState(liveStream?.features);
+    return collaboration.coHosts.includes(userId);
+  }
+
+  isHostOrCoHost(userId, liveStream) {
+    return liveStream?.hostId === userId || this.isCoHost(userId, liveStream);
+  }
+
+  async saveCollaborationState(liveStream, collaboration) {
+    const features = {
+      ...(liveStream.features || {}),
+      collaboration
+    };
+
+    return prisma.liveStream.update({
+      where: { id: liveStream.id },
+      data: { features }
+    });
+  }
+
+  async ensureChatMembership(chatId, userId) {
+    if (!chatId || !userId) return;
+
+    const existingMember = await prisma.chatMember.findUnique({
+      where: {
+        chatId_userId: {
+          chatId,
+          userId
+        }
+      }
+    });
+
+    if (!existingMember) {
+      await prisma.chatMember.create({
+        data: {
+          chatId,
+          userId
+        }
+      });
+    }
+  }
+
+  getBroadcasterRole(userId, liveStream) {
+    if (liveStream?.hostId === userId) return 'host';
+
+    const collaboration = this.getCollaborationState(liveStream?.features);
+    if (collaboration.coHosts.includes(userId)) return 'co_host';
+    if (collaboration.guests.includes(userId)) return 'guest';
+
+    return null;
+  }
+
+  getAudienceUserIds(streamId, broadcasterUserId) {
+    const viewerIds = Array.from(this.viewers.get(streamId) || []);
+    return viewerIds.filter((userId) => userId !== broadcasterUserId);
+  }
+
+  async emitParticipantUpdate(streamId, liveStream) {
+    const stream = liveStream || await this.getLiveStream(streamId);
+    if (!stream) return;
+
+    const collaboration = this.getCollaborationState(stream.features);
+
+    this.io.to(streamId).emit('stream_participants_updated', {
+      streamId,
+      hostId: stream.hostId,
+      coHosts: collaboration.coHosts,
+      guests: collaboration.guests,
+      pendingCoHostInvites: collaboration.pendingCoHostInvites,
+      pendingGuestInvites: collaboration.pendingGuestInvites
+    });
+  }
+
   setupSocket() {
     // Authentication middleware
     this.io.use(async (socket, next) => {
@@ -55,6 +150,8 @@ class EnhancedLiveStreamSocket {
     console.log(`🔴 Livestream user connected: ${socket.user.username} (${socket.userId})`);
     
     // Store user socket
+    socket.joinedStreams = new Set();
+    socket.publishedStreams = new Set();
     this.userSockets.set(socket.userId, socket);
     
     // Register event handlers
@@ -67,6 +164,19 @@ class EnhancedLiveStreamSocket {
 
   handleDisconnection(socket) {
     console.log(`🔴 Livestream user disconnected: ${socket.user.username}`);
+
+    if (socket.joinedStreams) {
+      for (const streamId of socket.joinedStreams) {
+        if (this.viewers.has(streamId)) {
+          this.viewers.get(streamId).delete(socket.userId);
+        }
+
+        if (this.streamConnections.has(streamId)) {
+          this.streamConnections.get(streamId).delete(socket.id);
+        }
+      }
+    }
+
     this.userSockets.delete(socket.userId);
     // Cleanup viewers and active streams if necessary
   }
@@ -85,6 +195,8 @@ class EnhancedLiveStreamSocket {
     socket.on('get_stream_info', (data) => this.handleGetStreamInfo(socket, data));
     
     // === WEBRTC SIGNALING ===
+    socket.on('begin_broadcast', (data) => this.handleBeginBroadcast(socket, data));
+    socket.on('stop_broadcast', (data) => this.handleStopBroadcast(socket, data));
     socket.on('offer', (data) => this.handleWebRTCOffer(socket, data));
     socket.on('answer', (data) => this.handleWebRTCAnswer(socket, data));
     socket.on('ice_candidate', (data) => this.handleICECandidate(socket, data));
@@ -189,7 +301,13 @@ class EnhancedLiveStreamSocket {
             recordingEnabled: features?.recordingEnabled ?? false,
             donationsEnabled: features?.donationsEnabled ?? false,
             subscribersOnly: features?.subscribersOnly ?? false,
-            moderationEnabled: features?.moderationEnabled ?? true
+            moderationEnabled: features?.moderationEnabled ?? true,
+            collaboration: {
+              coHosts: [],
+              guests: [],
+              pendingCoHostInvites: [],
+              pendingGuestInvites: []
+            }
           },
           quality: {
             resolution: quality?.resolution || '720p',
@@ -318,6 +436,7 @@ class EnhancedLiveStreamSocket {
 
       // Join stream room
       socket.join(streamId);
+      socket.joinedStreams.add(streamId);
       
       // Add viewer
       if (!this.viewers.has(streamId)) {
@@ -356,7 +475,9 @@ class EnhancedLiveStreamSocket {
         streamId,
         stream: liveStream,
         currentViewers,
-        roomId: liveStream.roomId
+        roomId: liveStream.roomId,
+        role: this.getBroadcasterRole(socket.userId, liveStream) || 'viewer',
+        collaboration: this.getCollaborationState(liveStream.features)
       });
 
       // Notify stream about new viewer
@@ -380,7 +501,12 @@ class EnhancedLiveStreamSocket {
     try {
       const { streamId } = data;
 
+      if (socket.publishedStreams?.has(streamId)) {
+        await this.handleStopBroadcast(socket, { streamId, silent: true });
+      }
+
       socket.leave(streamId);
+      socket.joinedStreams?.delete(streamId);
       
       // Remove viewer
       if (this.viewers.has(streamId)) {
@@ -420,6 +546,68 @@ class EnhancedLiveStreamSocket {
   }
 
   // === WEBRTC SIGNALING HANDLERS ===
+  async handleBeginBroadcast(socket, data) {
+    try {
+      const { streamId } = data;
+
+      const liveStream = await this.getLiveStream(streamId);
+      if (!liveStream) {
+        return socket.emit('stream_error', { error: 'Stream not found' });
+      }
+
+      const role = this.getBroadcasterRole(socket.userId, liveStream);
+      if (!role) {
+        return socket.emit('stream_error', { error: 'Only the host, co-hosts, or guests can broadcast' });
+      }
+
+      socket.join(streamId);
+      socket.joinedStreams?.add(streamId);
+      socket.publishedStreams?.add(streamId);
+
+      const audienceUserIds = this.getAudienceUserIds(streamId, socket.userId);
+
+      socket.emit('broadcast_ready', {
+        streamId,
+        role,
+        audienceUserIds
+      });
+
+      this.io.to(streamId).emit('broadcaster_started', {
+        streamId,
+        userId: socket.userId,
+        username: socket.user.username,
+        profilePicture: socket.user.profilePicture,
+        role
+      });
+    } catch (error) {
+      console.error('Begin broadcast error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
+  async handleStopBroadcast(socket, data) {
+    try {
+      const { streamId, silent = false } = data;
+      socket.publishedStreams?.delete(streamId);
+
+      const liveStream = await this.getLiveStream(streamId);
+      const role = this.getBroadcasterRole(socket.userId, liveStream);
+
+      if (!silent) {
+        socket.emit('broadcast_stopped', { streamId });
+      }
+
+      this.io.to(streamId).emit('broadcaster_stopped', {
+        streamId,
+        userId: socket.userId,
+        role
+      });
+    } catch (error) {
+      console.error('Stop broadcast error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
   handleWebRTCOffer(socket, data) {
     const { streamId, offer, targetUserId } = data;
     
@@ -686,12 +874,343 @@ class EnhancedLiveStreamSocket {
   handleStreamLike(socket, data) {}
   handleStreamShare(socket, data) {}
   handleFollowHost(socket, data) {}
-  handleInviteCoHost(socket, data) {}
-  handleAcceptCoHost(socket, data) {}
-  handleRemoveCoHost(socket, data) {}
-  handleInviteGuest(socket, data) {}
-  handleAcceptGuestInvite(socket, data) {}
-  handleRemoveGuest(socket, data) {}
+  async handleInviteCoHost(socket, data) {
+    try {
+      const { streamId, userId } = data;
+
+      const liveStream = await this.getLiveStream(streamId);
+      if (!liveStream) {
+        return socket.emit('stream_error', { error: 'Stream not found' });
+      }
+
+      if (liveStream.hostId !== socket.userId) {
+        return socket.emit('stream_error', { error: 'Only the host can invite co-hosts' });
+      }
+
+      if (!userId || userId === socket.userId) {
+        return socket.emit('stream_error', { error: 'A valid user is required' });
+      }
+
+      const targetUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, username: true, profilePicture: true }
+      });
+
+      if (!targetUser) {
+        return socket.emit('stream_error', { error: 'User not found' });
+      }
+
+      const collaboration = this.getCollaborationState(liveStream.features);
+      if (collaboration.coHosts.includes(userId)) {
+        return socket.emit('stream_error', { error: 'User is already a co-host' });
+      }
+
+      const alreadyInvited = collaboration.pendingCoHostInvites.some((invite) => invite.userId === userId);
+      if (!alreadyInvited) {
+        collaboration.pendingCoHostInvites.push({
+          userId,
+          invitedBy: socket.userId,
+          invitedAt: new Date().toISOString()
+        });
+
+        await this.saveCollaborationState(liveStream, collaboration);
+      }
+
+      const targetSocket = this.userSockets.get(userId);
+      const payload = {
+        streamId,
+        invitedBy: {
+          userId: socket.userId,
+          username: socket.user.username,
+          profilePicture: socket.user.profilePicture
+        },
+        stream: {
+          id: liveStream.id,
+          _id: liveStream.id,
+          title: liveStream.title
+        }
+      };
+
+      if (targetSocket) {
+        targetSocket.emit('co_host_invited', payload);
+      }
+
+      socket.emit('co_host_invite_sent', {
+        streamId,
+        user: targetUser
+      });
+    } catch (error) {
+      console.error('Invite co-host error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
+  async handleAcceptCoHost(socket, data) {
+    try {
+      const { streamId } = data;
+
+      const liveStream = await this.getLiveStream(streamId);
+      if (!liveStream) {
+        return socket.emit('stream_error', { error: 'Stream not found' });
+      }
+
+      const collaboration = this.getCollaborationState(liveStream.features);
+      const hasInvite = collaboration.pendingCoHostInvites.some((invite) => invite.userId === socket.userId);
+
+      if (!hasInvite) {
+        return socket.emit('stream_error', { error: 'No pending co-host invite found' });
+      }
+
+      collaboration.pendingCoHostInvites = collaboration.pendingCoHostInvites.filter(
+        (invite) => invite.userId !== socket.userId
+      );
+
+      if (!collaboration.coHosts.includes(socket.userId)) {
+        collaboration.coHosts.push(socket.userId);
+      }
+
+      await this.saveCollaborationState(liveStream, collaboration);
+      await this.ensureChatMembership(liveStream.chatId, socket.userId);
+
+      const payload = {
+        streamId,
+        user: {
+          userId: socket.userId,
+          username: socket.user.username,
+          profilePicture: socket.user.profilePicture
+        }
+      };
+
+      socket.emit('co_host_added', payload);
+      this.io.to(streamId).emit('co_host_joined', payload);
+      await this.emitParticipantUpdate(streamId, {
+        ...liveStream,
+        features: {
+          ...(liveStream.features || {}),
+          collaboration
+        }
+      });
+
+      const hostSocket = this.userSockets.get(liveStream.hostId);
+      if (hostSocket) {
+        hostSocket.emit('co_host_accepted', payload);
+      }
+    } catch (error) {
+      console.error('Accept co-host error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
+  async handleRemoveCoHost(socket, data) {
+    try {
+      const { streamId, userId } = data;
+
+      const liveStream = await this.getLiveStream(streamId);
+      if (!liveStream) {
+        return socket.emit('stream_error', { error: 'Stream not found' });
+      }
+
+      if (liveStream.hostId !== socket.userId) {
+        return socket.emit('stream_error', { error: 'Only the host can remove co-hosts' });
+      }
+
+      const collaboration = this.getCollaborationState(liveStream.features);
+      collaboration.coHosts = collaboration.coHosts.filter((id) => id !== userId);
+      collaboration.pendingCoHostInvites = collaboration.pendingCoHostInvites.filter(
+        (invite) => invite.userId !== userId
+      );
+
+      await this.saveCollaborationState(liveStream, collaboration);
+
+      const payload = { streamId, userId };
+      socket.emit('co_host_removed', payload);
+      this.io.to(streamId).emit('co_host_removed', payload);
+      await this.emitParticipantUpdate(streamId, {
+        ...liveStream,
+        features: {
+          ...(liveStream.features || {}),
+          collaboration
+        }
+      });
+
+      const targetSocket = this.userSockets.get(userId);
+      if (targetSocket) {
+        targetSocket.emit('removed_as_co_host', payload);
+      }
+    } catch (error) {
+      console.error('Remove co-host error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
+  async handleInviteGuest(socket, data) {
+    try {
+      const { streamId, userId } = data;
+
+      const liveStream = await this.getLiveStream(streamId);
+      if (!liveStream) {
+        return socket.emit('stream_error', { error: 'Stream not found' });
+      }
+
+      if (!this.isHostOrCoHost(socket.userId, liveStream)) {
+        return socket.emit('stream_error', { error: 'Only the host or a co-host can invite guests' });
+      }
+
+      if (!userId || userId === socket.userId) {
+        return socket.emit('stream_error', { error: 'A valid user is required' });
+      }
+
+      const targetUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, username: true, profilePicture: true }
+      });
+
+      if (!targetUser) {
+        return socket.emit('stream_error', { error: 'User not found' });
+      }
+
+      const collaboration = this.getCollaborationState(liveStream.features);
+      if (collaboration.guests.includes(userId)) {
+        return socket.emit('stream_error', { error: 'User is already a guest' });
+      }
+
+      const alreadyInvited = collaboration.pendingGuestInvites.some((invite) => invite.userId === userId);
+      if (!alreadyInvited) {
+        collaboration.pendingGuestInvites.push({
+          userId,
+          invitedBy: socket.userId,
+          invitedAt: new Date().toISOString()
+        });
+
+        await this.saveCollaborationState(liveStream, collaboration);
+      }
+
+      const targetSocket = this.userSockets.get(userId);
+      const payload = {
+        streamId,
+        invitedBy: {
+          userId: socket.userId,
+          username: socket.user.username,
+          profilePicture: socket.user.profilePicture
+        },
+        stream: {
+          id: liveStream.id,
+          _id: liveStream.id,
+          title: liveStream.title
+        }
+      };
+
+      if (targetSocket) {
+        targetSocket.emit('guest_invited', payload);
+      }
+
+      socket.emit('guest_invite_sent', {
+        streamId,
+        user: targetUser
+      });
+    } catch (error) {
+      console.error('Invite guest error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
+  async handleAcceptGuestInvite(socket, data) {
+    try {
+      const { streamId } = data;
+
+      const liveStream = await this.getLiveStream(streamId);
+      if (!liveStream) {
+        return socket.emit('stream_error', { error: 'Stream not found' });
+      }
+
+      const collaboration = this.getCollaborationState(liveStream.features);
+      const hasInvite = collaboration.pendingGuestInvites.some((invite) => invite.userId === socket.userId);
+
+      if (!hasInvite) {
+        return socket.emit('stream_error', { error: 'No pending guest invite found' });
+      }
+
+      collaboration.pendingGuestInvites = collaboration.pendingGuestInvites.filter(
+        (invite) => invite.userId !== socket.userId
+      );
+
+      if (!collaboration.guests.includes(socket.userId)) {
+        collaboration.guests.push(socket.userId);
+      }
+
+      await this.saveCollaborationState(liveStream, collaboration);
+      await this.ensureChatMembership(liveStream.chatId, socket.userId);
+
+      const payload = {
+        streamId,
+        user: {
+          userId: socket.userId,
+          username: socket.user.username,
+          profilePicture: socket.user.profilePicture
+        }
+      };
+
+      socket.emit('guest_added', payload);
+      this.io.to(streamId).emit('guest_joined', payload);
+      await this.emitParticipantUpdate(streamId, {
+        ...liveStream,
+        features: {
+          ...(liveStream.features || {}),
+          collaboration
+        }
+      });
+
+      const hostSocket = this.userSockets.get(liveStream.hostId);
+      if (hostSocket) {
+        hostSocket.emit('guest_accepted', payload);
+      }
+    } catch (error) {
+      console.error('Accept guest invite error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
+  async handleRemoveGuest(socket, data) {
+    try {
+      const { streamId, userId } = data;
+
+      const liveStream = await this.getLiveStream(streamId);
+      if (!liveStream) {
+        return socket.emit('stream_error', { error: 'Stream not found' });
+      }
+
+      if (!this.isHostOrCoHost(socket.userId, liveStream)) {
+        return socket.emit('stream_error', { error: 'Only the host or a co-host can remove guests' });
+      }
+
+      const collaboration = this.getCollaborationState(liveStream.features);
+      collaboration.guests = collaboration.guests.filter((id) => id !== userId);
+      collaboration.pendingGuestInvites = collaboration.pendingGuestInvites.filter(
+        (invite) => invite.userId !== userId
+      );
+
+      await this.saveCollaborationState(liveStream, collaboration);
+
+      const payload = { streamId, userId };
+      socket.emit('guest_removed', payload);
+      this.io.to(streamId).emit('guest_removed', payload);
+      await this.emitParticipantUpdate(streamId, {
+        ...liveStream,
+        features: {
+          ...(liveStream.features || {}),
+          collaboration
+        }
+      });
+
+      const targetSocket = this.userSockets.get(userId);
+      if (targetSocket) {
+        targetSocket.emit('removed_as_guest', payload);
+      }
+    } catch (error) {
+      console.error('Remove guest error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
   handleStartScreenShare(socket, data) {}
   handleStopScreenShare(socket, data) {}
   handleStartRecording(socket, data) {}
