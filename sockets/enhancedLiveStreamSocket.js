@@ -412,6 +412,60 @@ class EnhancedLiveStreamSocket {
     }
   }
 
+  async handleEndStream(socket, data) {
+    try {
+      const { streamId } = data;
+
+      const liveStream = await prisma.liveStream.findUnique({
+        where: { id: streamId }
+      });
+
+      if (!liveStream || liveStream.hostId !== socket.userId) {
+        return socket.emit('stream_error', { error: 'Stream not found or unauthorized' });
+      }
+
+      const endedAt = new Date();
+      const duration = liveStream.startedAt
+        ? Math.floor((endedAt.getTime() - new Date(liveStream.startedAt).getTime()) / 1000)
+        : 0;
+
+      const updatedStream = await prisma.liveStream.update({
+        where: { id: streamId },
+        data: {
+          status: 'ended',
+          endedAt,
+          duration
+        }
+      });
+
+      this.activeStreams.delete(streamId);
+      this.viewers.delete(streamId);
+      this.streamConnections.delete(streamId);
+      this.rtcConnections.delete(streamId);
+
+      socket.publishedStreams?.delete(streamId);
+      socket.joinedStreams?.delete(streamId);
+
+      this.io.to(streamId).emit('stream_ended', {
+        streamId,
+        endedAt: updatedStream.endedAt,
+        duration: updatedStream.duration,
+        status: updatedStream.status
+      });
+
+      this.io.emit('live_stream_ended', {
+        streamId,
+        status: 'ended',
+        endedAt: updatedStream.endedAt
+      });
+
+      console.log(`⚫ Stream ended: ${liveStream.title}`);
+    } catch (error) {
+      console.error('End stream error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
   async handleJoinStream(socket, data) {
     try {
       const { streamId } = data;
