@@ -1,7 +1,5 @@
 import axios from "axios";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../config/db.js";
 
 const getBotResponse = async (userId, message) => {
   const user = await prisma.user.findUnique({

@@ -1,17 +1,41 @@
 import AdminJS from "adminjs";
 import AdminJSExpress from "@adminjs/express";
 import { Database, Resource } from '@adminjs/prisma';
-import { PrismaClient } from '@prisma/client';
 import express from "express";
 import { Prisma } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { Pool } from "pg";
+import { prisma } from "./config/db.js";
 
-const prisma = new PrismaClient();
 const dmmf = Prisma.dmmf;
 const modelMap = dmmf.datamodel.models.reduce((acc, model) => {
     acc[model.name] = model;
     return acc;
 }, {});
+
+const buildAdminSessionStore = () => {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    return undefined;
+  }
+
+  const isLocalDb = /(localhost|127\.0\.0\.1)/i.test(databaseUrl);
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: isLocalDb ? false : { rejectUnauthorized: false },
+  });
+
+  const PgSession = connectPgSimple(session);
+  return new PgSession({
+    pool,
+    tableName: "admin_session",
+    createTableIfMissing: true,
+  });
+};
+
+const adminSessionStore = buildAdminSessionStore();
 
 const escapeCsvValue = (value) => {
   if (value === null || value === undefined) {
@@ -948,12 +972,13 @@ const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
   {
     authenticate,
     cookieName: 'adminjs',
-    cookiePassword: 'some-secret-password-used-to-secure-cookie',
+    cookiePassword: process.env.ADMINJS_COOKIE_SECRET || 'change-me-in-production',
   },
   null,
   {
     resave: false,
     saveUninitialized: true,
+    ...(adminSessionStore ? { store: adminSessionStore } : {}),
   }
 );
 

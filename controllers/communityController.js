@@ -1,8 +1,6 @@
 import { validationResult } from "express-validator";
-import { PrismaClient } from '@prisma/client';
+import { prisma } from "../config/db.js";
 import { v4 as uuidv4 } from 'uuid';
-
-const prisma = new PrismaClient();
 
 // @desc    Create a new community
 // @route   POST /api/communities

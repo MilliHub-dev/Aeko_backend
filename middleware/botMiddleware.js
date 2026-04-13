@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../config/db.js";
 
 // Middleware to modify bot's response based on personality
 export const botResponseMiddleware = async (req, res, next) => {

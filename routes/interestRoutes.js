@@ -1,11 +1,10 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/db.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 import adminMiddleware from '../middleware/adminMiddleware.js';
 import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * @swagger

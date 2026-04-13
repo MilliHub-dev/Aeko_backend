@@ -1,9 +1,8 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/db.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 import emailService from '../services/emailService.js';
 
-const prisma = new PrismaClient();
 const router = express.Router();
 
 // Helper to check if user is admin
