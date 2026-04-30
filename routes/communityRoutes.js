@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import {
   createCommunity,
   getCommunities,
+  getMyCommunities,
   getCommunity,
   joinCommunity,
   leaveCommunity,
@@ -111,6 +112,8 @@ router.post(
  *         description: Server error
  */
 router.get('/', getCommunities);
+
+router.get('/my', protect, getMyCommunities);
 
 /**
  * @swagger

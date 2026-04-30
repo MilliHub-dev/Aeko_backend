@@ -88,7 +88,10 @@ export const createCommunity = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: result.community
+      data: {
+        ...result.community,
+        _id: result.community.id
+      }
     });
   } catch (error) {
     console.error('Error creating community:', error);
@@ -143,6 +146,7 @@ export const getCommunities = async (req, res) => {
 
     const mappedCommunities = communities.map(community => ({
       ...community,
+      _id: community.id,
       owner: community.users,
       users: undefined
     }));
@@ -159,6 +163,82 @@ export const getCommunities = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching communities:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// @desc    Get current user's communities (created, joined, or followed)
+// @route   GET /api/communities/my
+// @access  Private
+export const getMyCommunities = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { page = 1, limit = 20, search = '' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {
+      isActive: true,
+      OR: [
+        { ownerId: userId },
+        { community_members: { some: { userId, status: 'active' } } },
+        { community_followers: { some: { userId } } }
+      ],
+      AND: search
+        ? [
+            {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { description: { contains: search, mode: 'insensitive' } },
+                { tags: { has: search } }
+              ]
+            }
+          ]
+        : undefined
+    };
+
+    const [communities, total] = await Promise.all([
+      prisma.community.findMany({
+        where,
+        include: {
+          users: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              profilePicture: true,
+              blueTick: true,
+              goldenTick: true
+            }
+          }
+        },
+        orderBy: [{ updatedAt: 'desc' }],
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.community.count({ where })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: communities.map(c => ({
+        ...c,
+        _id: c.id,
+        owner: c.users,
+        users: undefined
+      })),
+      pagination: {
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / parseInt(limit)),
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching my communities:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -185,7 +265,7 @@ export const getCommunity = async (req, res) => {
             profilePicture: true
           }
         },
-        members: {
+        community_members: {
           take: 5, // Limit displayed members for preview
           include: {
             user: {
@@ -251,8 +331,11 @@ export const getCommunity = async (req, res) => {
       success: true,
       data: {
         ...community,
+        _id: community.id,
         owner: community.users,
         users: undefined,
+        members: (community.community_members || []).map(m => m.user),
+        community_members: undefined,
         moderators: moderators.map(m => m.user)
       }
     });
