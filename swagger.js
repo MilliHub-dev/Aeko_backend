@@ -120,7 +120,12 @@ The enhanced chat system uses **Socket.IO** for real-time features:
         { name: "Payments", description: "Payment processing and billing" },
         { name: "Subscriptions", description: "Subscription management" },
         { name: "Admin", description: "Admin endpoints and analytics" },
-
+        { name: "Wallet", description: "AEKO wallet — balance, history, NFTs, transfers" },
+        { name: "NFTs", description: "NFT listing, detail, collections, minting and transfers" },
+        { name: "Marketplace", description: "NFT marketplace — listings, buy, list, cancel" },
+        { name: "Rewards", description: "Creator rewards — claimable balance and claim transactions" },
+        { name: "Staking", description: "AEKO staking — positions, open, yield, unstake" },
+        { name: "Blockchain", description: "On-chain post anchoring and verification" },
     ],
     'x-tagGroups': [
         {
@@ -139,7 +144,10 @@ The enhanced chat system uses **Socket.IO** for real-time features:
             name: 'Realtime',
             tags: ['Chat', 'Livestream']
         },
-
+        {
+            name: 'Blockchain',
+            tags: ['Wallet', 'NFTs', 'Marketplace', 'Rewards', 'Staking', 'Blockchain']
+        },
         {
             name: 'Admin & System',
             tags: ['Admin']

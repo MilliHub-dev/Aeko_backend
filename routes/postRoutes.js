@@ -4,6 +4,12 @@ import { Prisma } from "@prisma/client";
 import upload from "../middleware/upload.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingService from "../services/blockingService.js";
+import { connection, explorer } from "../chain/client.js";
+import { toBase58Hash } from "../chain/utils.js";
+import { deriveWithSeed, getMinBalanceForRentExemption } from "../chain/utils.js";
+import { buildPreparedAnchorPostTransaction } from "@aeko-chain/sdk";
+import { PROGRAM_IDS, buildPreparedMintWithAccountSetupTransaction, estimateTokenAccountSpace } from "@aeko-chain/web3.js";
+import { uploadJSON } from "../services/ipfsService.js";
 
 const router = express.Router();
 
@@ -1184,6 +1190,288 @@ router.delete("/:id", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Delete post error:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * @swagger
+ * /api/posts/{postId}/anchor:
+ *   post:
+ *     tags: [Blockchain]
+ *     summary: Anchor a post on-chain
+ *     description: |
+ *       Hashes the post content server-side and returns an unsigned transaction.
+ *       Sign with your wallet key and submit directly to the Aeko RPC.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [creatorAddress]
+ *             properties:
+ *               creatorAddress:
+ *                 type: string
+ *                 description: Creator's on-chain wallet address
+ *                 example: "AeKo1234...creator"
+ *               contentUri:
+ *                 type: string
+ *                 description: Optional — IPFS/HTTPS URI. If omitted, backend uploads post content to IPFS automatically.
+ *                 example: "ipfs://QmXyz..."
+ *     responses:
+ *       200:
+ *         description: Unsigned anchor transaction — sign with creator key and submit to RPC
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 txBase64: { type: string }
+ *                 contentUri: { type: string, description: "IPFS URI used for anchoring" }
+ *       400:
+ *         description: Already anchored or missing fields
+ *       404:
+ *         description: Post not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.post("/:postId/anchor", authMiddleware, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { contentUri, creatorAddress } = req.body;
+
+    if (!creatorAddress) {
+      return res.status(400).json({ success: false, message: "creatorAddress is required" });
+    }
+
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+    if (post.isAnchored) return res.status(400).json({ success: false, message: "Post already anchored" });
+
+    // Upload post content to IPFS if no URI yet
+    const resolvedContentUri = contentUri ?? await uploadJSON(
+      { postId, text: post.text, media: post.media, createdAt: post.createdAt },
+      `post_${postId}.json`,
+    );
+
+    const blockhash     = await connection.getLatestBlockhash();
+    const contentText   = post.text ?? resolvedContentUri;
+    const metadataJson  = JSON.stringify({ postId, text: post.text, media: post.media });
+
+    const txBase64 = buildPreparedAnchorPostTransaction({
+      payer:           creatorAddress,
+      recentBlockhash: blockhash,
+      stateAccount:    process.env.SOCIAL_POSTS_STATE_ACCOUNT,
+      creator:         creatorAddress,
+      postId:          toBase58Hash(postId),
+      contentHash:     toBase58Hash(contentText),
+      metadataHash:    toBase58Hash(metadataJson),
+      contentUri:      resolvedContentUri,
+      postKind:        "original",
+      visibility:      "public",
+      createdAtUnix:   Math.floor(post.createdAt.getTime() / 1000),
+    });
+
+    // Store contentUri optimistically so verify can use it after the user submits the tx
+    await prisma.post.update({
+      where: { id: postId },
+      data:  { contentUri: resolvedContentUri },
+    });
+
+    res.json({ success: true, txBase64, contentUri: resolvedContentUri });
+  } catch (error) {
+    console.error("anchor post error:", error);
+    res.status(500).json({ success: false, message: "Failed to anchor post" });
+  }
+});
+
+/**
+ * @swagger
+ * /api/posts/{postId}/verify:
+ *   get:
+ *     tags: [Blockchain]
+ *     summary: Verify a post's on-chain anchor
+ *     description: Checks the DB cache first, then optionally confirms live on the Aeko explorer.
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Verification result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 verified: { type: boolean }
+ *                 reason:
+ *                   type: string
+ *                   description: Present only when verified is false
+ *                   example: "not anchored"
+ *                 postId: { type: string }
+ *                 contentUri: { type: string }
+ *                 creator: { type: string }
+ *                 createdAtUnix: { type: integer }
+ *                 onChainSignature: { type: string }
+ *       404:
+ *         description: Post not found
+ */
+/**
+ * @swagger
+ * /api/posts/{postId}/mint-as-nft:
+ *   post:
+ *     tags: [Blockchain]
+ *     summary: Prepare an unsigned transaction to mint a post as an NFT
+ *     description: |
+ *       Converts a social post into a Token-721 NFT on the Aeko chain.
+ *
+ *       **Flow:**
+ *       1. `POST /api/posts/:postId/mint-as-nft` → get `txBase64`, `tokenAccount`, `tokenAccountSecretKey`
+ *       2. App signs with **both** the user keypair and the `tokenAccountSecretKey`
+ *       3. App submits signed tx directly to the Aeko RPC
+ *
+ *       The post's content is uploaded to IPFS automatically if it hasn't been anchored yet.
+ *       The first media asset URL (Cloudinary) is used as `imageUri` — `https://` is valid on-chain.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [collectionAccount, creatorAddress]
+ *             properties:
+ *               collectionAccount:
+ *                 type: string
+ *                 description: Collection account to mint the NFT into
+ *                 example: "AeKoCollect..."
+ *               creatorAddress:
+ *                 type: string
+ *                 description: Creator's wallet address
+ *                 example: "AeKo1234...creator"
+ *               royaltyBps:
+ *                 type: integer
+ *                 description: Royalty in basis points (e.g. 500 = 5%). Defaults to 0.
+ *                 example: 500
+ *     responses:
+ *       200:
+ *         description: Unsigned mint transaction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 txBase64: { type: string, description: "Sign with user key + tokenAccountSecretKey" }
+ *                 tokenAccount: { type: string, description: "New token account address (the NFT's on-chain identity)" }
+ *                 tokenAccountSecretKey: { type: array, items: { type: integer }, description: "Co-sign bytes for the token account" }
+ *                 contentUri: { type: string, description: "IPFS URI used as NFT metadata" }
+ *       400:
+ *         description: Missing required fields
+ *       404:
+ *         description: Post not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.post("/:postId/mint-as-nft", authMiddleware, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { collectionAccount, creatorAddress, royaltyBps } = req.body;
+
+    if (!collectionAccount || !creatorAddress) {
+      return res.status(400).json({ success: false, message: "collectionAccount and creatorAddress are required" });
+    }
+
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    // Use existing IPFS contentUri from anchoring, or upload fresh metadata JSON
+    const contentUri = post.contentUri ?? await uploadJSON(
+      { postId, text: post.text, media: post.media, createdAt: post.createdAt },
+      `post_${postId}.json`,
+    );
+
+    // Use first media asset as imageUri — https:// Cloudinary URLs are valid on-chain
+    const mediaUrls = Array.isArray(post.media) ? post.media : [];
+    const imageUri  = mediaUrls[0] ?? contentUri;
+    const nftName   = (post.text ?? "").slice(0, 32) || `Post ${postId.slice(0, 8)}`;
+    const metadata  = { name: nftName, uri: contentUri, imageUri };
+
+    const tokenId      = Date.now();
+    const tokenSeed    = `nft:${tokenId}`.slice(0, 32);
+    const tokenAccount = deriveWithSeed(creatorAddress, tokenSeed, PROGRAM_IDS.TOKEN_721);
+    const space        = estimateTokenAccountSpace({ metadata });
+    const lamports     = await getMinBalanceForRentExemption(connection, space);
+    const blockhash    = await connection.getLatestBlockhash();
+
+    const txBase64 = buildPreparedMintWithAccountSetupTransaction({
+      payer:           creatorAddress,
+      recentBlockhash: blockhash,
+      tokenAddress:    tokenAccount,
+      base:            creatorAddress,
+      tokenSeed,
+      lamports,
+      space,
+      collection:      collectionAccount,
+      authority:       creatorAddress,
+      owner:           creatorAddress,
+      tokenId,
+      royaltyBps:      royaltyBps ?? 0,
+      metadata,
+    });
+
+    res.json({ success: true, txBase64, tokenAccount, contentUri });
+  } catch (error) {
+    console.error("mint-as-nft error:", error);
+    res.status(500).json({ success: false, message: "Failed to prepare mint-as-NFT transaction" });
+  }
+});
+
+router.get("/:postId/verify", async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    if (!post.isAnchored) {
+      return res.json({ success: true, verified: false, reason: "not anchored" });
+    }
+
+    const onChain = await explorer.getPost(postId).catch(() => null);
+    if (!onChain) {
+      return res.json({ success: true, verified: false, reason: "not found on chain" });
+    }
+
+    res.json({
+      success: true,
+      verified: true,
+      postId,
+      contentUri: onChain.contentUri,
+      creator: onChain.creator,
+      createdAtUnix: onChain.createdAtUnix,
+      onChainSignature: post.onChainSignature,
+    });
+  } catch (error) {
+    console.error("verify post error:", error);
+    res.status(500).json({ success: false, message: "Failed to verify post" });
   }
 });
 

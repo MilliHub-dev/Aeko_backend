@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(node server.js)",
+      "Bash(node --input-type=module --eval 'import \"./server.js\"')",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s http://localhost:3000/api-docs/swagger.json)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); try{JSON.parse\\(d\\);console.log\\('Swagger OK'\\)}catch\\(e\\){console.log\\('Swagger error'\\)}\")",
+      "Bash(pkill -f \"node --input-type\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(lsof -ti:5000)",
+      "Bash(ps -p 83722 -o pid,command)",
+      "Bash(curl -s \"https://api.aeko.online/nfts?limit=3\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"https://api.aeko.online/stakes?limit=3\")",
+      "Bash(curl -s \"https://api.aeko.online/account/4GdFxTJDN5cKnoi5rb3QCcRaimgCQvw5UWw91WxqnhuL\")",
+      "Bash(curl -s \"https://api.aeko.online/collections?limit=2\")",
+      "Bash(curl -s \"https://api.aeko.online/rewards/4GdFxTJDN5cKnoi5rb3QCcRaimgCQvw5UWw91WxqnhuL\")",
+      "Bash(curl -s \"https://api.aeko.online/creators/4GdFxTJDN5cKnoi5rb3QCcRaimgCQvw5UWw91WxqnhuL\")",
+      "Bash(curl -sv \"https://api.aeko.online/creators/4GdFxTJDN5cKnoi5rb3QCcRaimgCQvw5UWw91WxqnhuL\")"
+    ]
+  }
+}

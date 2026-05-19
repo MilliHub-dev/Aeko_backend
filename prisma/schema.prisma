@@ -361,6 +361,10 @@ model Post {
   status String @default("active")
   transferHistory Json?
   media Json?
+  contentUri String?
+  isAnchored Boolean @default(false)
+  onChainSignature String?
+  nftTokenId String?
   bookmarks Bookmark[]
   comments Comment[]
   communities Community? @relation(fields: [communityId], references: [id], onDelete: SetNull)
@@ -510,6 +514,7 @@ model User {
   lastLoginAt DateTime?
   oauthId String?
   oauthProvider String?
+  walletAddress String? @unique
   blockedUsers Json?
   communities Json?
   followRequests Json?

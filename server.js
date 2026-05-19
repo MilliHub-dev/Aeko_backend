@@ -50,6 +50,11 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import supportRoutes from "./routes/supportRoutes.js";
 import waitlistRoutes from "./routes/waitlistRoutes.js";
+import walletRoutes from "./routes/walletRoutes.js";
+import nftRoutes from "./routes/nftRoutes.js";
+import marketplaceRoutes from "./routes/marketplaceRoutes.js";
+import rewardsRoutes from "./routes/rewardsRoutes.js";
+import stakingRoutes from "./routes/stakingRoutes.js";
 
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
@@ -59,6 +64,7 @@ import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
 import setupVideoCallSocket from './sockets/videoCallSocket.js';
 // Import scheduled jobs
 import "./jobs/expireSubscriptions.js";
+import "./jobs/settleEpoch.js";
 
 
 dotenv.config();
@@ -181,6 +187,11 @@ app.use("/api/notifications", apiRateLimit, notificationRoutes);
 app.use("/api/reports", apiRateLimit, reportRoutes);
 app.use('/api/support', apiRateLimit, supportRoutes);
 app.use('/api/waitlist', apiRateLimit, waitlistRoutes);
+app.use('/api/wallet', apiRateLimit, walletRoutes);
+app.use('/api/nfts', apiRateLimit, nftRoutes);
+app.use('/api/marketplace', apiRateLimit, marketplaceRoutes);
+app.use('/api/rewards', apiRateLimit, rewardsRoutes);
+app.use('/api/staking', apiRateLimit, stakingRoutes);
 
 // Admin API Routes with 2FA protection for sensitive operations
 // Expose admin REST endpoints such as /api/admin/setup/first-admin
