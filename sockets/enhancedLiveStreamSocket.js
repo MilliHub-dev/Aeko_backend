@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { v4 as uuidV4 } from "uuid";
 import { prisma } from "../config/db.js";
+import { getGiftById, HOST_COIN_SHARE } from "../config/giftCatalog.js";
 
 class EnhancedLiveStreamSocket {
   constructor(io) {
@@ -911,8 +912,203 @@ class EnhancedLiveStreamSocket {
     }
   }
 
-  handleStreamSubscribe(socket, data) {}
-  handleStreamGift(socket, data) {}
+  async handleStreamSubscribe(socket, data) {
+    try {
+      const { streamId } = data;
+      const liveStream = await prisma.liveStream.findUnique({ where: { id: streamId } });
+      if (!liveStream) return socket.emit('stream_error', { error: 'Stream not found' });
+
+      // Record subscription engagement in stream metadata
+      const metadata = liveStream.metadata || {};
+      const subscribers = metadata.subscribers || [];
+      if (!subscribers.includes(socket.userId)) subscribers.push(socket.userId);
+      await prisma.liveStream.update({
+        where: { id: streamId },
+        data: { metadata: { ...metadata, subscribers } }
+      });
+
+      // Notify host
+      const hostSocket = this.userSockets.get(liveStream.hostId);
+      if (hostSocket) {
+        hostSocket.emit('new_subscriber', {
+          streamId,
+          subscriber: { userId: socket.userId, username: socket.user.username, profilePicture: socket.user.profilePicture }
+        });
+      }
+
+      this.io.to(streamId).emit('stream_subscriber_alert', {
+        streamId,
+        username: socket.user.username,
+        profilePicture: socket.user.profilePicture,
+        timestamp: new Date()
+      });
+
+      socket.emit('subscribed_to_stream', { streamId });
+    } catch (error) {
+      console.error('Stream subscribe error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
+  async handleStreamGift(socket, data) {
+    try {
+      const { streamId, giftId, quantity = 1, message } = data;
+
+      if (!streamId || !giftId) {
+        return socket.emit('stream_error', { error: 'streamId and giftId are required' });
+      }
+
+      const gift = getGiftById(giftId);
+      if (!gift) return socket.emit('stream_error', { error: 'Invalid gift' });
+
+      const qty = Math.max(1, Math.min(parseInt(quantity) || 1, 100));
+      const totalCoins = gift.coinCost * qty;
+
+      // Fetch sender balance + stream atomically via transaction
+      const [sender, liveStream] = await Promise.all([
+        prisma.user.findUnique({ where: { id: socket.userId } }),
+        prisma.liveStream.findUnique({ where: { id: streamId } })
+      ]);
+
+      if (!liveStream || liveStream.status !== 'live') {
+        return socket.emit('stream_error', { error: 'Stream is not live' });
+      }
+      if (!sender || sender.coinBalance < totalCoins) {
+        return socket.emit('stream_error', { error: 'Insufficient coin balance' });
+      }
+
+      const hostEarnings = Math.floor(totalCoins * HOST_COIN_SHARE);
+      const newSenderBalance = sender.coinBalance - totalCoins;
+
+      // Persist gift, deduct sender coins, credit host coins in one transaction
+      await prisma.$transaction(async (tx) => {
+        // Deduct from sender
+        await tx.user.update({
+          where: { id: socket.userId },
+          data: { coinBalance: newSenderBalance }
+        });
+
+        // Credit host
+        await tx.user.update({
+          where: { id: liveStream.hostId },
+          data: { coinBalance: { increment: hostEarnings } }
+        });
+
+        // Record gift
+        await tx.liveStreamGift.create({
+          data: {
+            id: uuidV4(),
+            streamId,
+            senderId: socket.userId,
+            hostId: liveStream.hostId,
+            giftId: gift.id,
+            giftName: gift.name,
+            coinCost: gift.coinCost,
+            quantity: qty,
+            totalCoins,
+            message: message || null
+          }
+        });
+
+        // Log sender coin transaction
+        await tx.coinTransaction.create({
+          data: {
+            id: uuidV4(),
+            userId: socket.userId,
+            type: 'gift_sent',
+            amount: -totalCoins,
+            balanceAfter: newSenderBalance,
+            description: `Sent ${qty}x ${gift.name} on stream`,
+            metadata: { streamId, giftId, quantity: qty }
+          }
+        });
+
+        // Log host earning transaction
+        const host = await tx.user.findUnique({ where: { id: liveStream.hostId }, select: { coinBalance: true } });
+        await tx.coinTransaction.create({
+          data: {
+            id: uuidV4(),
+            userId: liveStream.hostId,
+            type: 'gift_received',
+            amount: hostEarnings,
+            balanceAfter: host.coinBalance,
+            description: `Received ${qty}x ${gift.name} gift`,
+            metadata: { streamId, giftId, senderId: socket.userId, quantity: qty }
+          }
+        });
+
+        // Update stream monetization totals
+        const mon = liveStream.monetization || { totalCoinsReceived: 0, totalGifts: 0 };
+        await tx.liveStream.update({
+          where: { id: streamId },
+          data: {
+            monetization: {
+              ...mon,
+              totalCoinsReceived: (mon.totalCoinsReceived || 0) + totalCoins,
+              totalGifts: (mon.totalGifts || 0) + qty
+            }
+          }
+        });
+      });
+
+      const giftPayload = {
+        streamId,
+        gift: { ...gift, quantity: qty, totalCoins },
+        sender: { userId: socket.userId, username: socket.user.username, profilePicture: socket.user.profilePicture },
+        message: message || null,
+        timestamp: new Date()
+      };
+
+      // Broadcast gift animation to all viewers
+      this.io.to(streamId).emit('stream_gift_received', giftPayload);
+
+      // Alert host separately (in case they want a special overlay)
+      const hostSocket = this.userSockets.get(liveStream.hostId);
+      if (hostSocket) hostSocket.emit('gift_alert', { ...giftPayload, coinsEarned: hostEarnings });
+
+      // Confirm to sender with updated balance
+      socket.emit('gift_sent', { streamId, giftId, quantity: qty, totalCoins, newBalance: newSenderBalance });
+
+      // Broadcast updated leaderboard top-5 to stream room
+      await this._broadcastLeaderboard(streamId);
+
+      console.log(`🎁 Gift: ${socket.user.username} sent ${qty}x ${gift.name} (${totalCoins} coins) to ${liveStream.title}`);
+    } catch (error) {
+      console.error('Stream gift error:', error);
+      socket.emit('stream_error', { error: error.message });
+    }
+  }
+
+  async _broadcastLeaderboard(streamId) {
+    try {
+      const top = await prisma.liveStreamGift.groupBy({
+        by: ['senderId'],
+        where: { streamId },
+        _sum: { totalCoins: true },
+        orderBy: { _sum: { totalCoins: 'desc' } },
+        take: 5
+      });
+
+      const senderIds = top.map((r) => r.senderId);
+      const users = await prisma.user.findMany({
+        where: { id: { in: senderIds } },
+        select: { id: true, username: true, profilePicture: true }
+      });
+      const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
+
+      const leaderboard = top.map((r, i) => ({
+        rank: i + 1,
+        userId: r.senderId,
+        username: userMap[r.senderId]?.username || 'Unknown',
+        profilePicture: userMap[r.senderId]?.profilePicture || null,
+        totalCoins: r._sum.totalCoins
+      }));
+
+      this.io.to(streamId).emit('leaderboard_update', { streamId, leaderboard });
+    } catch (err) {
+      console.error('Leaderboard broadcast error:', err);
+    }
+  }
 
   // === MODERATION HANDLERS ===
   async handleBanUser(socket, data) {

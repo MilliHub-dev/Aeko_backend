@@ -19,7 +19,15 @@
       "Bash(curl -s \"https://api.aeko.online/collections?limit=2\")",
       "Bash(curl -s \"https://api.aeko.online/rewards/4GdFxTJDN5cKnoi5rb3QCcRaimgCQvw5UWw91WxqnhuL\")",
       "Bash(curl -s \"https://api.aeko.online/creators/4GdFxTJDN5cKnoi5rb3QCcRaimgCQvw5UWw91WxqnhuL\")",
-      "Bash(curl -sv \"https://api.aeko.online/creators/4GdFxTJDN5cKnoi5rb3QCcRaimgCQvw5UWw91WxqnhuL\")"
+      "Bash(curl -sv \"https://api.aeko.online/creators/4GdFxTJDN5cKnoi5rb3QCcRaimgCQvw5UWw91WxqnhuL\")",
+      "Bash(tmux new-session *)",
+      "Bash(tmux send-keys *)",
+      "Bash(curl -s http://localhost:5000/api/livestream/gifts/catalog)",
+      "Bash(curl -s http://localhost:5000/api/coins/packages)",
+      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE3ZWNhYjk3LTg5MGEtNDE4ZC1iYmI0LWEzMDM3NTI5N2ViMyIsImlhdCI6MTc4MDQ1NTc2MSwiZXhwIjoxNzgxMDYwNTYxfQ.2moXH6Y0p0-OY9eUziGBHj90kAc4VqkG2-Oi92HYgSI' http://localhost:5000/api/coins/balance)",
+      "Bash(curl -s -X POST http://localhost:5000/api/livestream/fake-stream-id/gift -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE3ZWNhYjk3LTg5MGEtNDE4ZC1iYmI0LWEzMDM3NTI5N2ViMyIsImlhdCI6MTc4MDQ1NTc2MSwiZXhwIjoxNzgxMDYwNTYxfQ.2moXH6Y0p0-OY9eUziGBHj90kAc4VqkG2-Oi92HYgSI' -H 'Content-Type: application/json' -d '{\"giftId\":\"rose\",\"quantity\":1}')",
+      "Bash(curl -s http://localhost:5000/health)",
+      "Bash(curl -s -X POST http://localhost:5000/api/coins/purchase -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE3ZWNhYjk3LTg5MGEtNDE4ZC1iYmI0LWEzMDM3NTI5N2ViMyIsImlhdCI6MTc4MDQ1NTc2MSwiZXhwIjoxNzgxMDYwNTYxfQ.2moXH6Y0p0-OY9eUziGBHj90kAc4VqkG2-Oi92HYgSI' -H 'Content-Type: application/json' -d '{\"packageId\":\"coins_999\",\"paymentMethod\":\"paystack\"}')"
     ]
   }
 }

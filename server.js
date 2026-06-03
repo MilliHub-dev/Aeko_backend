@@ -55,6 +55,7 @@ import nftRoutes from "./routes/nftRoutes.js";
 import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import rewardsRoutes from "./routes/rewardsRoutes.js";
 import stakingRoutes from "./routes/stakingRoutes.js";
+import coinRoutes from "./routes/coinRoutes.js";
 
 import { admin, adminRouter } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
@@ -192,6 +193,7 @@ app.use('/api/nfts', apiRateLimit, nftRoutes);
 app.use('/api/marketplace', apiRateLimit, marketplaceRoutes);
 app.use('/api/rewards', apiRateLimit, rewardsRoutes);
 app.use('/api/staking', apiRateLimit, stakingRoutes);
+app.use('/api/coins', apiRateLimit, coinRoutes);
 
 // Admin API Routes with 2FA protection for sensitive operations
 // Expose admin REST endpoints such as /api/admin/setup/first-admin

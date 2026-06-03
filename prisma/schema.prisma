@@ -302,6 +302,7 @@ model LiveStream {
   tags String[]
   chats Chat? @relation(fields: [chatId], references: [id])
   user User @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  gifts LiveStreamGift[]
 }
 
 model Message {
@@ -554,6 +555,9 @@ model User {
   location String?
   warningCount Int @default(0)
   notInterested Json?
+  coinBalance Float @default(0)
+  coinTransactions CoinTransaction[]
+  sentGifts LiveStreamGift[] @relation("sentGifts")
 }
 
 model Report {
@@ -608,4 +612,36 @@ model WaitlistEntry {
   name String
   email String @unique
   createdAt DateTime @default(now())
+}
+
+model CoinTransaction {
+  @@map("coin_transactions")
+  id String @id @default(uuid())
+  userId String
+  type String // purchase | gift_sent | gift_received | refund | bonus
+  amount Float // positive = credit, negative = debit
+  balanceAfter Float
+  description String?
+  metadata Json? // gift details, payment reference, etc.
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LiveStreamGift {
+  @@map("livestream_gifts")
+  id String @id @default(uuid())
+  streamId String
+  senderId String
+  hostId String
+  giftId String // catalog item id (e.g. "rose", "crown")
+  giftName String
+  coinCost Int
+  quantity Int @default(1)
+  totalCoins Int // coinCost * quantity
+  message String?
+  createdAt DateTime @default(now())
+
+  stream LiveStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  sender User @relation("sentGifts", fields: [senderId], references: [id], onDelete: Cascade)
 }

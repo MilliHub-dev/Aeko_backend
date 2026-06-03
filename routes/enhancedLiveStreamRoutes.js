@@ -7,6 +7,7 @@ import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { uploadImage } from '../middleware/upload.js';
+import { GIFT_CATALOG, getGiftById, HOST_COIN_SHARE } from "../config/giftCatalog.js";
 
 const router = express.Router();
 
@@ -725,6 +726,71 @@ router.get('/stats', async (req, res) => {
       message: 'Failed to get platform statistics',
       error: error.message
     });
+  }
+});
+
+// Static-path routes must appear BEFORE /:streamId to avoid wildcard capture
+
+/**
+ * @route   GET /api/livestream/gifts/catalog
+ * @desc    Get available virtual gift catalog
+ * @access  Public
+ */
+router.get('/gifts/catalog', (req, res) => {
+  res.json({ success: true, data: GIFT_CATALOG });
+});
+
+/**
+ * @route   GET /api/livestream/earnings
+ * @desc    Host's total gift earnings across all their streams
+ * @access  Private
+ */
+router.get('/earnings', authMiddleware, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [streams, totalStreams] = await Promise.all([
+      prisma.liveStream.findMany({
+        where: { hostId: req.user.id },
+        orderBy: { createdAt: 'desc' },
+        skip, take: parseInt(limit),
+        select: {
+          id: true, title: true, status: true, startedAt: true, endedAt: true,
+          monetization: true,
+          _count: { select: { gifts: true } }
+        }
+      }),
+      prisma.liveStream.count({ where: { hostId: req.user.id } })
+    ]);
+
+    const totalCoinsEarned = await prisma.liveStreamGift.aggregate({
+      where: { hostId: req.user.id },
+      _sum: { totalCoins: true }
+    });
+
+    const totalGiftCount = await prisma.liveStreamGift.count({ where: { hostId: req.user.id } });
+    const hostUser = await prisma.user.findUnique({ where: { id: req.user.id }, select: { coinBalance: true } });
+
+    res.json({
+      success: true,
+      data: {
+        coinBalance: hostUser.coinBalance,
+        totalCoinsEarned: totalCoinsEarned._sum.totalCoins || 0,
+        totalGiftsReceived: totalGiftCount,
+        streams: streams.map((s) => ({
+          ...s,
+          totalCoinsReceived: s.monetization?.totalCoinsReceived || 0,
+          totalGifts: s._count.gifts
+        })),
+        total: totalStreams,
+        page: parseInt(page),
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Earnings error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch earnings', error: error.message });
   }
 });
 
@@ -1543,11 +1609,167 @@ router.delete('/:streamId/moderators/:userId', authMiddleware, async (req, res) 
   }
 });
 
-// === MONETIZATION ENDPOINTS ===
+// === MONETIZATION & GIFT ENDPOINTS ===
+
+/**
+ * @route   POST /api/livestream/:streamId/gift
+ * @desc    Send a virtual gift to a stream (deducts coins from sender)
+ * @access  Private
+ */
+router.post('/:streamId/gift', authMiddleware, async (req, res) => {
+  try {
+    const { streamId } = req.params;
+    const { giftId, quantity = 1, message } = req.body;
+
+    if (!giftId) return res.status(400).json({ success: false, message: 'giftId is required' });
+
+    const gift = getGiftById(giftId);
+    if (!gift) return res.status(400).json({ success: false, message: 'Invalid gift' });
+
+    const qty = Math.max(1, Math.min(parseInt(quantity) || 1, 100));
+    const totalCoins = gift.coinCost * qty;
+
+    const [sender, liveStream] = await Promise.all([
+      prisma.user.findUnique({ where: { id: req.user.id } }),
+      prisma.liveStream.findUnique({ where: { id: streamId } })
+    ]);
+
+    if (!liveStream) return res.status(404).json({ success: false, message: 'Stream not found' });
+    if (!sender || sender.coinBalance < totalCoins) {
+      return res.status(400).json({ success: false, message: 'Insufficient coin balance' });
+    }
+
+    const hostEarnings = Math.floor(totalCoins * HOST_COIN_SHARE);
+    const newBalance = sender.coinBalance - totalCoins;
+
+    const giftRecord = await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: req.user.id }, data: { coinBalance: newBalance } });
+      await tx.user.update({ where: { id: liveStream.hostId }, data: { coinBalance: { increment: hostEarnings } } });
+
+      const created = await tx.liveStreamGift.create({
+        data: {
+          id: uuidV4(), streamId, senderId: req.user.id, hostId: liveStream.hostId,
+          giftId: gift.id, giftName: gift.name, coinCost: gift.coinCost,
+          quantity: qty, totalCoins, message: message || null
+        }
+      });
+
+      await tx.coinTransaction.create({
+        data: {
+          id: uuidV4(), userId: req.user.id, type: 'gift_sent',
+          amount: -totalCoins, balanceAfter: newBalance,
+          description: `Sent ${qty}x ${gift.name} on stream`,
+          metadata: { streamId, giftId, quantity: qty }
+        }
+      });
+
+      const host = await tx.user.findUnique({ where: { id: liveStream.hostId }, select: { coinBalance: true } });
+      await tx.coinTransaction.create({
+        data: {
+          id: uuidV4(), userId: liveStream.hostId, type: 'gift_received',
+          amount: hostEarnings, balanceAfter: host.coinBalance,
+          description: `Received ${qty}x ${gift.name} gift`,
+          metadata: { streamId, giftId, senderId: req.user.id, quantity: qty }
+        }
+      });
+
+      const mon = liveStream.monetization || { totalCoinsReceived: 0, totalGifts: 0 };
+      await tx.liveStream.update({
+        where: { id: streamId },
+        data: {
+          monetization: {
+            ...mon,
+            totalCoinsReceived: (mon.totalCoinsReceived || 0) + totalCoins,
+            totalGifts: (mon.totalGifts || 0) + qty
+          }
+        }
+      });
+
+      return created;
+    });
+
+    res.json({
+      success: true,
+      message: 'Gift sent successfully',
+      data: { gift: giftRecord, newBalance, coinsSpent: totalCoins }
+    });
+  } catch (error) {
+    console.error('Send gift error:', error);
+    res.status(500).json({ success: false, message: 'Failed to send gift', error: error.message });
+  }
+});
+
+/**
+ * @route   GET /api/livestream/:streamId/gifts
+ * @desc    Get gift history for a stream
+ * @access  Private
+ */
+router.get('/:streamId/gifts', authMiddleware, async (req, res) => {
+  try {
+    const { streamId } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [gifts, total] = await Promise.all([
+      prisma.liveStreamGift.findMany({
+        where: { streamId },
+        orderBy: { createdAt: 'desc' },
+        skip, take: parseInt(limit),
+        include: { sender: { select: { id: true, username: true, profilePicture: true } } }
+      }),
+      prisma.liveStreamGift.count({ where: { streamId } })
+    ]);
+
+    res.json({ success: true, data: { gifts, total, page: parseInt(page), limit: parseInt(limit) } });
+  } catch (error) {
+    console.error('Get gifts error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch gifts', error: error.message });
+  }
+});
+
+/**
+ * @route   GET /api/livestream/:streamId/leaderboard
+ * @desc    Top gifters leaderboard for a stream
+ * @access  Public
+ */
+router.get('/:streamId/leaderboard', async (req, res) => {
+  try {
+    const { streamId } = req.params;
+    const { limit = 10 } = req.query;
+
+    const top = await prisma.liveStreamGift.groupBy({
+      by: ['senderId'],
+      where: { streamId },
+      _sum: { totalCoins: true },
+      orderBy: { _sum: { totalCoins: 'desc' } },
+      take: parseInt(limit)
+    });
+
+    const senderIds = top.map((r) => r.senderId);
+    const users = await prisma.user.findMany({
+      where: { id: { in: senderIds } },
+      select: { id: true, username: true, profilePicture: true }
+    });
+    const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
+
+    const leaderboard = top.map((r, i) => ({
+      rank: i + 1,
+      userId: r.senderId,
+      username: userMap[r.senderId]?.username || 'Unknown',
+      profilePicture: userMap[r.senderId]?.profilePicture || null,
+      totalCoins: r._sum.totalCoins
+    }));
+
+    res.json({ success: true, data: { streamId, leaderboard } });
+  } catch (error) {
+    console.error('Leaderboard error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch leaderboard', error: error.message });
+  }
+});
 
 /**
  * @route   POST /api/livestream/:streamId/donate
- * @desc    Process donation to stream
+ * @desc    Process fiat donation to stream
  * @access  Private
  */
 router.post('/:streamId/donate', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
@@ -1556,75 +1778,32 @@ router.post('/:streamId/donate', authMiddleware, twoFactorMiddleware.requireTwoF
     const { amount, message, currency = 'USD' } = req.body;
 
     if (!amount || amount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Valid donation amount is required'
-      });
+      return res.status(400).json({ success: false, message: 'Valid donation amount is required' });
     }
 
-    const liveStream = await prisma.liveStream.findUnique({
-        where: { id: streamId }
-    });
+    const liveStream = await prisma.liveStream.findUnique({ where: { id: streamId } });
+    if (!liveStream) return res.status(404).json({ success: false, message: 'Stream not found' });
 
-    if (!liveStream) {
-      return res.status(404).json({
-        success: false,
-        message: 'Stream not found'
-      });
-    }
-
-    // Check features.donationsEnabled
     const features = liveStream.features || {};
     if (!features.donationsEnabled) {
-      return res.status(400).json({
-        success: false,
-        message: 'Donations are disabled for this stream'
-      });
+      return res.status(400).json({ success: false, message: 'Donations are disabled for this stream' });
     }
 
-    // Here you would integrate with your payment processor
-    // For now, we'll simulate a successful payment
-
-    const donation = {
-      userId: req.user.id,
-      amount: parseFloat(amount),
-      message: message || '',
-      timestamp: new Date()
-    };
-
+    const donation = { userId: req.user.id, amount: parseFloat(amount), message: message || '', timestamp: new Date() };
     const monetization = liveStream.monetization || { donations: [], totalEarnings: 0 };
-    const donations = monetization.donations || [];
-    donations.push(donation);
-    const totalEarnings = (monetization.totalEarnings || 0) + parseFloat(amount);
+    monetization.donations = [...(monetization.donations || []), donation];
+    monetization.totalEarnings = (monetization.totalEarnings || 0) + parseFloat(amount);
 
-    await prisma.liveStream.update({
-        where: { id: streamId },
-        data: {
-            monetization: {
-                ...monetization,
-                donations,
-                totalEarnings
-            }
-        }
-    });
+    await prisma.liveStream.update({ where: { id: streamId }, data: { monetization } });
 
     res.json({
       success: true,
       message: 'Donation processed successfully',
-      data: {
-        donation: {
-          ...donation,
-          donorUsername: req.user.username
-        }
-      }
+      data: { donation: { ...donation, donorUsername: req.user.username } }
     });
   } catch (error) {
     console.error('Process donation error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process donation',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to process donation', error: error.message });
   }
 });
 
