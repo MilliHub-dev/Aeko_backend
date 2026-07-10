@@ -109,7 +109,7 @@ setupVideoCallSocket(io);
 app.use(cookieParser());
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, /\.railway\.app$/]
+    ? [process.env.FRONTEND_URL, /\.railway\.app$/, /\.coolify\.io$/, /\.coolify\.[a-z]+$/]
     : ['http://localhost:3000', 'http://localhost:5000', 'http://localhost:9876'],
   credentials: true
 }));
