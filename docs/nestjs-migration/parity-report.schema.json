@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aeko.example/schemas/nestjs-parity-report.json",
+  "title": "Aeko dual-runtime parity report",
+  "type": "object",
+  "required": ["caseId", "matched", "legacy", "nest", "differences"],
+  "properties": {
+    "caseId": { "type": "string", "minLength": 1 },
+    "matched": { "type": "boolean" },
+    "legacy": { "type": "object" },
+    "nest": { "type": "object" },
+    "differences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "intentional"],
+        "properties": {
+          "path": { "type": "string" },
+          "legacy": true,
+          "nest": true,
+          "intentional": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
