@@ -31,7 +31,7 @@ const checkAdmin = (req, res, next) => {
  *             required: [entityId, entityType, reason]
  *             properties:
  *               entityId: { type: string }
- *               entityType: { type: string, enum: [USER, POST, COMMENT] }
+ *               entityType: { type: string, enum: [USER, POST, COMMENT, STATUS] }
  *               reason: { type: string }
  *               reportedId: { type: string, description: "ID of the user being reported" }
  *     responses:
@@ -43,7 +43,9 @@ router.post('/', authMiddleware, async (req, res) => {
     const { entityId, entityType, reason, reportedId } = req.body;
     const reporterId = req.user.id;
 
-    if (!['USER', 'POST', 'COMMENT'].includes(entityType)) {
+    // STATUS covers stories. Without it the mobile story report was rejected with
+    // a 400, which is why story reporting had to be wired to something else.
+    if (!['USER', 'POST', 'COMMENT', 'STATUS'].includes(entityType)) {
       return res.status(400).json({ error: 'Invalid entity type' });
     }
 

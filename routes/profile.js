@@ -94,6 +94,7 @@ const router = express.Router();
  *                 type: string
  *               newPassword:
  *                 type: string
+ *                 minLength: 8
  *     responses:
  *       200:
  *         description: Password changed successfully
@@ -390,6 +391,18 @@ router.put('/change-password', authMiddleware, twoFactorMiddleware.requireTwoFac
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { currentPassword, newPassword } = req.body;
+
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      return res.status(400).json({
+        error: 'Current password and new password are required',
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        error: 'Password must be at least 8 characters long',
+      });
+    }
     
     const user = await prisma.user.findUnique({
       where: { id: userId }
@@ -404,10 +417,22 @@ router.put('/change-password', authMiddleware, twoFactorMiddleware.requireTwoFac
     if (!isMatch) return res.status(400).json({ error: 'Incorrect password' });
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const passwordChangedAt = new Date(
+      Math.floor(Date.now() / 1000) * 1000,
+    );
     
     await prisma.user.update({
       where: { id: userId },
-      data: { password: hashedPassword }
+      data: {
+        password: hashedPassword,
+        passwordChangedAt,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        passwordResetOtpHash: null,
+        passwordResetOtpExpiresAt: null,
+        passwordResetOtpAttempts: 0,
+        authTokenVersion: { increment: 1 },
+      }
     });
 
     res.json({ success: true, message: 'Password changed successfully' });

@@ -2,6 +2,8 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { prisma } from '../config/db.js';
+import { hasCurrentAuthTokenVersion } from '../utils/authTokenUtils.js';
+import { getJwtSecret } from '../utils/authConfig.js';
 
 const router = express.Router();
 
@@ -36,9 +38,10 @@ router.post('/login', async (req, res) => {
       { 
         userId: user.id, 
         email: user.email,
-        isAdmin: true 
+        isAdmin: true,
+        authTokenVersion: user.authTokenVersion ?? 0,
       },
-      process.env.JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '24h' }
     );
 
@@ -67,12 +70,19 @@ router.get('/verify', async (req, res) => {
       return res.status(401).json({ success: false, message: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
+    if (decoded.purpose === 'password-reset') {
+      return res.status(401).json({ success: false, message: 'Invalid admin token' });
+    }
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId }
     });
     
     if (!user || !user.isAdmin) {
+      return res.status(401).json({ success: false, message: 'Invalid admin token' });
+    }
+
+    if (!hasCurrentAuthTokenVersion(decoded, user)) {
       return res.status(401).json({ success: false, message: 'Invalid admin token' });
     }
 

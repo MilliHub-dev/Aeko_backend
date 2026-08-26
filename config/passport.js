@@ -1,10 +1,70 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { OAuth2Client } from 'google-auth-library';
+import bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { prisma } from './db.js';
 
-// Initialize Google OAuth2 client for ID token verification (only if credentials exist)
-const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
+const googleClient = new OAuth2Client();
+
+const splitAudienceList = (value) =>
+  value
+    ? value
+        .split(',')
+        .map((audience) => audience.trim())
+        .filter(Boolean)
+    : [];
+
+/**
+ * Return the Google OAuth client IDs whose ID tokens this API accepts.
+ *
+ * GOOGLE_ID_TOKEN_AUDIENCES is an explicit allow-list for deployments that
+ * have separate web, iOS, and Android OAuth clients. Existing deployments
+ * continue to work with GOOGLE_CLIENT_ID alone.
+ */
+const getGoogleIdTokenAudiences = () => {
+  const configuredAudiences = splitAudienceList(
+    process.env.GOOGLE_ID_TOKEN_AUDIENCES,
+  );
+
+  if (configuredAudiences.length > 0) {
+    return [...new Set(configuredAudiences)];
+  }
+
+  return [
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_WEB_CLIENT_ID,
+    process.env.GOOGLE_IOS_CLIENT_ID,
+    process.env.GOOGLE_ANDROID_CLIENT_ID,
+  ]
+    .map((audience) => audience?.trim())
+    .filter(Boolean)
+    .filter((audience, index, audiences) => audiences.indexOf(audience) === index);
+};
+
+const isGoogleIdTokenVerificationConfigured = () =>
+  getGoogleIdTokenAudiences().length > 0;
+
+const hasConflictingGoogleOAuthIdentity = (user, oauthId) =>
+  Boolean(
+    user?.oauthProvider &&
+      (user.oauthProvider !== 'google' ||
+        (user.oauthId && user.oauthId !== oauthId)),
+  );
+
+class GoogleIdTokenConfigurationError extends Error {
+  constructor() {
+    super('Google ID token verification is not configured');
+    this.name = 'GoogleIdTokenConfigurationError';
+  }
+}
+
+class GoogleIdTokenVerificationError extends Error {
+  constructor() {
+    super('Invalid Google ID token');
+    this.name = 'GoogleIdTokenVerificationError';
+  }
+}
 
 /**
  * Verify Google ID token
@@ -12,19 +72,35 @@ const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env
  * @returns {Promise<Object>} - Verified token payload
  */
 async function verifyGoogleIdToken(idToken) {
-  if (!googleClient) {
-    throw new Error('Google OAuth not configured');
+  if (typeof idToken !== 'string' || idToken.trim().length === 0) {
+    throw new GoogleIdTokenVerificationError();
   }
-  
+
+  const audiences = getGoogleIdTokenAudiences();
+  if (audiences.length === 0) {
+    throw new GoogleIdTokenConfigurationError();
+  }
+
   try {
     const ticket = await googleClient.verifyIdToken({
-      idToken: idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      idToken,
+      audience: audiences,
     });
-    return ticket.getPayload();
+    const payload = ticket.getPayload();
+
+    if (!payload) {
+      throw new GoogleIdTokenVerificationError();
+    }
+
+    return payload;
   } catch (error) {
-    console.error('ID token verification failed:', error);
-    throw new Error('Invalid ID token');
+    if (error instanceof GoogleIdTokenVerificationError) {
+      throw error;
+    }
+
+    // Do not log the provider error: it can include untrusted token details.
+    console.warn('Google ID token verification failed');
+    throw new GoogleIdTokenVerificationError();
   }
 }
 
@@ -69,8 +145,10 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     }
 
     // Try existing by provider id first
-    let user = await prisma.user.findFirst({
-        where: { oauthProvider: 'google', oauthId }
+    let user = await prisma.user.findUnique({
+        where: {
+          oauthProvider_oauthId: { oauthProvider: 'google', oauthId },
+        }
     });
 
     if (!user) {
@@ -80,6 +158,13 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       }
 
       if (user) {
+        if (hasConflictingGoogleOAuthIdentity(user, oauthId)) {
+          // A Google subject is stable; an email address must never replace
+          // an existing OAuth identity. Linking a second provider belongs in
+          // an authenticated account-settings flow.
+          return done(null, false);
+        }
+
         // Link existing account to Google OAuth
         const currentEmailVerification = user.emailVerification || {};
         
@@ -103,8 +188,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             name: profile.displayName || username,
             username,
             email: email || `${oauthId}@google-oauth.local`,
-            // Dummy password (not used for OAuth accounts)
-            password: oauthId,
+            // OAuth accounts do not have a user-known password by default.
+            password: await bcrypt.hash(randomBytes(32).toString('hex'), 12),
             oauthProvider: 'google',
             oauthId,
             avatar: profile.photos?.[0]?.value || '',
@@ -136,5 +221,12 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   console.warn('Google OAuth credentials not configured. Google OAuth will be disabled.');
 }
 
-export { verifyGoogleIdToken };
+export {
+  getGoogleIdTokenAudiences,
+  GoogleIdTokenConfigurationError,
+  GoogleIdTokenVerificationError,
+  hasConflictingGoogleOAuthIdentity,
+  isGoogleIdTokenVerificationConfigured,
+  verifyGoogleIdToken,
+};
 export default passport;

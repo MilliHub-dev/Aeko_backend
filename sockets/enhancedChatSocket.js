@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/db.js";
+import { hasCurrentAuthTokenVersion } from "../utils/authTokenUtils.js";
+import { getJwtSecret } from "../utils/authConfig.js";
 import enhancedBot from "../ai/enhancedBot.js";
 import { sendPushNotification } from "../services/notificationService.js";
 import multer from "multer";
@@ -28,7 +30,10 @@ class EnhancedChatSocket {
           return next(new Error('Authentication error: No token provided'));
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, getJwtSecret());
+        if (decoded.purpose === "password-reset") {
+          return next(new Error('Authentication error: Invalid token'));
+        }
         const user = await prisma.user.findUnique({
           where: { id: decoded.id || decoded.userId }
         });
@@ -37,7 +42,12 @@ class EnhancedChatSocket {
           return next(new Error('Authentication error: User not found'));
         }
 
+        if (!hasCurrentAuthTokenVersion(decoded, user)) {
+          return next(new Error('Authentication error: Token expired'));
+        }
+
         socket.userId = user.id;
+        socket.authTokenVersion = decoded.authTokenVersion;
         socket.user = user;
         next();
       } catch (error) {
@@ -87,6 +97,7 @@ class EnhancedChatSocket {
   }
 
   handleConnection(socket) {
+    this.enforceCurrentAuthTokenVersion(socket);
     console.log(`✅ User connected: ${socket.user.username} (${socket.userId})`);
     
     // Store user connection
@@ -111,6 +122,40 @@ class EnhancedChatSocket {
 
     socket.on('disconnect', () => {
       this.handleDisconnection(socket);
+    });
+  }
+
+  enforceCurrentAuthTokenVersion(socket) {
+    socket.use(async (_event, next) => {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: socket.userId },
+          select: { id: true, authTokenVersion: true },
+        });
+
+        if (
+          !user ||
+          !hasCurrentAuthTokenVersion(
+            { authTokenVersion: socket.authTokenVersion },
+            user,
+          )
+        ) {
+          socket.emit('auth_error', {
+            message: 'Your session has expired. Please log in again.',
+          });
+          socket.disconnect(true);
+          return next(new Error('Authentication error: Token expired'));
+        }
+
+        return next();
+      } catch (error) {
+        console.error('Socket session validation failed:', error);
+        socket.emit('auth_error', {
+          message: 'Your session has expired. Please log in again.',
+        });
+        socket.disconnect(true);
+        return next(new Error('Authentication error: Token expired'));
+      }
     });
   }
 

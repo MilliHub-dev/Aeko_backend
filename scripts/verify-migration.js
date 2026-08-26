@@ -1,12 +1,11 @@
-
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function verify() {
   try {
-    console.log('Verifying Migration Counts...');
-    
+    console.log("Verifying Migration Counts...");
+
     const counts = {
       users: await prisma.user.count(),
       posts: await prisma.post.count(),
@@ -30,32 +29,47 @@ async function verify() {
     };
 
     console.table(counts);
-    
+
     // Check specific models requested by user
     const requestedModels = [
-      'ads', 'botconversations', 'botsettings', 'challenges', 
-      'chats', 'comments', 'communities', 'debates', 'enhancedmessages', 
-      'interests', 'livestreams', 'messages', 'posts', 
-      'securityevents', 'spaces', 'status', 'transactions', 'users'
+      "ads",
+      "botconversations",
+      "botsettings",
+      "challenges",
+      "chats",
+      "comments",
+      "communities",
+      "debates",
+      "enhancedmessages",
+      "interests",
+      "livestreams",
+      "messages",
+      "posts",
+      "securityevents",
+      "spaces",
+      "status",
+      "transactions",
+      "users",
     ];
 
-    console.log('\nUser Requested Models Verification:');
-    requestedModels.forEach(model => {
-        // Map user model name to our count key
-        let key = model;
-        if (model === 'botconversations') key = 'botConversations';
-        if (model === 'botsettings') key = 'botSettings';
-        if (model === 'enhancedmessages') key = 'enhancedMessages';
-        if (model === 'livestreams') key = 'liveStreams';
-        if (model === 'securityevents') key = 'securityEvents';
-        if (model === 'status') key = 'statuses'; // Status model table is "status" but prisma model is Status, count key I used is statuses
-        
-        const exists = counts[key] !== undefined;
-        console.log(`- ${model}: ${exists ? 'EXISTS' : 'MISSING'} (Count: ${counts[key]})`);
-    });
+    console.log("\nUser Requested Models Verification:");
+    requestedModels.forEach((model) => {
+      // Map user model name to our count key
+      let key = model;
+      if (model === "botconversations") key = "botConversations";
+      if (model === "botsettings") key = "botSettings";
+      if (model === "enhancedmessages") key = "enhancedMessages";
+      if (model === "livestreams") key = "liveStreams";
+      if (model === "securityevents") key = "securityEvents";
+      if (model === "status") key = "statuses"; // Status model table is "status" but prisma model is Status, count key I used is statuses
 
+      const exists = counts[key] !== undefined;
+      console.log(
+        `- ${model}: ${exists ? "EXISTS" : "MISSING"} (Count: ${counts[key]})`,
+      );
+    });
   } catch (error) {
-    console.error('Verification failed:', error);
+    console.error("Verification failed:", error);
   } finally {
     await prisma.$disconnect();
   }

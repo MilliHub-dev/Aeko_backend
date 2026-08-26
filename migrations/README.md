@@ -82,21 +82,27 @@ node migrations/migrate.js down 001-add-post-privacy-fields
 ## Troubleshooting
 
 ### Migration already executed
+
 ```
 ⚠️  Migration 001-add-post-privacy-fields has already been executed
 ```
+
 This is normal - the migration has already been run and won't run again.
 
 ### Database connection issues
+
 ```
 ❌ Migration failed: Database connection failed
 ```
+
 Check your `MONGO_URI` in the `.env` file and ensure MongoDB is running.
 
 ### Permission errors
+
 ```
 ❌ Error creating index: not authorized
 ```
+
 Ensure your database user has the necessary permissions to create indexes.
 
 ## Creating New Migrations

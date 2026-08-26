@@ -415,6 +415,9 @@ model Status {
   caption String?
   backgroundColor String?
   font String?
+  // Legacy append-only reaction blob. Superseded by the StatusReaction table and
+  // backfilled by 20260826120000_add_story_views_reactions_privacy. Retained for one
+  // release so the backfill stays reversible; drop it once mobile no longer reads it.
   reactions Json?
   sharedPostId String?
   originalContent Json?
@@ -422,8 +425,119 @@ model Status {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Audience scoping. FOLLOWERS is the product default; PUBLIC and CLOSE_FRIENDS are opt-in.
+  audience String @default("FOLLOWERS")
+  hiddenFromUserIds Json?
+
+  // Media descriptors. durationMs drives per-item viewer timing instead of a flat 5s.
+  durationMs Int?
+  thumbnailUrl String?
+  mediaWidth Int?
+  mediaHeight Int?
+  // Required to actually destroy the Cloudinary asset on delete/expiry.
+  cloudinaryPublicId String?
+  cloudinaryResourceType String?
+
+  // Denormalised counters kept in step with the child tables.
+  viewCount Int @default(0)
+  reactionCount Int @default(0)
+  replyCount Int @default(0)
+
+  mentions Json?
+  stickers Json?
+  linkClickCount Int @default(0)
+
   posts Post? @relation(fields: [sharedPostId], references: [id], onDelete: SetNull)
   users User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  views StatusView[]
+  statusReactions StatusReaction[]
+  highlightItems StatusHighlightItem[]
+  linkClicks StatusLinkClick[]
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+  @@index([userId, createdAt])
+}
+
+model StatusView {
+  @@map("status_views")
+  id String @id @default(uuid())
+  statusId String
+  viewerId String
+  viewedAt DateTime @default(now())
+  status Status @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  viewer User @relation("statusViews", fields: [viewerId], references: [id], onDelete: Cascade)
+
+  // One view row per viewer per status makes POST /api/status/views idempotent.
+  @@unique([statusId, viewerId])
+  @@index([statusId, viewedAt])
+  @@index([viewerId, viewedAt])
+}
+
+model StatusReaction {
+  @@map("status_reactions")
+  id String @id @default(uuid())
+  statusId String
+  userId String
+  emoji String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  status Status @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  user User @relation("statusReactions", fields: [userId], references: [id], onDelete: Cascade)
+
+  // One reaction per user per status; changing emoji updates in place.
+  @@unique([statusId, userId])
+  @@index([statusId, createdAt])
+}
+
+model StatusLinkClick {
+  @@map("status_link_clicks")
+  id String @id @default(uuid())
+  statusId String
+  viewerId String
+  // The destination as it was at click time, so a later edit cannot rewrite history.
+  url String
+  clickedAt DateTime @default(now())
+  status Status @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  viewer User @relation("statusLinkClicks", fields: [viewerId], references: [id], onDelete: Cascade)
+
+  // Not unique: a repeat click is legitimate. Indexed for author analytics and for
+  // spotting a link that is being clicked far more than the story was viewed.
+  @@index([statusId, clickedAt])
+  @@index([viewerId, clickedAt])
+}
+
+model StatusHighlight {
+  @@map("status_highlights")
+  id String @id @default(uuid())
+  userId String
+  title String
+  coverUrl String?
+  position Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation("statusHighlights", fields: [userId], references: [id], onDelete: Cascade)
+  items StatusHighlightItem[]
+
+  @@index([userId, position])
+}
+
+model StatusHighlightItem {
+  @@map("status_highlight_items")
+  id String @id @default(uuid())
+  highlightId String
+  // Nullable so a hard status delete degrades to the snapshot rather than cascading.
+  statusId String?
+  position Int @default(0)
+  // Media/caption copy so a highlight survives expiry of the underlying status.
+  snapshot Json?
+  createdAt DateTime @default(now())
+  highlight StatusHighlight @relation(fields: [highlightId], references: [id], onDelete: Cascade)
+  status Status? @relation(fields: [statusId], references: [id], onDelete: SetNull)
+
+  @@unique([highlightId, statusId])
+  @@index([highlightId, position])
 }
 
 model VerificationSettings {
@@ -483,10 +597,18 @@ model SubscriptionPlan {
 
 model User {
  @@map("users")
+ @@unique([oauthProvider, oauthId])
   id String @id @default(uuid())
   username String @unique
   email String @unique
   password String
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+  passwordResetOtpHash String?
+  passwordResetOtpExpiresAt DateTime?
+  passwordResetOtpAttempts Int @default(0)
+  passwordChangedAt DateTime?
+  authTokenVersion Int @default(0)
   name String
   avatar String?
   profilePicture String?
@@ -522,6 +644,10 @@ model User {
   followers Json?
   following Json?
   interests Json?
+  // Story audience + per-viewer muting. Arrays of user id strings, matching
+  // the existing followers/following/blockedUsers JSON convention.
+  closeFriends Json?
+  mutedStoryUserIds Json?
   ads Ad[]
   bookmarks Bookmark[]
   bot_conversations BotConversation[]
@@ -547,6 +673,10 @@ model User {
   sentNotifications Notification[] @relation("sentNotifications")
   spaces Space[]
   status Status[]
+  statusViews StatusView[] @relation("statusViews")
+  statusReactions StatusReaction[] @relation("statusReactions")
+  statusHighlights StatusHighlight[] @relation("statusHighlights")
+  statusLinkClicks StatusLinkClick[] @relation("statusLinkClicks")
   transactions Transaction[]
   reporterReports Report[] @relation("reporterReports")
   reportedReports Report[] @relation("reportedReports")

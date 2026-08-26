@@ -4,10 +4,15 @@ import { Database, Resource } from '@adminjs/prisma';
 import express from "express";
 import { Prisma } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { randomBytes } from "crypto";
+import dotenv from "dotenv";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
 import { prisma } from "./config/db.js";
+import { hasCurrentAuthTokenVersion } from "./utils/authTokenUtils.js";
+
+dotenv.config();
 
 const dmmf = Prisma.dmmf;
 const modelMap = dmmf.datamodel.models.reduce((acc, model) => {
@@ -36,6 +41,69 @@ const buildAdminSessionStore = () => {
 };
 
 const adminSessionStore = buildAdminSessionStore();
+const adminSessionCookieName = "adminjs";
+const ADMINJS_COOKIE_SECRET_PLACEHOLDERS = new Set([
+  "change-me-in-production",
+  "replace_with_a_secure_adminjs_cookie_secret",
+  "your_adminjs_cookie_secret",
+  "your_adminjs_cookie_secret_here",
+  "adminjs_cookie_secret",
+  "changeme",
+  "default",
+  "secret",
+  "undefined",
+  "null",
+]);
+const isExampleAdminSessionSecret = (secret) => {
+  const normalizedSecret = secret.trim().toLowerCase();
+  return (
+    ADMINJS_COOKIE_SECRET_PLACEHOLDERS.has(normalizedSecret) ||
+    /^<[^>]+>$/.test(normalizedSecret) ||
+    /^\[[^\]]+\]$/.test(normalizedSecret)
+  );
+};
+const getAdminSessionCookieSecret = () => {
+  const configuredSecret = process.env.ADMINJS_COOKIE_SECRET?.trim();
+
+  if (configuredSecret && !isExampleAdminSessionSecret(configuredSecret)) {
+    return configuredSecret;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "ADMINJS_COOKIE_SECRET must be set to a non-placeholder value in production",
+    );
+  }
+
+  console.warn(
+    "AdminJS is using an ephemeral session secret outside production; existing sessions will not survive a restart.",
+  );
+  return randomBytes(32).toString("hex");
+};
+const adminSessionCookieSecret = getAdminSessionCookieSecret();
+const adminSessionOptions = {
+  resave: false,
+  saveUninitialized: true,
+  ...(adminSessionStore ? { store: adminSessionStore } : {}),
+};
+
+// AdminJS creates its own session middleware. Mounting this equivalent middleware
+// before the router lets the version guard run before every AdminJS request; the
+// middleware inside AdminJS then reuses req.session instead of loading it twice.
+const adminSessionMiddleware = session({
+  ...adminSessionOptions,
+  secret: adminSessionCookieSecret,
+  name: adminSessionCookieName,
+});
+
+const toAdminSessionUser = (user) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  username: user.username,
+  isAdmin: Boolean(user.isAdmin),
+  authTokenVersion: user.authTokenVersion ?? 0,
+});
 
 const escapeCsvValue = (value) => {
   if (value === null || value === undefined) {
@@ -932,6 +1000,71 @@ const admin = new AdminJS({
   }
 });
 
+const destroyStaleAdminSession = (req, res) => {
+  const redirectToLogin = () => {
+    res.clearCookie(adminSessionCookieName);
+    res.redirect(admin.options.loginPath);
+  };
+
+  if (!req.session) {
+    redirectToLogin();
+    return;
+  }
+
+  req.session.destroy((error) => {
+    if (error) {
+      console.error("Failed to destroy stale AdminJS session", error);
+    }
+    redirectToLogin();
+  });
+};
+
+// This is mounted outside AdminJS's router, after its matching session middleware,
+// so password resets and changes revoke existing AdminJS sessions immediately.
+const adminSessionVersionGuard = async (req, res, next) => {
+  const sessionAdmin = req.session?.adminUser;
+
+  if (!sessionAdmin) {
+    return next();
+  }
+
+  if (typeof sessionAdmin.id !== "string") {
+    destroyStaleAdminSession(req, res);
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: sessionAdmin.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        username: true,
+        isAdmin: true,
+        authTokenVersion: true,
+      },
+    });
+
+    if (
+      !user ||
+      !user.isAdmin ||
+      !hasCurrentAuthTokenVersion(sessionAdmin, user)
+    ) {
+      destroyStaleAdminSession(req, res);
+      return;
+    }
+
+    // Upgrade legacy sessions and ensure no password/hash or other Prisma fields
+    // are retained in the session store.
+    req.session.adminUser = toAdminSessionUser(user);
+    return next();
+  } catch (error) {
+    console.error("AdminJS session validation failed", error);
+    destroyStaleAdminSession(req, res);
+  }
+};
+
 // Custom authentication function with error handling
 const authenticate = async (email, password) => {
   try {
@@ -942,7 +1075,18 @@ const authenticate = async (email, password) => {
       return false;
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        username: true,
+        password: true,
+        isAdmin: true,
+        authTokenVersion: true,
+      },
+    });
     if (!user) {
       console.log('User not found:', email);
       return false;
@@ -960,7 +1104,7 @@ const authenticate = async (email, password) => {
       return false;
     }
 
-    return user;
+    return toAdminSessionUser(user);
   } catch (error) {
     console.error('AdminJS Authentication Error:', error);
     return false;
@@ -971,14 +1115,12 @@ const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
   admin,
   {
     authenticate,
-    cookieName: 'adminjs',
-    cookiePassword: process.env.ADMINJS_COOKIE_SECRET || 'change-me-in-production',
+    cookieName: adminSessionCookieName,
+    cookiePassword: adminSessionCookieSecret,
   },
   null,
   {
-    resave: false,
-    saveUninitialized: true,
-    ...(adminSessionStore ? { store: adminSessionStore } : {}),
+    ...adminSessionOptions,
   }
 );
 
@@ -1004,4 +1146,9 @@ adminRouter.get('/waitlist-export', async (req, res) => {
   }
 });
 
-export { admin, adminRouter };
+export {
+  admin,
+  adminRouter,
+  adminSessionMiddleware,
+  adminSessionVersionGuard,
+};

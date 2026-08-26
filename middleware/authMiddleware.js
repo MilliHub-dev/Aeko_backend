@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../config/db.js";
 import TwoFactorService from "../services/twoFactorService.js";
+import { hasCurrentAuthTokenVersion } from "../utils/authTokenUtils.js";
+import { getJwtSecret } from "../utils/authConfig.js";
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -13,7 +15,14 @@ const authMiddleware = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
+
+    if (decoded.purpose === "password-reset") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden: Invalid token format",
+      });
+    }
     
     // Handle both 'id' and 'userId' from different token formats
     const userId = decoded.id || decoded.userId;
@@ -34,6 +43,13 @@ const authMiddleware = async (req, res, next) => {
       return res.status(404).json({ 
         success: false,
         error: "User not found" 
+      });
+    }
+
+    if (!hasCurrentAuthTokenVersion(decoded, user)) {
+      return res.status(401).json({
+        success: false,
+        error: "Token expired",
       });
     }
 

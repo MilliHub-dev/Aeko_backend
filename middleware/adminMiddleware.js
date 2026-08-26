@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/db.js';
+import { hasCurrentAuthTokenVersion } from '../utils/authTokenUtils.js';
+import { getJwtSecret } from '../utils/authConfig.js';
 
 /**
  * Middleware to check if user is an admin
@@ -17,7 +19,14 @@ const adminMiddleware = async (req, res, next) => {
         }
 
         // Verify token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, getJwtSecret());
+
+        if (decoded.purpose === 'password-reset') {
+            return res.status(401).json({
+                success: false,
+                message: 'Token is not valid or expired'
+            });
+        }
         
         // Find user and check if admin
         const user = await prisma.user.findUnique({
@@ -28,6 +37,13 @@ const adminMiddleware = async (req, res, next) => {
             return res.status(401).json({
                 success: false,
                 message: 'User not found'
+            });
+        }
+
+        if (!hasCurrentAuthTokenVersion(decoded, user)) {
+            return res.status(401).json({
+                success: false,
+                message: 'Token is not valid or expired'
             });
         }
 

@@ -1,13 +1,14 @@
 import { SendMailClient } from "zeptomail";
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
 // Shared Styles & Layout
-const getEmailTemplate = (title, content, username = '') => {
+const getEmailTemplate = (title, content, username = "") => {
   const currentYear = new Date().getFullYear();
-  const frontendUrl = process.env.FRONTEND_URL || 'https://aeko.social';
-  
+  const frontendUrl = process.env.FRONTEND_URL || "https://aeko.social";
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -199,7 +200,7 @@ const getEmailTemplate = (title, content, username = '') => {
           
           <!-- Content -->
           <div class="content">
-            ${username ? `<h2>Hi ${username} 👋</h2>` : ''}
+            ${username ? `<h2>Hi ${username} 👋</h2>` : ""}
             ${content}
           </div>
           
@@ -223,62 +224,120 @@ const getEmailTemplate = (title, content, username = '') => {
   `;
 };
 
+let transporter = null;
+
+const hasGmailCredentials = () =>
+  Boolean(
+    process.env.GMAIL_USER?.trim() && process.env.GMAIL_APP_PASSWORD?.trim(),
+  );
+
+const hasZeptoMailCredentials = () =>
+  Boolean(
+    process.env.ZEPTOMAIL_API_URL?.trim() &&
+      process.env.ZEPTOMAIL_API_KEY?.trim(),
+  );
+
+const getTransporter = () => {
+  if (transporter) return transporter;
+  transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+  return transporter;
+};
+
 class EmailService {
   constructor() {
     this.client = null;
-    if (process.env.ZEPTOMAIL_API_URL && process.env.ZEPTOMAIL_API_KEY) {
+    if (hasZeptoMailCredentials()) {
       this.client = new SendMailClient({
         url: process.env.ZEPTOMAIL_API_URL,
         token: process.env.ZEPTOMAIL_API_KEY,
       });
-      console.log('✅ ZeptoMail Service Configured');
-    } else {
-      console.warn('❌ ZeptoMail credentials missing. Email service disabled.');
+      console.log("✅ ZeptoMail Service Configured");
+    }
+
+    if (hasGmailCredentials()) {
+      console.log("✅ Gmail Service Configured");
+    }
+
+    if (!this.client && !hasGmailCredentials()) {
+      console.warn("❌ Email service disabled: no provider is configured.");
     }
   }
 
   // Check if email service is available
   isAvailable() {
-    return this.client !== null;
+    return hasGmailCredentials() || this.client !== null;
   }
 
-  // Send email using ZeptoMail
-  async sendEmail(toEmail, subject, htmlContent, username = '') {
-    if (!this.client) {
-      throw new Error('Email service not configured');
+  // Send email using Gmail first, then ZeptoMail as a fallback.
+  async sendEmail(toEmail, subject, htmlContent, username = "") {
+    if (!this.isAvailable()) {
+      throw new Error("Email service not configured");
     }
 
     const mailOptions = {
       from: {
         address: "noreply@aeko.social",
-        name: process.env.EMAIL_SENDER_NAME || 'Aeko'
+        name: process.env.EMAIL_SENDER_NAME || "Aeko",
       },
-      to: [{
-        email_address: {
-          address: toEmail,
-          name: username || toEmail.split('@')[0]
-        }
-      }],
+      to: [
+        {
+          email_address: {
+            address: toEmail,
+            name: username || toEmail.split("@")[0],
+          },
+        },
+      ],
       subject: subject,
-      htmlbody: htmlContent
+      htmlbody: htmlContent,
     };
 
-    try {
-      await this.client.sendMail(mailOptions);
-      console.log(`✅ Email sent to ${toEmail}`);
-      return { success: true, message: 'Email sent successfully' };
-    } catch (error) {
-      console.error(`❌ Failed to send email to ${toEmail}:`, error.message);
-      throw error;
+    if (hasGmailCredentials()) {
+      try {
+        await getTransporter().sendMail({
+          from: {
+            address: process.env.GMAIL_USER,
+            name: process.env.EMAIL_SENDER_NAME || "Aeko",
+          },
+          to: toEmail,
+          subject: subject,
+          html: htmlContent,
+        });
+        console.log(`✅ Email sent to ${toEmail}`);
+        return { success: true, message: "Email sent successfully" };
+      } catch {
+        console.warn(
+          `⚠️ Gmail delivery failed for ${toEmail}; trying ZeptoMail fallback.`,
+        );
+      }
     }
+
+    if (this.client) {
+      try {
+        await this.client.sendMail(mailOptions);
+        console.log(`✅ Email sent to ${toEmail}`);
+        return { success: true, message: "Email sent successfully" };
+      } catch {
+        console.error(`❌ ZeptoMail delivery failed for ${toEmail}.`);
+      }
+    }
+
+    throw new Error("Unable to send email");
   }
 
   // Send 4-digit verification code
   async sendVerificationCode(email, code, username) {
     if (!this.isAvailable()) {
-      console.warn('Email service not available. Verification code not sent.');
-      console.log(`🔐 [MOCK EMAIL] Verification code for ${email}: ${code}`);
-      return { success: true, message: 'Verification code generated (Email service unavailable)' };
+      console.warn("Email service not available. Verification code not sent.");
+      return {
+        success: false,
+        message: "Email service not configured",
+      };
     }
 
     const content = `
@@ -297,25 +356,46 @@ class EmailService {
       </div>
     `;
 
-    const htmlContent = getEmailTemplate("Verify Your Email", content, username);
+    const htmlContent = getEmailTemplate(
+      "Verify Your Email",
+      content,
+      username,
+    );
     const subject = "🔐 Verify your Aeko account";
 
     try {
-      await this.sendEmail(email, subject, htmlContent, username);
-      return { success: true, message: 'Verification email sent successfully' };
-    } catch (error) {
-      console.log(`🔐 [FAILOVER] Verification code for ${email}: ${code}`);
-      // Even if email fails, return success so the frontend moves to the code entry screen
-      // The user can find the code in the server logs (which we just printed)
-      return { success: true, message: 'Verification code generated (Email delivery failed)' };
+      const result = await this.sendEmail(
+        email,
+        subject,
+        htmlContent,
+        username,
+      );
+      if (result.success) {
+        return {
+          success: true,
+          message: "Verification email sent successfully",
+        };
+      }
+
+      return {
+        success: false,
+        message: "Failed to send verification email",
+      };
+    } catch {
+      return {
+        success: false,
+        message: "Failed to send verification email",
+      };
     }
   }
 
   // Send password reset email
   async sendPasswordResetEmail(email, username, resetLink) {
     if (!this.isAvailable()) {
-      console.warn('Email service not available. Password reset email not sent.');
-      return { success: false, message: 'Email service not configured' };
+      console.warn(
+        "Email service not available. Password reset email not sent.",
+      );
+      return { success: false, message: "Email service not configured" };
     }
 
     const content = `
@@ -325,7 +405,7 @@ class EmailService {
         <a href="${resetLink}" class="btn">Reset Password</a>
       </div>
       
-      <p style="text-align: center; font-size: 13px; color: #6b7280; margin-top: 0;">Link expires in 15 minutes</p>
+      <p style="text-align: center; font-size: 13px; color: #6b7280; margin-top: 0;">Link expires in 1 hour</p>
 
       <div class="divider"></div>
       
@@ -343,13 +423,83 @@ class EmailService {
     const subject = "🔑 Reset Your Aeko Password";
 
     try {
-      await this.sendEmail(email, subject, htmlContent, username);
-      return { success: true, message: 'Password reset email sent successfully' };
-    } catch (error) {
-      return { 
-        success: false, 
-        message: 'Failed to send password reset email',
-        error: error.message 
+      const result = await this.sendEmail(
+        email,
+        subject,
+        htmlContent,
+        username,
+      );
+      if (result.success) {
+        return {
+          success: true,
+          message: "Password reset email sent successfully",
+        };
+      }
+
+      return {
+        success: false,
+        message: "Failed to send password reset email",
+      };
+    } catch {
+      return {
+        success: false,
+        message: "Failed to send password reset email",
+      };
+    }
+  }
+
+  // Send 6-digit password reset code
+  async sendPasswordResetCode(email, username, code) {
+    if (!this.isAvailable()) {
+      console.warn(
+        "Email service not available. Password reset code not sent.",
+      );
+      return { success: false, message: "Email service not configured" };
+    }
+
+    const content = `
+      <p>We received a request to reset the password for your Aeko account. Enter the code below in the app to continue:</p>
+      
+      <div class="code-box">
+        <p style="margin-bottom: 5px; font-size: 13px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Password Reset Code</p>
+        <div class="verification-code">${code}</div>
+        <p style="color: #9ca3af; font-size: 13px; margin-top: 5px;">Expires in 10 minutes</p>
+      </div>
+      
+      <div class="alert-box">
+        <strong>⚠️ Security Notice:</strong> Never share this code with anyone. Aeko staff will never ask for your password reset code.
+      </div>
+      
+      <div class="alert-box" style="margin-top: 24px;">
+        <strong>Didn't request this?</strong> You can safely ignore this email. Your password will remain unchanged.
+      </div>
+    `;
+
+    const htmlContent = getEmailTemplate("Reset Password", content, username);
+    const subject = "🔑 Your Aeko Password Reset Code";
+
+    try {
+      const result = await this.sendEmail(
+        email,
+        subject,
+        htmlContent,
+        username,
+      );
+      if (result.success) {
+        return {
+          success: true,
+          message: "Password reset code sent successfully",
+        };
+      }
+
+      return {
+        success: false,
+        message: "Failed to send password reset code",
+      };
+    } catch {
+      return {
+        success: false,
+        message: "Failed to send password reset code",
       };
     }
   }
@@ -357,8 +507,8 @@ class EmailService {
   // Send login notification
   async sendLoginNotification(email, username, time, device) {
     if (!this.isAvailable()) {
-       console.warn('Email service not available. Login notification not sent.');
-       return { success: false, message: 'Email service not configured' };
+      console.warn("Email service not available. Login notification not sent.");
+      return { success: false, message: "Email service not configured" };
     }
 
     const content = `
@@ -382,23 +532,27 @@ class EmailService {
       </div>
     `;
 
-    const htmlContent = getEmailTemplate("New Login Detected", content, username);
+    const htmlContent = getEmailTemplate(
+      "New Login Detected",
+      content,
+      username,
+    );
     const subject = "🛡️ New Login Alert - Aeko";
 
     try {
       await this.sendEmail(email, subject, htmlContent, username);
-      return { success: true, message: 'Login notification sent' };
+      return { success: true, message: "Login notification sent" };
     } catch (error) {
-      console.error('Email sending error:', error.message);
-      return { success: false, message: 'Failed to send login notification' };
+      console.error("Email sending error:", error.message);
+      return { success: false, message: "Failed to send login notification" };
     }
   }
 
   // Send golden tick notification
   async sendGoldenTickNotification(email, username) {
     if (!this.isAvailable()) {
-       console.warn('Email service not available. Golden tick email not sent.');
-       return { success: false, message: 'Email service not configured' };
+      console.warn("Email service not available. Golden tick email not sent.");
+      return { success: false, message: "Email service not configured" };
     }
 
     const content = `
@@ -424,23 +578,30 @@ class EmailService {
       </div>
     `;
 
-    const htmlContent = getEmailTemplate("Golden Status Awarded", content, username);
+    const htmlContent = getEmailTemplate(
+      "Golden Status Awarded",
+      content,
+      username,
+    );
     const subject = "🏆 You are now a Golden Member!";
 
     try {
       await this.sendEmail(email, subject, htmlContent, username);
-      return { success: true, message: 'Golden tick notification sent' };
+      return { success: true, message: "Golden tick notification sent" };
     } catch (error) {
-      console.error('Email sending error:', error.message);
-      return { success: false, message: 'Failed to send golden tick notification' };
+      console.error("Email sending error:", error.message);
+      return {
+        success: false,
+        message: "Failed to send golden tick notification",
+      };
     }
   }
 
   // Send blue tick notification
   async sendBlueTickNotification(email, username) {
     if (!this.isAvailable()) {
-       console.warn('Email service not available. Blue tick email not sent.');
-       return { success: false, message: 'Email service not configured' };
+      console.warn("Email service not available. Blue tick email not sent.");
+      return { success: false, message: "Email service not configured" };
     }
 
     const content = `
@@ -460,23 +621,30 @@ class EmailService {
       </div>
     `;
 
-    const htmlContent = getEmailTemplate("Verified Status Awarded", content, username);
+    const htmlContent = getEmailTemplate(
+      "Verified Status Awarded",
+      content,
+      username,
+    );
     const subject = "🎉 You earned the Blue Tick!";
 
     try {
       await this.sendEmail(email, subject, htmlContent, username);
-      return { success: true, message: 'Blue tick notification sent' };
+      return { success: true, message: "Blue tick notification sent" };
     } catch (error) {
-      console.error('Email sending error:', error.message);
-      return { success: false, message: 'Failed to send blue tick notification' };
+      console.error("Email sending error:", error.message);
+      return {
+        success: false,
+        message: "Failed to send blue tick notification",
+      };
     }
   }
 
   // Send warning email
   async sendWarningEmail(email, username, reason, warningCount) {
     if (!this.isAvailable()) {
-       console.warn('Email service not available. Warning email not sent.');
-       return { success: false, message: 'Email service not configured' };
+      console.warn("Email service not available. Warning email not sent.");
+      return { success: false, message: "Email service not configured" };
     }
 
     const content = `
@@ -504,18 +672,18 @@ class EmailService {
 
     try {
       await this.sendEmail(email, subject, htmlContent, username);
-      return { success: true, message: 'Warning email sent' };
+      return { success: true, message: "Warning email sent" };
     } catch (error) {
-      console.error('Email sending error:', error.message);
-      return { success: false, message: 'Failed to send warning email' };
+      console.error("Email sending error:", error.message);
+      return { success: false, message: "Failed to send warning email" };
     }
   }
 
   // Send welcome email after verification
   async sendWelcomeEmail(email, username) {
     if (!this.isAvailable()) {
-       console.warn('Email service not available. Welcome email not sent.');
-       return { success: false, message: 'Email service not configured' };
+      console.warn("Email service not available. Welcome email not sent.");
+      return { success: false, message: "Email service not configured" };
     }
 
     const content = `
@@ -563,10 +731,10 @@ class EmailService {
 
     try {
       await this.sendEmail(email, subject, htmlContent, username);
-      return { success: true, message: 'Welcome email sent' };
+      return { success: true, message: "Welcome email sent" };
     } catch (error) {
-      console.error('Email sending error:', error.message);
-      return { success: false, message: 'Failed to send welcome email' };
+      console.error("Email sending error:", error.message);
+      return { success: false, message: "Failed to send welcome email" };
     }
   }
 }

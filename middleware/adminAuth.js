@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/db.js';
 import bcrypt from 'bcrypt';
+import { hasCurrentAuthTokenVersion } from '../utils/authTokenUtils.js';
+import { getJwtSecret } from '../utils/authConfig.js';
 
 // Admin Authentication Middleware
 export const adminAuth = async (req, res, next) => {
@@ -11,12 +13,19 @@ export const adminAuth = async (req, res, next) => {
       return res.status(401).json({ message: 'Access denied. No admin token provided.' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
+    if (decoded.purpose === 'password-reset') {
+      return res.status(401).json({ message: 'Invalid admin token.' });
+    }
     const user = await prisma.user.findUnique({
       where: { id: decoded.id }
     });
 
     if (!user) {
+      return res.status(401).json({ message: 'Invalid admin token.' });
+    }
+
+    if (!hasCurrentAuthTokenVersion(decoded, user)) {
       return res.status(401).json({ message: 'Invalid admin token.' });
     }
 
@@ -63,8 +72,13 @@ export const adminLogin = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, isAdmin: user.isAdmin },
-      process.env.JWT_SECRET,
+      {
+        id: user.id,
+        email: user.email,
+        isAdmin: user.isAdmin,
+        authTokenVersion: user.authTokenVersion ?? 0,
+      },
+      getJwtSecret(),
       { expiresIn: '24h' }
     );
 
