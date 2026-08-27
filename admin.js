@@ -1,9 +1,9 @@
 import AdminJS from "adminjs";
 import AdminJSExpress from "@adminjs/express";
-import { Database, Resource } from '@adminjs/prisma';
+import { Database, Resource } from "@adminjs/prisma";
 import express from "express";
-import { Prisma } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import { Prisma } from "@prisma/client";
+import bcrypt from "bcrypt";
 import { randomBytes } from "crypto";
 import dotenv from "dotenv";
 import session from "express-session";
@@ -16,8 +16,8 @@ dotenv.config();
 
 const dmmf = Prisma.dmmf;
 const modelMap = dmmf.datamodel.models.reduce((acc, model) => {
-    acc[model.name] = model;
-    return acc;
+  acc[model.name] = model;
+  return acc;
 }, {});
 
 const buildAdminSessionStore = () => {
@@ -115,16 +115,18 @@ const escapeCsvValue = (value) => {
 };
 
 const buildWaitlistCsv = (entries) => {
-  const header = ['Name', 'Email', 'Created At'];
+  const header = ["Name", "Email", "Created At"];
   const rows = entries.map((entry) => [
     entry.name,
     entry.email,
-    entry.createdAt instanceof Date ? entry.createdAt.toISOString() : entry.createdAt
+    entry.createdAt instanceof Date
+      ? entry.createdAt.toISOString()
+      : entry.createdAt,
   ]);
 
   return [header, ...rows]
-    .map((row) => row.map(escapeCsvValue).join(','))
-    .join('\n');
+    .map((row) => row.map(escapeCsvValue).join(","))
+    .join("\n");
 };
 
 AdminJS.registerAdapter({ Database, Resource });
@@ -136,119 +138,155 @@ const admin = new AdminJS({
       resource: { model: modelMap.Community, client: prisma },
       options: {
         parent: {
-          name: 'Community Management',
-          icon: 'Users'
+          name: "Community Management",
+          icon: "Users",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
-          updatedAt: { isVisible: { list: false, show: true, edit: false } }
+          updatedAt: { isVisible: { list: false, show: true, edit: false } },
         },
         actions: {
           new: { isVisible: true },
           edit: { isVisible: true },
           delete: { isVisible: true },
-          bulkDelete: { isVisible: true }
-        }
-      }
+          bulkDelete: { isVisible: true },
+        },
+      },
     },
     {
       resource: { model: modelMap.Transaction, client: prisma },
       options: {
         parent: {
-          name: 'Community Management',
-          icon: 'CreditCard'
+          name: "Community Management",
+          icon: "CreditCard",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
-          updatedAt: { isVisible: { list: false, show: true, edit: false } }
-        }
-      }
+          updatedAt: { isVisible: { list: false, show: true, edit: false } },
+        },
+      },
     },
     // ===== INTEREST MANAGEMENT =====
     {
       resource: { model: modelMap.Interest, client: prisma },
       options: {
         parent: {
-          name: 'Content Management',
-          icon: 'Tag'
+          name: "Content Management",
+          icon: "Tag",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
-          updatedAt: { isVisible: { list: false, show: true, edit: false } }
+          updatedAt: { isVisible: { list: false, show: true, edit: false } },
         },
         actions: {
           new: { isVisible: true },
           edit: { isVisible: true },
           delete: { isVisible: true },
-          bulkDelete: { isVisible: true }
+          bulkDelete: { isVisible: true },
         },
-        listProperties: ['name', 'displayName', 'isActive', 'createdAt'],
-        showProperties: ['name', 'displayName', 'description', 'icon', 'isActive', 'createdAt', 'updatedAt'],
-        editProperties: ['name', 'displayName', 'description', 'icon', 'isActive']
-      }
+        listProperties: ["name", "displayName", "isActive", "createdAt"],
+        showProperties: [
+          "name",
+          "displayName",
+          "description",
+          "icon",
+          "isActive",
+          "createdAt",
+          "updatedAt",
+        ],
+        editProperties: [
+          "name",
+          "displayName",
+          "description",
+          "icon",
+          "isActive",
+        ],
+      },
     },
-    
+
     // ===== SUPPORT MANAGEMENT =====
     {
       resource: { model: modelMap.SupportTicket, client: prisma },
       options: {
         parent: {
-          name: 'Support',
-          icon: 'HelpCircle'
+          name: "Support",
+          icon: "HelpCircle",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
-          description: { type: 'textarea' },
-          status: { 
+          description: { type: "textarea" },
+          status: {
             availableValues: [
-              { value: 'open', label: 'Open' },
-              { value: 'in_progress', label: 'In Progress' },
-              { value: 'resolved', label: 'Resolved' },
-              { value: 'closed', label: 'Closed' }
-            ]
+              { value: "open", label: "Open" },
+              { value: "in_progress", label: "In Progress" },
+              { value: "resolved", label: "Resolved" },
+              { value: "closed", label: "Closed" },
+            ],
           },
           priority: {
             availableValues: [
-              { value: 'low', label: 'Low' },
-              { value: 'medium', label: 'Medium' },
-              { value: 'high', label: 'High' }
-            ]
+              { value: "low", label: "Low" },
+              { value: "medium", label: "Medium" },
+              { value: "high", label: "High" },
+            ],
           },
           category: {
             availableValues: [
-              { value: 'billing', label: 'Billing' },
-              { value: 'technical', label: 'Technical' },
-              { value: 'account', label: 'Account' },
-              { value: 'other', label: 'Other' }
-            ]
+              { value: "billing", label: "Billing" },
+              { value: "technical", label: "Technical" },
+              { value: "account", label: "Account" },
+              { value: "other", label: "Other" },
+            ],
           },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
-          updatedAt: { isVisible: { list: true, show: true, edit: false } }
+          updatedAt: { isVisible: { list: true, show: true, edit: false } },
         },
-        listProperties: ['subject', 'status', 'priority', 'category', 'user', 'createdAt'],
-        showProperties: ['subject', 'description', 'status', 'priority', 'category', 'user', 'createdAt', 'updatedAt'],
-        editProperties: ['status', 'priority', 'category']
-      }
+        listProperties: [
+          "subject",
+          "status",
+          "priority",
+          "category",
+          "user",
+          "createdAt",
+        ],
+        showProperties: [
+          "subject",
+          "description",
+          "status",
+          "priority",
+          "category",
+          "user",
+          "createdAt",
+          "updatedAt",
+        ],
+        editProperties: ["status", "priority", "category"],
+      },
     },
     {
       resource: { model: modelMap.SupportMessage, client: prisma },
       options: {
         parent: {
-          name: 'Support',
-          icon: 'MessageSquare'
+          name: "Support",
+          icon: "MessageSquare",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
-          message: { type: 'textarea' },
-          createdAt: { isVisible: { list: true, show: true, edit: false } }
+          message: { type: "textarea" },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
         },
-        listProperties: ['ticket', 'sender', 'message', 'createdAt'],
-        showProperties: ['ticket', 'sender', 'message', 'attachments', 'createdAt'],
-        editProperties: ['message']
-      }
+        listProperties: ["ticket", "sender", "message", "createdAt"],
+        showProperties: [
+          "ticket",
+          "sender",
+          "message",
+          "attachments",
+          "createdAt",
+        ],
+        editProperties: ["message"],
+      },
     },
 
     // ===== GROWTH MANAGEMENT =====
@@ -256,12 +294,12 @@ const admin = new AdminJS({
       resource: { model: modelMap.WaitlistEntry, client: prisma },
       options: {
         parent: {
-          name: 'Growth',
-          icon: 'TrendingUp'
+          name: "Growth",
+          icon: "TrendingUp",
         },
         properties: {
           id: { isVisible: { list: false, show: true, edit: false } },
-          createdAt: { isVisible: { list: true, show: true, edit: false } }
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
         },
         actions: {
           new: { isVisible: false },
@@ -269,31 +307,31 @@ const admin = new AdminJS({
           delete: { isVisible: true },
           bulkDelete: { isVisible: true },
           exportCsv: {
-            actionType: 'resource',
-            icon: 'Download',
-            label: 'Export CSV',
+            actionType: "resource",
+            icon: "Download",
+            label: "Export CSV",
             component: false,
             handler: async () => ({
               redirectUrl: `${admin.options.rootPath}/waitlist-export`,
               notice: {
-                message: 'Preparing waitlist CSV export',
-                type: 'success',
+                message: "Preparing waitlist CSV export",
+                type: "success",
               },
             }),
-          }
+          },
         },
-        listProperties: ['name', 'email', 'createdAt'],
-        showProperties: ['id', 'name', 'email', 'createdAt']
-      }
+        listProperties: ["name", "email", "createdAt"],
+        showProperties: ["id", "name", "email", "createdAt"],
+      },
     },
-    
+
     // ===== USER MANAGEMENT =====
     {
       resource: { model: modelMap.User, client: prisma },
       options: {
         parent: {
           name: "User Management",
-          icon: "Users"
+          icon: "Users",
         },
         properties: {
           password: { isVisible: false },
@@ -303,7 +341,7 @@ const admin = new AdminJS({
           followers: { isVisible: { list: false, show: true, edit: false } },
           following: { isVisible: { list: false, show: true, edit: false } },
           posts: { isVisible: { list: false, show: true, edit: false } },
-          botResponses: { isVisible: { list: false, show: true, edit: true } }
+          botResponses: { isVisible: { list: false, show: true, edit: true } },
         },
         actions: {
           new: { isVisible: true },
@@ -318,13 +356,13 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.user.update({
                 where: { id: record.params.id },
-                data: { banned: true }
+                data: { banned: true },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `User ${record.params.username} has been banned successfully!`,
-                  type: 'success',
+                  type: "success",
                 },
               };
             },
@@ -338,13 +376,13 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.user.update({
                 where: { id: record.params.id },
-                data: { banned: false }
+                data: { banned: false },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `User ${record.params.username} has been unbanned successfully!`,
-                  type: 'success',
+                  type: "success",
                 },
               };
             },
@@ -358,13 +396,13 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.user.update({
                 where: { id: record.params.id },
-                data: { blueTick: true }
+                data: { blueTick: true },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `Blue tick granted to ${record.params.username}!`,
-                  type: 'success',
+                  type: "success",
                 },
               };
             },
@@ -378,7 +416,7 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.user.update({
                 where: { id: record.params.id },
-                data: { goldenTick: true }
+                data: { goldenTick: true },
               });
               return {
                 record: record.toJSON(),
@@ -398,7 +436,7 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.user.update({
                 where: { id: record.params.id },
-                data: { blueTick: false }
+                data: { blueTick: false },
               });
               return {
                 record: record.toJSON(),
@@ -418,7 +456,7 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.user.update({
                 where: { id: record.params.id },
-                data: { goldenTick: false }
+                data: { goldenTick: false },
               });
               return {
                 record: record.toJSON(),
@@ -440,16 +478,16 @@ const admin = new AdminJS({
               oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
               await prisma.user.update({
                 where: { id: record.params.id },
-                data: { 
-                  subscriptionStatus: 'active',
-                  subscriptionExpiry: oneMonthFromNow
-                }
+                data: {
+                  subscriptionStatus: "active",
+                  subscriptionExpiry: oneMonthFromNow,
+                },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `Subscription activated for ${record.params.username}!`,
-                  type: 'success',
+                  type: "success",
                 },
               };
             },
@@ -461,32 +499,73 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const totalUsers = await prisma.user.count();
-              const verifiedUsers = await prisma.user.count({ where: { OR: [{ blueTick: true }, { goldenTick: true }] } });
-              const activeSubscriptions = await prisma.user.count({ where: { subscriptionStatus: 'active' } });
-              const botEnabledUsers = await prisma.user.count({ where: { botEnabled: true } });
-              
+              const verifiedUsers = await prisma.user.count({
+                where: { OR: [{ blueTick: true }, { goldenTick: true }] },
+              });
+              const activeSubscriptions = await prisma.user.count({
+                where: { subscriptionStatus: "active" },
+              });
+              const botEnabledUsers = await prisma.user.count({
+                where: { botEnabled: true },
+              });
+
               return {
                 notice: {
                   message: `Total Users: ${totalUsers}, Verified: ${verifiedUsers}, Active Subscriptions: ${activeSubscriptions}, Bot Enabled: ${botEnabledUsers}`,
-                  type: 'info',
+                  type: "info",
                 },
               };
             },
-          }
+          },
         },
-        listProperties: ['username', 'email', 'name', 'blueTick', 'goldenTick', 'subscriptionStatus', 'botEnabled', 'createdAt'],
-        showProperties: ['username', 'email', 'name', 'bio', 'profilePicture', 'blueTick', 'goldenTick', 'subscriptionStatus', 'subscriptionExpiry', 'botEnabled', 'botPersonality', 'createdAt', 'updatedAt'],
-        editProperties: ['name', 'username', 'email', 'bio', 'profilePicture', 'blueTick', 'goldenTick', 'subscriptionStatus', 'subscriptionExpiry', 'botEnabled', 'botPersonality'],
+        listProperties: [
+          "username",
+          "email",
+          "name",
+          "blueTick",
+          "goldenTick",
+          "subscriptionStatus",
+          "botEnabled",
+          "createdAt",
+        ],
+        showProperties: [
+          "username",
+          "email",
+          "name",
+          "bio",
+          "profilePicture",
+          "blueTick",
+          "goldenTick",
+          "subscriptionStatus",
+          "subscriptionExpiry",
+          "botEnabled",
+          "botPersonality",
+          "createdAt",
+          "updatedAt",
+        ],
+        editProperties: [
+          "name",
+          "username",
+          "email",
+          "bio",
+          "profilePicture",
+          "blueTick",
+          "goldenTick",
+          "subscriptionStatus",
+          "subscriptionExpiry",
+          "botEnabled",
+          "botPersonality",
+        ],
       },
     },
-    
+
     // ===== CONTENT MANAGEMENT =====
     {
       resource: { model: modelMap.Post, client: prisma },
       options: {
         parent: {
           name: "Content Management",
-          icon: "FileText"
+          icon: "FileText",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
@@ -495,7 +574,10 @@ const admin = new AdminJS({
           likes: { isVisible: { list: false, show: true, edit: false } },
           reposts: { isVisible: { list: false, show: true, edit: false } },
           comments: { isVisible: { list: false, show: true, edit: false } },
-          users_posts_userIdTouser: { isVisible: { list: true, show: true, edit: false }, label: 'User' }
+          users_posts_userIdTouser: {
+            isVisible: { list: true, show: true, edit: false },
+            label: "User",
+          },
         },
         actions: {
           delete: { isVisible: true },
@@ -510,7 +592,7 @@ const admin = new AdminJS({
                 record: context.record.toJSON(),
                 notice: {
                   message: `Post has been flagged for review!`,
-                  type: 'warning',
+                  type: "warning",
                 },
               };
             },
@@ -522,21 +604,37 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const stats = await prisma.post.groupBy({
-                by: ['type'],
-                _count: { _all: true }
+                by: ["type"],
+                _count: { _all: true },
               });
-              const message = stats.map(s => `${s.type}: ${s._count._all} posts`).join(', ');
+              const message = stats
+                .map((s) => `${s.type}: ${s._count._all} posts`)
+                .join(", ");
               return {
                 notice: {
                   message: `Content Stats: ${message}`,
-                  type: 'info',
+                  type: "info",
                 },
               };
             },
-          }
+          },
         },
-        listProperties: ['users_posts_userIdTouser', 'type', 'text', 'createdAt'],
-        showProperties: ['users_posts_userIdTouser', 'text', 'media', 'type', 'likes', 'reposts', 'comments', 'createdAt'],
+        listProperties: [
+          "users_posts_userIdTouser",
+          "type",
+          "text",
+          "createdAt",
+        ],
+        showProperties: [
+          "users_posts_userIdTouser",
+          "text",
+          "media",
+          "type",
+          "likes",
+          "reposts",
+          "comments",
+          "createdAt",
+        ],
       },
     },
 
@@ -545,7 +643,7 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "Content Management",
-          icon: "MessageCircle"
+          icon: "MessageCircle",
         },
         actions: {
           delete: { isVisible: true },
@@ -559,11 +657,11 @@ const admin = new AdminJS({
                 record: context.record.toJSON(),
                 notice: {
                   message: `Comment moderated successfully!`,
-                  type: 'success',
+                  type: "success",
                 },
               };
             },
-          }
+          },
         },
       },
     },
@@ -574,7 +672,7 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "LiveStream Management",
-          icon: "Video"
+          icon: "Video",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
@@ -583,11 +681,15 @@ const admin = new AdminJS({
           hlsUrl: { isVisible: { list: false, show: true, edit: false } },
           webrtcUrl: { isVisible: { list: false, show: true, edit: false } },
           roomId: { isVisible: { list: false, show: true, edit: false } },
-          uniqueViewers: { isVisible: { list: false, show: true, edit: false } },
+          uniqueViewers: {
+            isVisible: { list: false, show: true, edit: false },
+          },
           reactions: { isVisible: { list: false, show: true, edit: false } },
-          currentViewers: { isVisible: { list: true, show: true, edit: false } },
+          currentViewers: {
+            isVisible: { list: true, show: true, edit: false },
+          },
           peakViewers: { isVisible: { list: true, show: true, edit: false } },
-          totalViews: { isVisible: { list: true, show: true, edit: false } }
+          totalViews: { isVisible: { list: true, show: true, edit: false } },
         },
         actions: {
           delete: { isVisible: true },
@@ -600,16 +702,16 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.liveStream.update({
                 where: { id: record.params.id },
-                data: { 
-                  status: 'ended',
-                  endedAt: new Date()
-                }
+                data: {
+                  status: "ended",
+                  endedAt: new Date(),
+                },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `Stream "${record.params.title}" has been ended!`,
-                  type: 'success',
+                  type: "success",
                 },
               };
             },
@@ -623,16 +725,16 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.liveStream.update({
                 where: { id: record.params.id },
-                data: { 
-                  status: 'ended',
-                  endedAt: new Date()
-                }
+                data: {
+                  status: "ended",
+                  endedAt: new Date(),
+                },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `Stream "${record.params.title}" has been banned and ended!`,
-                  type: 'error',
+                  type: "error",
                 },
               };
             },
@@ -644,23 +746,46 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const stats = await prisma.liveStream.groupBy({
-                by: ['status'],
+                by: ["status"],
                 _count: { _all: true },
-                _sum: { totalViews: true }
+                _sum: { totalViews: true },
               });
-              const message = stats.map(s => `${s.status}: ${s._count._all} streams (${s._sum.totalViews || 0} views)`).join(', ');
+              const message = stats
+                .map(
+                  (s) =>
+                    `${s.status}: ${s._count._all} streams (${s._sum.totalViews || 0} views)`,
+                )
+                .join(", ");
               return {
                 notice: {
                   message: `Stream Stats: ${message}`,
-                  type: 'info',
+                  type: "info",
                 },
               };
             },
-          }
+          },
         },
-        listProperties: ['title', 'user', 'status', 'category', 'currentViewers', 'totalViews', 'createdAt'],
-        showProperties: ['title', 'description', 'user', 'status', 'category', 'currentViewers', 'peakViewers', 'totalViews', 'createdAt'],
-        editProperties: ['title', 'description', 'status', 'category'],
+        listProperties: [
+          "title",
+          "user",
+          "status",
+          "category",
+          "currentViewers",
+          "totalViews",
+          "createdAt",
+        ],
+        showProperties: [
+          "title",
+          "description",
+          "user",
+          "status",
+          "category",
+          "currentViewers",
+          "peakViewers",
+          "totalViews",
+          "createdAt",
+        ],
+        editProperties: ["title", "description", "status", "category"],
       },
     },
 
@@ -670,14 +795,31 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "AI & Bot Management",
-          icon: "Bot"
+          icon: "Bot",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
         },
-        listProperties: ['user', 'botEnabled', 'botPersonality', 'aiProvider'],
-        showProperties: ['user', 'botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'customInstructions'],
-        editProperties: ['botEnabled', 'botPersonality', 'aiProvider', 'model', 'maxTokens', 'temperature', 'customInstructions'],
+        listProperties: ["user", "botEnabled", "botPersonality", "aiProvider"],
+        showProperties: [
+          "user",
+          "botEnabled",
+          "botPersonality",
+          "aiProvider",
+          "model",
+          "maxTokens",
+          "temperature",
+          "customInstructions",
+        ],
+        editProperties: [
+          "botEnabled",
+          "botPersonality",
+          "aiProvider",
+          "model",
+          "maxTokens",
+          "temperature",
+          "customInstructions",
+        ],
       },
     },
 
@@ -686,9 +828,9 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "AI & Bot Management",
-          icon: "MessageSquare"
+          icon: "MessageSquare",
         },
-        listProperties: ['user', 'userMessage', 'botResponse', 'updatedAt'],
+        listProperties: ["user", "userMessage", "botResponse", "updatedAt"],
         actions: {
           delete: { isVisible: true },
           clearHistory: {
@@ -700,20 +842,20 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.botConversation.update({
                 where: { id: record.params.id },
-                data: { 
+                data: {
                   messages: [],
-                  totalMessages: 0
-                }
+                  totalMessages: 0,
+                },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `Chat history cleared for user!`,
-                  type: 'success',
+                  type: "success",
                 },
               };
             },
-          }
+          },
         },
       },
     },
@@ -724,7 +866,7 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "Advertising",
-          icon: "DollarSign"
+          icon: "DollarSign",
         },
         actions: {
           approveAd: {
@@ -736,13 +878,13 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.ad.update({
                 where: { id: record.params.id },
-                data: { status: 'approved' }
+                data: { status: "approved" },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `Ad "${record.params.title}" has been approved!`,
-                  type: 'success',
+                  type: "success",
                 },
               };
             },
@@ -756,13 +898,13 @@ const admin = new AdminJS({
               const { record } = context;
               await prisma.ad.update({
                 where: { id: record.params.id },
-                data: { status: 'rejected' }
+                data: { status: "rejected" },
               });
               return {
                 record: record.toJSON(),
                 notice: {
                   message: `Ad "${record.params.title}" has been rejected!`,
-                  type: 'error',
+                  type: "error",
                 },
               };
             },
@@ -774,20 +916,22 @@ const admin = new AdminJS({
             component: false,
             handler: async (request, response, context) => {
               const stats = await prisma.ad.groupBy({
-                by: ['status'],
-                _count: { _all: true }
+                by: ["status"],
+                _count: { _all: true },
               });
-              const message = stats.map(s => `${s.status}: ${s._count._all} ads`).join(', ');
+              const message = stats
+                .map((s) => `${s.status}: ${s._count._all} ads`)
+                .join(", ");
               return {
                 notice: {
                   message: `Ad Stats: ${message}`,
-                  type: 'info',
+                  type: "info",
                 },
               };
             },
-          }
+          },
         },
-        listProperties: ['title', 'mediaType', 'Status', 'user', 'createdAt'],
+        listProperties: ["title", "mediaType", "Status", "user", "createdAt"],
       },
     },
 
@@ -797,7 +941,7 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "Community Features",
-          icon: "Users2"
+          icon: "Users2",
         },
       },
     },
@@ -807,7 +951,7 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "Community Features",
-          icon: "Trophy"
+          icon: "Trophy",
         },
       },
     },
@@ -817,7 +961,7 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "Community Features",
-          icon: "Globe"
+          icon: "Globe",
         },
       },
     },
@@ -828,13 +972,13 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "Messaging",
-          icon: "Mail"
+          icon: "Mail",
         },
         properties: {
           attachments: { isVisible: { list: false, show: true, edit: false } },
-          metadata: { isVisible: { list: false, show: true, edit: false } }
+          metadata: { isVisible: { list: false, show: true, edit: false } },
         },
-        listProperties: ['sender', 'receiver', 'messageType', 'createdAt'],
+        listProperties: ["sender", "receiver", "messageType", "createdAt"],
         actions: {
           delete: { isVisible: true },
           flagMessage: {
@@ -847,11 +991,11 @@ const admin = new AdminJS({
                 record: context.record.toJSON(),
                 notice: {
                   message: `Message has been flagged for review!`,
-                  type: 'warning',
+                  type: "warning",
                 },
               };
             },
-          }
+          },
         },
       },
     },
@@ -861,7 +1005,7 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "Messaging",
-          icon: "MessageCircle"
+          icon: "MessageCircle",
         },
       },
     },
@@ -871,7 +1015,7 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "Messaging",
-          icon: "Send"
+          icon: "Send",
         },
       },
     },
@@ -882,9 +1026,9 @@ const admin = new AdminJS({
       options: {
         parent: {
           name: "User Activity",
-          icon: "Activity"
+          icon: "Activity",
         },
-        listProperties: ['users', 'content', 'createdAt'],
+        listProperties: ["users", "content", "createdAt"],
       },
     },
 
@@ -893,31 +1037,56 @@ const admin = new AdminJS({
       resource: { model: modelMap.SubscriptionPlan, client: prisma },
       options: {
         parent: {
-          name: 'Subscription Management',
-          icon: 'Star'
+          name: "Subscription Management",
+          icon: "Star",
         },
         properties: {
           id: { isVisible: { list: true, show: true, edit: false } },
-          features: { type: 'textarea' }, 
-          limits: { type: 'textarea' },
+          features: { type: "textarea" },
+          limits: { type: "textarea" },
           createdAt: { isVisible: { list: true, show: true, edit: false } },
-          updatedAt: { isVisible: { list: false, show: true, edit: false } }
+          updatedAt: { isVisible: { list: false, show: true, edit: false } },
         },
         actions: {
           new: { isVisible: true },
           edit: { isVisible: true },
           delete: { isVisible: true },
-          bulkDelete: { isVisible: true }
+          bulkDelete: { isVisible: true },
         },
-        listProperties: ['name', 'price', 'currency', 'duration', 'isActive', 'createdAt'],
-        showProperties: ['name', 'price', 'currency', 'duration', 'features', 'limits', 'targetAudience', 'isActive', 'createdAt', 'updatedAt'],
-        editProperties: ['name', 'price', 'currency', 'duration', 'features', 'limits', 'targetAudience', 'isActive']
-      }
+        listProperties: [
+          "name",
+          "price",
+          "currency",
+          "duration",
+          "isActive",
+          "createdAt",
+        ],
+        showProperties: [
+          "name",
+          "price",
+          "currency",
+          "duration",
+          "features",
+          "limits",
+          "targetAudience",
+          "isActive",
+          "createdAt",
+          "updatedAt",
+        ],
+        editProperties: [
+          "name",
+          "price",
+          "currency",
+          "duration",
+          "features",
+          "limits",
+          "targetAudience",
+          "isActive",
+        ],
+      },
     },
-
-
   ],
-  
+
   // ===== BRANDING & UI CUSTOMIZATION =====
   branding: {
     companyName: "Aeko Platform Admin",
@@ -926,78 +1095,78 @@ const admin = new AdminJS({
     favicon: "/uploads/favicon.ico",
     theme: {
       colors: {
-        primary100: '#667eea',
-        primary80: '#764ba2',
-        primary60: '#f093fb',
-        primary40: '#4facfe',
-        primary20: '#00f2fe',
-        grey100: '#151515',
-        grey80: '#333333',
-        grey60: '#666666',
-        grey40: '#999999',
-        grey20: '#cccccc',
-        filterBg: '#333333',
-        accent: '#ff6b6b',
-        hoverBg: '#4a5568',
+        primary100: "#667eea",
+        primary80: "#764ba2",
+        primary60: "#f093fb",
+        primary40: "#4facfe",
+        primary20: "#00f2fe",
+        grey100: "#151515",
+        grey80: "#333333",
+        grey60: "#666666",
+        grey40: "#999999",
+        grey20: "#cccccc",
+        filterBg: "#333333",
+        accent: "#ff6b6b",
+        hoverBg: "#4a5568",
       },
-    }
+    },
   },
-  
+
   // ===== DASHBOARD CUSTOMIZATION =====
   dashboard: {
     component: false,
   },
-  
+
   // ===== CUSTOM PAGES =====
   pages: {
     analytics: {
       component: false,
-      icon: 'Analytics',
+      icon: "Analytics",
     },
     reports: {
       component: false,
-      icon: 'FileText',
-    }
+      icon: "FileText",
+    },
   },
-  
+
   rootPath: "/admin",
-  
+
   // Login redirect configuration
-  loginPath: '/admin/login',
-  logoutPath: '/admin/logout',
-  
+  loginPath: "/admin/login",
+  logoutPath: "/admin/logout",
+
   // ===== LOCALE SETTINGS =====
   locale: {
-    language: 'en',
-    availableLanguages: ['en'],
+    language: "en",
+    availableLanguages: ["en"],
     translations: {
       en: {
         labels: {
-          loginWelcome: 'Welcome to Aeko Platform Admin',
+          loginWelcome: "Welcome to Aeko Platform Admin",
         },
         actions: {
-          banUser: 'Ban User',
-          unbanUser: 'Unban User',
-          grantBlueTick: 'Grant Blue Tick',
-          grantGoldenTick: 'Grant Golden Tick',
-          activateSubscription: 'Activate Subscription',
-          userStats: 'User Statistics',
-          contentStats: 'Content Statistics',
-          streamStats: 'Stream Analytics',
-          adStats: 'Ad Performance',
-          approveAd: 'Approve Ad',
-          rejectAd: 'Reject Ad',
-          endStream: 'End Stream',
-          banStream: 'Ban Stream',
-          exportCsv: 'Export CSV',
-          flagContent: 'Flag as Inappropriate',
-          flagMessage: 'Flag Message',
-          moderateComment: 'Moderate',
-          clearHistory: 'Clear Chat History'
-        }
-      }
-    }
-  }
+          banUser: "Ban User",
+          unbanUser: "Unban User",
+          grantBlueTick: "Grant Blue Tick",
+          grantGoldenTick: "Grant Golden Tick",
+          activateSubscription: "Activate Subscription",
+          userStats: "User Statistics",
+          contentStats: "Content Statistics",
+          streamStats: "Stream Analytics",
+          adStats: "Ad Performance",
+          approveAd: "Approve Ad",
+          rejectAd: "Reject Ad",
+          endStream: "End Stream",
+          banStream: "Ban Stream",
+          exportCsv: "Export CSV",
+          flagContent: "Flag as Inappropriate",
+          flagMessage: "Flag Message",
+          moderateComment: "Moderate",
+          clearHistory: "Clear Chat History",
+        },
+      },
+    },
+  },
 });
 
 const destroyStaleAdminSession = (req, res) => {
@@ -1068,10 +1237,10 @@ const adminSessionVersionGuard = async (req, res, next) => {
 // Custom authentication function with error handling
 const authenticate = async (email, password) => {
   try {
-    console.log('AdminJS Authentication attempt for:', email);
-    
+    console.log("AdminJS Authentication attempt for:", email);
+
     if (!email || !password) {
-      console.log('Missing email or password');
+      console.log("Missing email or password");
       return false;
     }
 
@@ -1088,25 +1257,25 @@ const authenticate = async (email, password) => {
       },
     });
     if (!user) {
-      console.log('User not found:', email);
+      console.log("User not found:", email);
       return false;
     }
 
     if (!user.isAdmin) {
-      console.log('User is not admin:', email);
+      console.log("User is not admin:", email);
       return false;
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password);
-    
+
     if (!isValidPassword) {
-      console.log('Invalid password for user:', email);
+      console.log("Invalid password for user:", email);
       return false;
     }
 
     return toAdminSessionUser(user);
   } catch (error) {
-    console.error('AdminJS Authentication Error:', error);
+    console.error("AdminJS Authentication Error:", error);
     return false;
   }
 };
@@ -1121,34 +1290,32 @@ const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
   null,
   {
     ...adminSessionOptions,
-  }
+  },
 );
 
-adminRouter.get('/waitlist-export', async (req, res) => {
+adminRouter.get("/waitlist-export", async (req, res) => {
   try {
     if (!req.session?.adminUser) {
-      return res.status(401).send('Unauthorized');
+      return res.status(401).send("Unauthorized");
     }
 
     const entries = await prisma.waitlistEntry.findMany({
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
 
     const csv = buildWaitlistCsv(entries);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="waitlist-${timestamp}.csv"`);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="waitlist-${timestamp}.csv"`,
+    );
     res.status(200).send(csv);
   } catch (error) {
-    console.error('Waitlist CSV export error:', error);
-    res.status(500).send('Failed to export waitlist CSV');
+    console.error("Waitlist CSV export error:", error);
+    res.status(500).send("Failed to export waitlist CSV");
   }
 });
 
-export {
-  admin,
-  adminRouter,
-  adminSessionMiddleware,
-  adminSessionVersionGuard,
-};
+export { admin, adminRouter, adminSessionMiddleware, adminSessionVersionGuard };

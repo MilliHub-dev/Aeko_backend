@@ -117,26 +117,28 @@ setupVideoCallSocket(io);
 
 // CORS and cookie parser (keep these before AdminJS)
 app.use(cookieParser());
-app.use(cors());
-
-// process.env.NODE_ENV === "production"
-//   ? {
-//       origin:
-//         process.env.NODE_ENV === "production"
-//           ? [
-//               process.env.FRONTEND_URL,
-//               /\.railway\.app$/,
-//               /\.coolify\.io$/,
-//               /\.coolify\.[a-z]+$/,
-//             ]
-//           : [
-//               "http://localhost:3000",
-//               "http://localhost:5000",
-//               "http://localhost:9876",
-//             ],
-//       credentials: true,
-//     }
-//   : undefined,
+app.use(
+  cors(
+    process.env.NODE_ENV === "production"
+      ? {
+          origin:
+            process.env.NODE_ENV === "production"
+              ? [
+                  process.env.FRONTEND_URL,
+                  /\.railway\.app$/,
+                  /\.coolify\.io$/,
+                  /\.coolify\.[a-z]+$/,
+                ]
+              : [
+                  "http://localhost:3000",
+                  "http://localhost:5000",
+                  "http://localhost:9876",
+                ],
+          credentials: true,
+        }
+      : undefined,
+  ),
+);
 
 // Static file serving for uploads (disabled in production - using Cloudinary)
 if (process.env.NODE_ENV !== "production") {
