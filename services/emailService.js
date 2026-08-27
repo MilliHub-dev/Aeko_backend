@@ -234,20 +234,8 @@ const hasGmailCredentials = () =>
 const hasZeptoMailCredentials = () =>
   Boolean(
     process.env.ZEPTOMAIL_API_URL?.trim() &&
-      process.env.ZEPTOMAIL_API_KEY?.trim(),
+    process.env.ZEPTOMAIL_API_KEY?.trim(),
   );
-
-const getTransporter = () => {
-  if (transporter) return transporter;
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
-  });
-  return transporter;
-};
 
 class EmailService {
   constructor() {
@@ -296,26 +284,6 @@ class EmailService {
       subject: subject,
       htmlbody: htmlContent,
     };
-
-    if (hasGmailCredentials()) {
-      try {
-        await getTransporter().sendMail({
-          from: {
-            address: process.env.GMAIL_USER,
-            name: process.env.EMAIL_SENDER_NAME || "Aeko",
-          },
-          to: toEmail,
-          subject: subject,
-          html: htmlContent,
-        });
-        console.log(`✅ Email sent to ${toEmail}`);
-        return { success: true, message: "Email sent successfully" };
-      } catch {
-        console.warn(
-          `⚠️ Gmail delivery failed for ${toEmail}; trying ZeptoMail fallback.`,
-        );
-      }
-    }
 
     if (this.client) {
       try {
