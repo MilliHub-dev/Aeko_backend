@@ -234,7 +234,7 @@ const hasGmailCredentials = () =>
 const hasZeptoMailCredentials = () =>
   Boolean(
     process.env.ZEPTOMAIL_API_URL?.trim() &&
-      process.env.ZEPTOMAIL_API_KEY?.trim(),
+    process.env.ZEPTOMAIL_API_KEY?.trim(),
   );
 
 const getTransporter = () => {

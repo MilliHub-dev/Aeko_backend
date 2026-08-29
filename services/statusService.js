@@ -777,6 +777,19 @@ export async function getHighlights(ownerId, viewerId) {
   return { highlights: highlights.map((h) => serializeHighlight(h, viewerId)) };
 }
 
+/**
+ * An image URL usable as a highlight cover, or null.
+ *
+ * Only media stories have one. A text story's `content` is the text itself, so using
+ * it as a cover would hand the client a string it would try to load as an image.
+ */
+function coverUrlOf(status) {
+  if (!status) return null;
+  if (status.thumbnailUrl) return status.thumbnailUrl;
+  if (status.type === "image") return status.content || null;
+  return null;
+}
+
 /** Copy enough of a status to render it after the original is gone. */
 function snapshotOf(status) {
   return {
@@ -809,7 +822,9 @@ export async function createHighlight(userId, { title, coverUrl, statusIds = [] 
     data: {
       userId,
       title: title.trim(),
-      coverUrl: coverUrl ?? owned[0]?.thumbnailUrl ?? owned[0]?.content ?? null,
+      // Falls back to the first item that actually has an image; a text-only
+      // highlight legitimately has no cover and the client renders a preview.
+      coverUrl: coverUrl ?? owned.map(coverUrlOf).find(Boolean) ?? null,
       position: (last?.position ?? -1) + 1,
       updatedAt: new Date(),
       items: {

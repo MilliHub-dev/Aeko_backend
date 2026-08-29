@@ -15,7 +15,10 @@ import { deleteFromCloudinary } from "../services/cloudinaryService.js";
 
 const BATCH_SIZE = 200;
 
-export async function purgeExpiredStatuses({ now = new Date(), dryRun = false } = {}) {
+export async function purgeExpiredStatuses({
+  now = new Date(),
+  dryRun = false,
+} = {}) {
   let deletedRows = 0;
   let deletedAssets = 0;
   let retained = 0;
@@ -45,7 +48,9 @@ export async function purgeExpiredStatuses({ now = new Date(), dryRun = false } 
 
     const ids = batch.map((s) => s.id);
     // Delete rows first. status_views and status_reactions cascade.
-    const result = await prisma.status.deleteMany({ where: { id: { in: ids } } });
+    const result = await prisma.status.deleteMany({
+      where: { id: { in: ids } },
+    });
     deletedRows += result.count;
 
     for (const item of batch) {
