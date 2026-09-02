@@ -118,7 +118,7 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
     });
   } catch (error) {
     console.error('Create comment error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -196,7 +196,7 @@ router.post("/reply/:commentId", authMiddleware, BlockingMiddleware.checkPostInt
         res.status(201).json(reply);
     } catch (error) {
         console.error("Error creating reply:", error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
 });
 
@@ -269,7 +269,7 @@ router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInte
             isLiked: true
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
 });
 
@@ -325,7 +325,7 @@ router.get("/replies/:commentId", authMiddleware, async (req, res) => {
 
         res.json(repliesWithCounts);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
 });
 
@@ -409,7 +409,7 @@ router.get("/:postId", authMiddleware, async (req, res) => {
 
         res.json(commentsWithCounts);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
 });
 
@@ -459,7 +459,7 @@ router.put("/:postId/:commentId", authMiddleware, async (req, res) => {
     res.json({ success: true, comment });
   } catch (error) {
     console.error("Edit comment error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -509,7 +509,7 @@ router.delete("/:postId/:commentId", authMiddleware, async (req, res) => {
     res.json({ success: true, commentId, commentsCount });
   } catch (error) {
     console.error("Delete comment error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

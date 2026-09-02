@@ -25,7 +25,7 @@ router.post("/start", authMiddleware, async (req, res) => {
     res.json({ success: true, debate });
   } catch (error) {
     console.error("Error starting debate:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -50,7 +50,7 @@ router.put("/:debateId/score", authMiddleware, async (req, res) => {
 
     res.json({ success: true, score });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -73,7 +73,7 @@ router.put("/:debateId/vote", authMiddleware, async (req, res) => {
 
     res.json({ success: true, message: "Vote added" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -108,7 +108,7 @@ router.put("/:debateId/end", authMiddleware, async (req, res) => {
 
     res.json({ success: true, message: "Debate ended successfully", debate: updatedDebate });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -158,7 +158,7 @@ router.get("/", async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

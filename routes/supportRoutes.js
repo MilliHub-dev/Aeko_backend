@@ -86,7 +86,7 @@ router.get('/tickets', authMiddleware, async (req, res) => {
     });
     res.json({ success: true, tickets });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -132,7 +132,7 @@ router.get('/tickets/:id', authMiddleware, async (req, res) => {
 
     res.json({ success: true, ticket });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -200,7 +200,7 @@ router.post('/tickets/:id/messages', authMiddleware, async (req, res) => {
 
     res.status(201).json({ success: true, message: newMessage });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -244,7 +244,7 @@ router.patch('/tickets/:id/status', authMiddleware, async (req, res) => {
 
     res.json({ success: true, ticket: updatedTicket });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -299,7 +299,7 @@ router.get('/admin/tickets', authMiddleware, checkAdmin, async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -324,7 +324,7 @@ router.patch('/admin/tickets/:id/priority', authMiddleware, checkAdmin, async (r
 
     res.json({ success: true, ticket: updatedTicket });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

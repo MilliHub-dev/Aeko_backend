@@ -127,7 +127,7 @@ router.post("/purchase", authMiddleware, async (req, res) => {
     res.status(400).json({ success: false, message: "Unsupported payment method. Use paystack or stripe" });
   } catch (error) {
     console.error("Coin purchase init error:", error);
-    res.status(500).json({ success: false, message: "Failed to initialize purchase", error: error.message });
+    res.status(500).json({ success: false, message: "Failed to initialize purchase", error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -184,7 +184,7 @@ router.get("/purchase/verify", async (req, res) => {
     });
   } catch (error) {
     console.error("Coin verify error:", error);
-    res.status(500).json({ success: false, message: "Failed to verify payment", error: error.message });
+    res.status(500).json({ success: false, message: "Failed to verify payment", error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -238,7 +238,7 @@ router.post("/purchase/verify-stripe", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error("Stripe verify error:", error);
-    res.status(500).json({ success: false, message: "Failed to verify Stripe payment", error: error.message });
+    res.status(500).json({ success: false, message: "Failed to verify Stripe payment", error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

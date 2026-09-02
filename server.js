@@ -71,6 +71,7 @@ import {
 } from "./admin.js";
 import { adminAuth, adminLogin, adminLogout } from "./middleware/adminAuth.js";
 import cookieParser from "cookie-parser";
+import { sendError } from "./utils/apiErrors.js";
 import EnhancedChatSocket from "./sockets/enhancedChatSocket.js";
 import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
 import setupVideoCallSocket from "./sockets/videoCallSocket.js";
@@ -345,12 +346,11 @@ const adminOptions = {
 
 // Basic error handling
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    success: false,
-    message: "Internal Server Error",
-    error: process.env.NODE_ENV === "development" ? err.message : undefined,
-  });
+  // Classified so infrastructure faults (schema drift, database unreachable)
+  // answer 503 with an honest message instead of a blanket 500, and so raw
+  // error text never reaches a production client.
+  if (res.headersSent) return next(err);
+  return sendError(res, err, `${req.method} ${req.originalUrl}`);
 });
 
 function getNetworkIP() {

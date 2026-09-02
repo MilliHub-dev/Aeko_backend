@@ -91,7 +91,7 @@ router.get("/:id/profile", protect, checkPrivateCommunityAccess, async (req, res
     res.json({ success: true, community });
   } catch (error) {
     console.error("Get community profile error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -101,7 +101,7 @@ router.get("/:id/settings", protect, isCommunityAdminOrModerator, async (req, re
     res.json({ success: true, settings });
   } catch (error) {
     console.error("Get community settings error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -115,7 +115,7 @@ router.put("/:id/settings", protect, isCommunityAdmin, async (req, res) => {
     res.json({ success: true, settings });
   } catch (error) {
     console.error("Update community settings error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -149,7 +149,7 @@ router.post(
       res.json({ success: true, url, field });
     } catch (error) {
       console.error("Community photo upload error:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   },
 );
@@ -173,7 +173,7 @@ router.post("/:id/follow", protect, async (req, res) => {
     res.json({ success: true, following: true });
   } catch (error) {
     console.error("Follow community error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -185,7 +185,7 @@ router.post("/:id/unfollow", protect, async (req, res) => {
     res.json({ success: true, following: false });
   } catch (error) {
     console.error("Unfollow community error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -223,7 +223,7 @@ router.get("/:id/posts", protect, checkPrivateCommunityAccess, async (req, res) 
     });
   } catch (error) {
     console.error("Get community posts error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -249,7 +249,7 @@ router.post("/:id/posts", protect, isCommunityMember, async (req, res) => {
     res.status(201).json({ success: true, post });
   } catch (error) {
     console.error("Create community post error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -274,7 +274,7 @@ router.delete("/:id/posts/:postId", protect, isCommunityAdminOrModerator, async 
     res.json({ success: true, postId });
   } catch (error) {
     console.error("Delete community post error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -289,7 +289,7 @@ router.post("/:id/posts/:postId/pin", protect, isCommunityAdminOrModerator, asyn
     res.json({ success: true, pinnedPostIds: settings.pinnedPostIds });
   } catch (error) {
     console.error("Pin community post error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -303,7 +303,7 @@ router.post("/:id/posts/:postId/unpin", protect, isCommunityAdminOrModerator, as
     res.json({ success: true, pinnedPostIds: settings.pinnedPostIds });
   } catch (error) {
     console.error("Unpin community post error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -317,7 +317,7 @@ router.get("/:id/rules", protect, checkPrivateCommunityAccess, async (req, res) 
     res.json({ success: true, rules: settings.rules ?? [] });
   } catch (error) {
     console.error("Get community rules error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -343,7 +343,7 @@ router.post("/:id/rules", protect, isCommunityAdmin, async (req, res) => {
     res.status(201).json({ success: true, rule, rules: settings.rules });
   } catch (error) {
     console.error("Create community rule error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -372,7 +372,7 @@ router.put("/:id/rules/:ruleId", protect, isCommunityAdmin, async (req, res) => 
     res.json({ success: true, rules: settings.rules });
   } catch (error) {
     console.error("Update community rule error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -386,7 +386,7 @@ router.delete("/:id/rules/:ruleId", protect, isCommunityAdmin, async (req, res) 
     res.json({ success: true, rules: settings.rules });
   } catch (error) {
     console.error("Delete community rule error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -404,7 +404,7 @@ router.get("/:id/members/:userId/role", protect, checkPrivateCommunityAccess, as
     res.json({ success: true, ...member });
   } catch (error) {
     console.error("Get member role error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -428,7 +428,7 @@ router.put("/:id/members/:userId/role", protect, isCommunityAdmin, async (req, r
     res.json({ success: true, userId: req.params.userId, role });
   } catch (error) {
     console.error("Update member role error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -449,7 +449,7 @@ router.delete("/:id/members/:userId", protect, isCommunityAdminOrModerator, asyn
     res.json({ success: true, userId });
   } catch (error) {
     console.error("Remove member error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -468,7 +468,7 @@ const setMemberStatus = (status) => async (req, res) => {
     res.json({ success: true, userId, status: revert ? "active" : status });
   } catch (error) {
     console.error(`Set member ${status} error:`, error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 };
 
@@ -489,7 +489,7 @@ router.get("/:id/member-requests", protect, isCommunityAdminOrModerator, async (
     res.json({ success: true, requests });
   } catch (error) {
     console.error("List member requests error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -515,7 +515,7 @@ router.post(
       res.json({ success: true, userId, status: "active" });
     } catch (error) {
       console.error("Approve member request error:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   },
 );
@@ -533,7 +533,7 @@ router.post(
       res.json({ success: true, userId: req.params.userId, status: "denied" });
     } catch (error) {
       console.error("Deny member request error:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   },
 );
@@ -565,7 +565,7 @@ router.post("/:id/invite", protect, isCommunityAdminOrModerator, async (req, res
     res.status(201).json({ success: true, invite });
   } catch (error) {
     console.error("Create community invite error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -596,7 +596,7 @@ router.get("/invite/:code", async (req, res) => {
     res.json({ success: true, invite: { code, expiresAt: invite.expiresAt }, community });
   } catch (error) {
     console.error("Resolve community invite error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -637,7 +637,7 @@ router.post("/invite/:code/accept", protect, async (req, res) => {
     res.json({ success: true, communityId: match.id, alreadyMember: false });
   } catch (error) {
     console.error("Accept community invite error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -692,7 +692,7 @@ router.post("/:id/announce", protect, isCommunityAdminOrModerator, async (req, r
     res.json({ success: true, notified: recipients.length });
   } catch (error) {
     console.error("Community announce error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -706,7 +706,7 @@ router.get("/:id/notification-settings", protect, async (req, res) => {
     res.json({ success: true, settings: prefs });
   } catch (error) {
     console.error("Get community notification settings error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -726,7 +726,7 @@ router.put("/:id/notification-settings", protect, async (req, res) => {
     res.json({ success: true, settings: settings.notificationPrefs[userId] });
   } catch (error) {
     console.error("Update community notification settings error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

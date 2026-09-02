@@ -321,7 +321,7 @@ router.get("/", protect, async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: "Error fetching explore feed",
-      error: error.message 
+      error: process.env.NODE_ENV === "production" ? undefined : error.message 
     });
   }
 });

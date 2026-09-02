@@ -86,7 +86,7 @@ router.get('/', authMiddleware, checkAdmin, async (req, res) => {
     });
     res.json({ success: true, reports });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -140,7 +140,7 @@ router.post('/:userId/warn', authMiddleware, checkAdmin, async (req, res) => {
 
     res.json({ success: true, message: 'User warned', warningCount: user.warningCount });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -183,7 +183,7 @@ router.post('/:userId/ban', authMiddleware, checkAdmin, async (req, res) => {
 
     res.json({ success: true, message: 'User banned' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

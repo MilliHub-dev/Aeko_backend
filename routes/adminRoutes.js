@@ -124,7 +124,7 @@ router.get('/stats', adminAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Stats error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch admin stats', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to fetch admin stats', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -143,7 +143,7 @@ router.put('/users/:userId/ban', adminAuth, twoFactorMiddleware.requireTwoFactor
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'User not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to ban user', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to ban user', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -159,7 +159,7 @@ router.put('/users/:userId/unban', adminAuth, twoFactorMiddleware.requireTwoFact
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'User not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to unban user', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to unban user', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -187,7 +187,7 @@ router.put('/users/:userId/verify', adminAuth, twoFactorMiddleware.requireTwoFac
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'User not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to verify user', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to verify user', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -231,10 +231,10 @@ router.delete('/users/:userId', adminAuth, twoFactorMiddleware.requireTwoFactor(
         return res.status(400).json({ 
             success: false, 
             message: 'Cannot delete user due to existing references. Please ensure all related data is cleaned up.', 
-            error: error.message 
+            error: process.env.NODE_ENV === "production" ? undefined : error.message 
         });
     }
-    res.status(500).json({ success: false, message: 'Failed to delete user', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to delete user', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -250,7 +250,7 @@ router.delete('/posts/:postId', adminAuth, twoFactorMiddleware.requireTwoFactor(
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'Post not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to delete post', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to delete post', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -260,7 +260,7 @@ router.put('/posts/:postId/flag', adminAuth, async (req, res) => {
     // Returning success to mock behavior
     res.json({ success: true, message: 'Post flagged successfully (mock)' });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to flag post', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to flag post', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -280,7 +280,7 @@ router.put('/streams/:streamId/end', adminAuth, async (req, res) => {
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'Stream not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to end stream', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to end stream', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -300,7 +300,7 @@ router.put('/streams/:streamId/ban', adminAuth, async (req, res) => {
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'Stream not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to ban stream', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to ban stream', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -317,7 +317,7 @@ router.put('/ads/:adId/approve', adminAuth, async (req, res) => {
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'Ad not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to approve ad', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to approve ad', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -335,7 +335,7 @@ router.put('/ads/:adId/reject', adminAuth, async (req, res) => {
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'Ad not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to reject ad', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to reject ad', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -346,7 +346,7 @@ router.put('/debates/:debateId/end', adminAuth, async (req, res) => {
     // Mocking success
     res.json({ success: true, message: 'Debate ended successfully (mock)' });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to end debate', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to end debate', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -354,7 +354,7 @@ router.put('/debates/:debateId/moderate', adminAuth, async (req, res) => {
   try {
     res.json({ success: true, message: `Debate moderated (mock)` });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to moderate debate', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to moderate debate', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -364,7 +364,7 @@ router.put('/challenges/:challengeId/end', adminAuth, async (req, res) => {
     // Challenge schema is minimal
     res.json({ success: true, message: 'Challenge ended successfully (mock)' });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to end challenge', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to end challenge', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -372,7 +372,7 @@ router.put('/challenges/:challengeId/moderate', adminAuth, async (req, res) => {
   try {
     res.json({ success: true, message: `Challenge moderated (mock)` });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to moderate challenge', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to moderate challenge', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -382,7 +382,7 @@ router.post('/system/backup', superAdminAuth, async (req, res) => {
     // Implementation for system backup
     res.json({ success: true, message: 'System backup initiated' });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to initiate backup', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to initiate backup', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -391,7 +391,7 @@ router.get('/system/logs', superAdminAuth, async (req, res) => {
     // Implementation for system logs
     res.json({ success: true, logs: [] });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to fetch logs', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to fetch logs', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -413,7 +413,7 @@ router.post('/admins/create', superAdminAuth, twoFactorMiddleware.requireTwoFact
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'User not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to create admin', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to create admin', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -473,7 +473,7 @@ router.post('/setup/first-admin', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to create first admin', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to create first admin', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -491,7 +491,7 @@ router.delete('/admins/:userId', superAdminAuth, twoFactorMiddleware.requireTwoF
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, message: 'User not found' });
     }
-    res.status(500).json({ success: false, message: 'Failed to revoke admin', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to revoke admin', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -520,7 +520,7 @@ router.get('/verification-settings', adminAuth, async (req, res) => {
     }
     res.json(settings);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -599,7 +599,7 @@ router.put('/verification-settings', adminAuth, async (req, res) => {
 
     res.json(settings);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../config/db.js';
 import authMiddleware from '../middleware/authMiddleware.js';
+import { sendError } from "../utils/apiErrors.js";
 
 const router = express.Router();
 
@@ -76,7 +77,7 @@ router.post('/', authMiddleware, verifyAdmin, async (req, res) => {
     res.status(201).json({ success: true, data: plan });
   } catch (error) {
     console.error('Create Plan Error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    return sendError(res, error, "subscriptionPlan");
   }
 });
 
@@ -97,7 +98,7 @@ router.get('/', async (req, res) => {
     });
     res.json({ success: true, data: plans });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return sendError(res, error, "subscriptionPlan");
   }
 });
 
@@ -137,7 +138,7 @@ router.put('/:id', authMiddleware, verifyAdmin, async (req, res) => {
 
     res.json({ success: true, data: plan });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return sendError(res, error, "subscriptionPlan");
   }
 });
 
@@ -170,7 +171,7 @@ router.delete('/:id', authMiddleware, verifyAdmin, async (req, res) => {
 
     res.json({ success: true, message: 'Plan deactivated successfully', data: plan });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return sendError(res, error, "subscriptionPlan");
   }
 });
 

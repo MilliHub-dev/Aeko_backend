@@ -65,7 +65,7 @@ router.get('/', authMiddleware, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching user interests',
-            error: error.message
+            error: process.env.NODE_ENV === "production" ? undefined : error.message
         });
     }
 });
@@ -164,7 +164,7 @@ router.post('/', authMiddleware, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error updating interests',
-            error: error.message
+            error: process.env.NODE_ENV === "production" ? undefined : error.message
         });
     }
 });
@@ -242,7 +242,7 @@ router.delete('/:interestId', authMiddleware, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error removing interest',
-            error: error.message
+            error: process.env.NODE_ENV === "production" ? undefined : error.message
         });
     }
 });

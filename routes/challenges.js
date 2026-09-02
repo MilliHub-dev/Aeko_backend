@@ -22,7 +22,7 @@ router.post("/create", authMiddleware, async (req, res) => {
 
     res.json({ success: true, challenge });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -46,7 +46,7 @@ router.put("/:challengeId/duet", authMiddleware, async (req, res) => {
 
     res.json({ success: true, message: "Duet added" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -76,7 +76,7 @@ router.put("/:challengeId/vote", authMiddleware, async (req, res) => {
 
     res.json({ success: true, message: "Vote added" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -110,7 +110,7 @@ router.put("/:challengeId/end", authMiddleware, async (req, res) => {
 
     res.json({ success: true, message: "Challenge ended successfully", challenge: updatedChallenge });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -176,7 +176,7 @@ router.get("/", async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

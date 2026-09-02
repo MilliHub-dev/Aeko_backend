@@ -76,7 +76,7 @@ router.post('/', authMiddleware, adminMiddleware, twoFactorMiddleware.requireTwo
         res.status(500).json({
             success: false,
             message: 'Error creating interest',
-            error: error.message
+            error: process.env.NODE_ENV === "production" ? undefined : error.message
         });
     }
 });
@@ -110,7 +110,7 @@ router.get('/', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching interests',
-            error: error.message
+            error: process.env.NODE_ENV === "production" ? undefined : error.message
         });
     }
 });
@@ -180,7 +180,7 @@ router.put('/:id', authMiddleware, adminMiddleware, twoFactorMiddleware.requireT
         res.status(500).json({
             success: false,
             message: 'Error updating interest',
-            error: error.message
+            error: process.env.NODE_ENV === "production" ? undefined : error.message
         });
     }
 });
@@ -217,7 +217,7 @@ router.delete('/:id', authMiddleware, adminMiddleware, twoFactorMiddleware.requi
         res.status(500).json({
             success: false,
             message: 'Error deleting interest',
-            error: error.message
+            error: process.env.NODE_ENV === "production" ? undefined : error.message
         });
     }
 });

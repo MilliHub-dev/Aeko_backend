@@ -396,7 +396,7 @@ router.post("/create", authMiddleware,
       commentsCount: 0
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -556,7 +556,7 @@ router.get("/search", authMiddleware, async (req, res) => {
         res.json(mappedPosts);
     } catch (error) {
         console.error('Search error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
 });
 
@@ -757,7 +757,7 @@ router.get("/:postId", authMiddleware, async (req, res) => {
             type: ((post.type === 'image' || post.type === 'video') && !mediaUrl) ? 'text' : post.type
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
 });
 
@@ -878,7 +878,7 @@ router.get("/:postId/reposts", authMiddleware, async (req, res) => {
     });
     res.json(reposts);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -967,7 +967,7 @@ router.post("/:postId/promote", authMiddleware, async (req, res) => {
 
     res.json({ success: true, post: updatedPost });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1062,7 +1062,7 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('User posts endpoint error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1088,7 +1088,7 @@ router.get("/mixed", authMiddleware, async (req, res) => {
     
     res.json(posts);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1134,7 +1134,7 @@ router.get("/videos", authMiddleware, async (req, res) => {
 
     res.json(transformed);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1166,7 +1166,7 @@ router.post("/repost/:postId", authMiddleware, async (req, res) => {
       commentsCount: 0
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

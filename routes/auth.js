@@ -23,6 +23,7 @@ import passport, {
 import TwoFactorService from "../services/twoFactorService.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { getJwtSecret } from "../utils/authConfig.js";
+import { sendError } from "../utils/apiErrors.js";
 
 /**
  * @swagger
@@ -950,7 +951,7 @@ router.post("/signup", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Registration failed",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 });
@@ -1075,7 +1076,7 @@ router.post("/verify-email", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Email verification failed",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 });
@@ -1162,7 +1163,7 @@ router.post("/resend-verification", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to resend verification code",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 });
@@ -1380,12 +1381,10 @@ router.post(
         },
       });
     } catch (error) {
-      console.error("Login error:", error);
-      res.status(500).json({
-        success: false,
-        message: "Login failed",
-        error: error.message,
-      });
+      // Classified rather than blanket-500: a database behind on migrations
+      // returns 503 with an honest message instead of "Login failed", which was
+      // indistinguishable from wrong credentials. Raw details stay in the log.
+      return sendError(res, error, "auth.login");
     }
   },
 );
@@ -1437,7 +1436,7 @@ router.get("/profile-completion", authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to get profile completion status",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 });
@@ -1482,7 +1481,7 @@ router.get("/me", authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to get user information",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 });

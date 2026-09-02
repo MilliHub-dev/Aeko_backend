@@ -155,7 +155,7 @@ router.post('/create', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to create stream',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -217,7 +217,7 @@ router.post('/:streamId/start', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to start stream',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -282,7 +282,7 @@ router.post('/:streamId/end', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to end stream',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -349,7 +349,7 @@ router.put('/:streamId', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to update stream',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -416,7 +416,7 @@ router.post('/:streamId/thumbnail', authMiddleware, uploadImage.single('thumbnai
     res.status(500).json({
       success: false,
       message: 'Failed to upload thumbnail',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -480,7 +480,7 @@ router.get('/trending', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to get trending streams',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -552,7 +552,7 @@ router.get('/category/:category', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to get category streams',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -652,7 +652,7 @@ router.get('/search', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to search streams',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -724,7 +724,7 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to get platform statistics',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -790,7 +790,7 @@ router.get('/earnings', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('Earnings error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch earnings', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to fetch earnings', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -905,7 +905,7 @@ router.get('/:streamId', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to get stream details',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -970,7 +970,7 @@ router.get('/user/streams', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to get user streams',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -1060,7 +1060,7 @@ router.get('/user/analytics/:streamId', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to get stream analytics',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -1171,7 +1171,7 @@ router.post('/:streamId/co-hosts/invite', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to invite co-host',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -1264,7 +1264,7 @@ router.post('/:streamId/co-hosts/accept', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to accept co-host invite',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -1365,7 +1365,7 @@ router.post('/:streamId/guests/invite', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to invite guest',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -1458,7 +1458,7 @@ router.post('/:streamId/guests/accept', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to accept guest invite',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -1542,7 +1542,7 @@ router.post('/:streamId/moderators', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to add moderator',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -1604,7 +1604,7 @@ router.delete('/:streamId/moderators/:userId', authMiddleware, async (req, res) 
     res.status(500).json({
       success: false,
       message: 'Failed to remove moderator',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? undefined : error.message
     });
   }
 });
@@ -1695,7 +1695,7 @@ router.post('/:streamId/gift', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('Send gift error:', error);
-    res.status(500).json({ success: false, message: 'Failed to send gift', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to send gift', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1723,7 +1723,7 @@ router.get('/:streamId/gifts', authMiddleware, async (req, res) => {
     res.json({ success: true, data: { gifts, total, page: parseInt(page), limit: parseInt(limit) } });
   } catch (error) {
     console.error('Get gifts error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch gifts', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to fetch gifts', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1763,7 +1763,7 @@ router.get('/:streamId/leaderboard', async (req, res) => {
     res.json({ success: true, data: { streamId, leaderboard } });
   } catch (error) {
     console.error('Leaderboard error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch leaderboard', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to fetch leaderboard', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1803,7 +1803,7 @@ router.post('/:streamId/donate', authMiddleware, twoFactorMiddleware.requireTwoF
     });
   } catch (error) {
     console.error('Process donation error:', error);
-    res.status(500).json({ success: false, message: 'Failed to process donation', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to process donation', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1822,7 +1822,7 @@ router.use((error, req, res, next) => {
   res.status(500).json({
     success: false,
     message: 'Internal server error',
-    error: error.message
+    error: process.env.NODE_ENV === "production" ? undefined : error.message
   });
 });
 

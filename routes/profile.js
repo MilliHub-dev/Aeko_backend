@@ -245,7 +245,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
     res.json({ success: true, user: enhancedUser });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -382,7 +382,7 @@ router.put('/update', authMiddleware, twoFactorMiddleware.requireTwoFactor(), as
     if (error.code === 'P2025') {
         return res.status(404).json({ success: false, error: 'User not found' });
     }
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -437,7 +437,7 @@ router.put('/change-password', authMiddleware, twoFactorMiddleware.requireTwoFac
 
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -454,7 +454,7 @@ router.delete('/delete-account', authMiddleware, twoFactorMiddleware.requireTwoF
         // User already deleted or not found, which is technically a success for delete
         return res.json({ success: true, message: 'User account deleted successfully' });
     }
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -500,7 +500,7 @@ router.get('/followers', authMiddleware, async (req, res) => {
     res.json({ success: true, followers: filteredFollowers });
   } catch (error) {
     console.error('Get followers error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -545,7 +545,7 @@ router.get('/following', authMiddleware, async (req, res) => {
     res.json({ success: true, following: filteredFollowing });
   } catch (error) {
     console.error('Get following error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -580,7 +580,7 @@ router.get('/followers/search', authMiddleware, async (req, res) => {
 
     res.json({ success: true, followers: matchedFollowers });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -647,7 +647,7 @@ router.put('/follow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess()
 
     res.json({ success: true, message: 'Followed user successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -693,7 +693,7 @@ router.put('/unfollow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess
 
     res.json({ success: true, message: 'Unfollowed user successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -763,7 +763,7 @@ router.post("/verify", authMiddleware, twoFactorMiddleware.requireTwoFactor(), a
       if (error.code === 'P2025') {
         return res.status(404).json({ message: "User not found" });
       }
-      res.status(500).json({ message: "Server error", error: error.message });
+      res.status(500).json({ message: "Server error", error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   });
 
@@ -824,7 +824,7 @@ router.get("/eligibility", authMiddleware, async (req, res) => {
 
         res.json({ eligible, criteria });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
 });
 

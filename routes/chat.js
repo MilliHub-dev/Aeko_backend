@@ -172,7 +172,7 @@ router.post("/send-message", authMiddleware, BlockingMiddleware.checkMessagingAc
       res.json({ success: true });
   } catch (error) {
       console.error("Send message error:", error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

@@ -80,7 +80,7 @@ router.put("/bot-settings", authMiddleware, async (req, res) => {
       res.status(200).json({ message: "Smart Bot settings updated successfully", botSettings });
     } catch (error) {
       console.error("Update bot settings error:", error);
-      res.status(400).json({ message: "Bad request", error: error.message });
+      res.status(400).json({ message: "Bad request", error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   });
 

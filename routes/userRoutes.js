@@ -66,7 +66,7 @@ router.post("/register", async (req, res) => {
 
     res.status(201).json({ message: "User registered successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -214,7 +214,7 @@ router.get(
         // Retry without posts include? Or log.
         console.error("Profile fetch error (likely schema mismatch):", error);
       }
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   },
 );
@@ -375,7 +375,7 @@ router.get("/", authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to retrieve users",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 });
@@ -431,7 +431,7 @@ router.put(
       }
       res.json(user);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   },
 );
@@ -492,7 +492,7 @@ router.put(
       }
       res.json(user);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   },
 );

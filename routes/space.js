@@ -22,7 +22,7 @@ router.post("/create", authMiddleware, async (req, res) => {
 
     res.json({ success: true, space });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -52,7 +52,7 @@ router.patch("/:spaceId/end", authMiddleware, async (req, res) => {
 
     res.json({ success: true, space: updatedSpace });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -77,7 +77,7 @@ router.put("/:spaceId/highlight", authMiddleware, async (req, res) => {
 
     res.json({ success: true, space: updatedSpace });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

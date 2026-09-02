@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Server error', 
-      error: error.message 
+      error: process.env.NODE_ENV === "production" ? undefined : error.message 
     });
   }
 });

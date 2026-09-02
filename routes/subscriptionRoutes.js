@@ -4,6 +4,7 @@ import authMiddleware from "../middleware/authMiddleware.js";
 import adminMiddleware from "../middleware/adminMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { initializeSubscriptionPayment, verifySubscriptionPayment } from "../services/subscriptionPaymentService.js";
+import { sendError } from "../utils/apiErrors.js";
 
 const router = express.Router();
 
@@ -81,7 +82,7 @@ router.get("/admin/all", authMiddleware, adminMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error("Admin Subscribers Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    return sendError(res, error, "subscription");
   }
 });
 
@@ -137,7 +138,7 @@ router.get("/admin/stats", authMiddleware, adminMiddleware, async (req, res) => 
     });
   } catch (error) {
     console.error("Admin Stats Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    return sendError(res, error, "subscription");
   }
 });
 
@@ -259,7 +260,7 @@ router.get("/status", authMiddleware, async (req, res) => {
 
     res.json({ success: true, data: user });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return sendError(res, error, "subscription");
   }
 });
 

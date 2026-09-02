@@ -175,7 +175,7 @@ router.get('/conversations', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Get conversations error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -281,7 +281,7 @@ router.get('/messages/:chatId', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Get messages error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -362,7 +362,7 @@ router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAcce
     });
   } catch (error) {
     console.error('Send message error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -448,7 +448,7 @@ router.post('/upload-voice', authenticate, generalUpload.single('voice'), async 
     });
   } catch (error) {
     console.error('Upload voice error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -530,7 +530,7 @@ router.post('/upload-file', authenticate, generalUpload.single('file'), async (r
     });
   } catch (error) {
     console.error('Upload file error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -604,7 +604,7 @@ router.post('/emoji-reactions/:messageId', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Add reaction error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -663,7 +663,7 @@ router.delete('/emoji-reactions/:messageId', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Remove reaction error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -772,7 +772,7 @@ router.post('/bot-chat', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Bot chat error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -838,7 +838,7 @@ router.post('/assist', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Chat assistance error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -946,7 +946,7 @@ router.post('/create-chat', authenticate, BlockingMiddleware.checkMessagingAcces
     });
   } catch (error) {
     console.error('Create chat error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1002,7 +1002,7 @@ router.post('/mark-read/:chatId', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Mark read error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1081,7 +1081,7 @@ router.get('/search', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Search messages error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1113,7 +1113,7 @@ router.get('/emoji-list', async (req, res) => {
     });
   } catch (error) {
     console.error('Get emoji list error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1166,7 +1166,7 @@ router.delete('/messages/:messageId', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Delete message error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1224,7 +1224,7 @@ router.delete('/conversations/:chatId', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Delete chat error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1284,7 +1284,7 @@ router.get('/users', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Get users error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1353,7 +1353,7 @@ router.post('/groups/:chatId/icon', authenticate, generalUpload.single('icon'), 
     });
   } catch (error) {
     console.error('Update group icon error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1418,7 +1418,7 @@ router.get('/groups/:chatId/invite', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Get invite link error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1490,7 +1490,7 @@ router.post('/groups/join/:inviteCode', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Join group error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1555,7 +1555,7 @@ router.delete('/groups/:chatId/members/:userId', authenticate, async (req, res) 
     });
   } catch (error) {
     console.error('Remove member error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
@@ -1631,7 +1631,7 @@ router.delete('/groups/:chatId/leave', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Leave group error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
