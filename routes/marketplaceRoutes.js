@@ -1,7 +1,8 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
 import { connection } from "../chain/client.js";
-import { aekoToLamports, lamportsToAeko, deriveWithSeed, getMinBalanceForRentExemption } from "../chain/utils.js";
+import { aekoToLamports, lamportsToAeko, deriveWithSeed, getMinBalanceForRentExemption, sendAndConfirmSigned } from "../chain/utils.js";
+import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeypair.js";
 import { buildPreparedMultiInstructionTransaction, buildSystemTransferInstruction } from "../chain/txBuilder.js";
 import {
   PROGRAM_IDS,
@@ -333,6 +334,90 @@ router.post("/prepare-cancel", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("prepare-cancel error:", error);
     res.status(500).json({ success: false, message: "Failed to prepare cancel transaction" });
+  }
+});
+
+/**
+ * @swagger
+ * /api/marketplace/buy:
+ *   post:
+ *     tags: [Marketplace]
+ *     summary: Buy a listing using the caller's custodial wallet
+ *     description: |
+ *       Custodial counterpart to prepare-buy. The backend derives the buyer's
+ *       key, signs and submits, so the client never handles key material.
+ *       Fee split (royalty, platform fee, seller proceeds) is identical.
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post("/buy", authMiddleware, async (req, res) => {
+  try {
+    if (!isCustodyConfigured()) {
+      return res.status(503).json({ success: false, message: "Purchases are temporarily unavailable." });
+    }
+
+    const { listingId } = req.body || {};
+    if (!listingId) return res.status(400).json({ success: false, message: "listingId is required" });
+    if (!TREASURY_ADDRESS) return res.status(500).json({ success: false, message: "Platform treasury not configured" });
+
+    const userId = req.user?.id || req.userId;
+    const signer = getCustodialKeypair(userId);
+    const buyer = signer.publicKey;
+
+    const listing = await fetchListing(listingId);
+    if (!listing || listing.state !== "Active") {
+      return res.status(400).json({ success: false, message: "Listing not available" });
+    }
+    if (listing.seller === buyer) {
+      return res.status(400).json({ success: false, message: "You already own this listing" });
+    }
+
+    const { priceLamports, royaltyBps, seller, creator } = listing;
+    const royaltyLamports = Math.floor((priceLamports * royaltyBps) / 10_000);
+    const platformFeeLamports = Math.floor((priceLamports * PLATFORM_FEE_BPS) / 10_000);
+    const sellerLamports = priceLamports - royaltyLamports - platformFeeLamports;
+
+    const balance = await connection.getBalance(buyer);
+    if (balance < priceLamports) {
+      return res.status(400).json({
+        success: false,
+        message: "Insufficient balance",
+        balance: lamportsToAeko(balance),
+        required: lamportsToAeko(priceLamports),
+      });
+    }
+
+    const blockhash = await connection.getLatestBlockhash();
+    const instructions = [
+      buildSystemTransferInstruction(buyer, seller, sellerLamports),
+      buildSystemTransferInstruction(buyer, TREASURY_ADDRESS, platformFeeLamports),
+    ];
+    if (royaltyLamports > 0 && creator && creator !== seller) {
+      instructions.push(buildSystemTransferInstruction(buyer, creator, royaltyLamports));
+    }
+
+    const txBase64 = buildPreparedMultiInstructionTransaction({
+      payer: buyer,
+      recentBlockhash: blockhash,
+      instructions,
+    });
+
+    const signature = await sendAndConfirmSigned(connection, txBase64, signer);
+
+    res.json({
+      success: true,
+      signature,
+      listingId,
+      breakdown: {
+        price: listing.priceAeko,
+        royalty: lamportsToAeko(royaltyLamports),
+        platformFee: lamportsToAeko(platformFeeLamports),
+        sellerGets: lamportsToAeko(sellerLamports),
+      },
+    });
+  } catch (error) {
+    console.error("marketplace buy error:", error);
+    res.status(500).json({ success: false, message: "Purchase failed" });
   }
 });
 
