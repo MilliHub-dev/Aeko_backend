@@ -413,4 +413,104 @@ router.get("/:postId", authMiddleware, async (req, res) => {
     }
 });
 
+// Edit a comment.
+//
+// The mobile client has called PUT /api/comments/:postId/:commentId since
+// launch, but no such route existed, so editing a comment always 404'd.
+// Only the comment's author may edit it.
+router.put("/:postId/:commentId", authMiddleware, async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const { text } = req.body;
+    const userId = req.userId;
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: "Comment text is required" });
+    }
+
+    const existing = await prisma.comment.findUnique({
+      where: { id: commentId },
+      select: { userId: true, postId: true },
+    });
+
+    if (!existing || existing.postId !== postId) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+    if (existing.userId !== userId) {
+      return res.status(403).json({ error: "You can only edit your own comments" });
+    }
+
+    const comment = await prisma.comment.update({
+      where: { id: commentId },
+      data: { text: text.trim() },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+            username: true,
+            profilePicture: true,
+          },
+        },
+      },
+    });
+
+    res.json({ success: true, comment });
+  } catch (error) {
+    console.error("Edit comment error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a comment.
+//
+// Also previously missing. Replies cascade via the self-relation's
+// onDelete: Cascade, and any notification pointing at the comment is removed so
+// the notification list cannot link to a comment that no longer exists.
+//
+// Either the comment's author or the post's owner may delete it.
+router.delete("/:postId/:commentId", authMiddleware, async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const userId = req.userId;
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const existing = await prisma.comment.findUnique({
+      where: { id: commentId },
+      select: { userId: true, postId: true, post: { select: { userId: true } } },
+    });
+
+    if (!existing || existing.postId !== postId) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+
+    const isAuthor = existing.userId === userId;
+    const isPostOwner = existing.post?.userId === userId;
+    if (!isAuthor && !isPostOwner) {
+      return res.status(403).json({ error: "Not allowed to delete this comment" });
+    }
+
+    await prisma.comment.delete({ where: { id: commentId } });
+
+    try {
+      const { deleteEntityNotifications } = await import(
+        "../services/notificationService.js"
+      );
+      await deleteEntityNotifications(commentId);
+    } catch (cleanupError) {
+      // Never fail the delete because notification cleanup failed.
+      console.error("Comment notification cleanup failed:", cleanupError);
+    }
+
+    const commentsCount = await prisma.comment.count({ where: { postId } });
+
+    res.json({ success: true, commentId, commentsCount });
+  } catch (error) {
+    console.error("Delete comment error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

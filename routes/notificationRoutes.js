@@ -79,6 +79,37 @@ router.put('/push-token', authMiddleware, async (req, res) => {
     }
 });
 
+// Release a push token on sign-out.
+//
+// The token is matched before clearing so that a device signing out cannot
+// unregister a token that has since been claimed by another device on the same
+// account. A mismatch is reported as success: the caller's registration is
+// already gone, which is the outcome it asked for.
+router.delete('/push-token', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.id || req.user._id;
+        const { pushToken } = req.body || {};
+
+        if (!pushToken) {
+            return res.status(400).json({ error: 'Push token is required' });
+        }
+
+        const { count } = await prisma.user.updateMany({
+            where: { id: userId, pushToken },
+            data: { pushToken: null }
+        });
+
+        res.json({
+            message: count > 0
+                ? 'Push token released successfully'
+                : 'Push token was already released'
+        });
+    } catch (error) {
+        console.error('Delete push token error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 /**
  * @swagger
  * components:

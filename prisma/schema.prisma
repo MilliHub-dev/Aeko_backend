@@ -630,6 +630,7 @@ model User {
   profileCompletion Json?
   privacy Json?
   notificationSettings Json?
+  preferences Json?
   pushToken String?
   twoFactorAuth Json?
   createdAt DateTime @default(now())

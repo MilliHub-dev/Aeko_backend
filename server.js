@@ -44,6 +44,7 @@ import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
 import interestRoutes from "./routes/interestRoutes.js";
 import userInterestRoutes from "./routes/userInterestRoutes.js";
 import communityRoutes from "./routes/communityRoutes.js";
+import communityExtendedRoutes from "./routes/communityExtendedRoutes.js";
 import communityProfileRoutes from "./routes/communityProfileRoutes.js";
 import communityPaymentRoutes from "./routes/communityPaymentRoutes.js";
 import securityRoutes from "./routes/security.js";
@@ -58,6 +59,9 @@ import marketplaceRoutes from "./routes/marketplaceRoutes.js";
 import rewardsRoutes from "./routes/rewardsRoutes.js";
 import stakingRoutes from "./routes/stakingRoutes.js";
 import coinRoutes from "./routes/coinRoutes.js";
+import configRoutes from "./routes/configRoutes.js";
+import settingsRoutes from "./routes/settingsRoutes.js";
+import postTransferRoutes from "./routes/postTransferRoutes.js";
 
 import {
   admin,
@@ -275,6 +279,13 @@ app.use("/api/marketplace", apiRateLimit, marketplaceRoutes);
 app.use("/api/rewards", apiRateLimit, rewardsRoutes);
 app.use("/api/staking", apiRateLimit, stakingRoutes);
 app.use("/api/coins", apiRateLimit, coinRoutes);
+// Unauthenticated presentation config consumed by the mobile client.
+app.use("/api/config", apiRateLimit, configRoutes);
+// Aggregate user settings (display preferences + notification/privacy/2FA state).
+app.use("/api/settings", apiRateLimit, settingsRoutes);
+// Post ownership transfer. The router existed but was never mounted, so
+// /api/posts/transfer and /api/posts/transfer-history/:id both 404'd.
+app.use("/api/posts", apiRateLimit, postTransferRoutes);
 
 // Admin API Routes with 2FA protection for sensitive operations
 // Expose admin REST endpoints such as /api/admin/setup/first-admin
@@ -289,6 +300,14 @@ app.use(
   blockingMiddleware.checkPostInteraction(),
   privacyMiddleware.filterResponsePosts,
   communityRoutes,
+);
+// Posts, rules, members, moderation, invites, settings and follow. Mounted
+// after communityRoutes so the existing create/list/get/join routes win.
+app.use(
+  "/api/communities",
+  apiRateLimit,
+  blockingMiddleware.checkPostInteraction(),
+  communityExtendedRoutes,
 );
 app.use(
   "/api/community-profiles",

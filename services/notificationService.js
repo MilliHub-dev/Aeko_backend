@@ -1,4 +1,5 @@
 import { prisma } from "../config/db.js";
+import { sendExpoPushMessages } from "./pushProviderService.js";
 
 /**
  * Create a new notification
@@ -159,19 +160,30 @@ export const sendPushNotification = async (userId, notification) => {
 
     if (!shouldSend) return;
 
-    console.log(`[PUSH] Sending to ${userId} (${user.pushToken}): ${notification.title} - ${notification.message}`);
-    
-    // TODO: Integrate FCM/OneSignal here
-    // const payload = {
-    //   token: user.pushToken,
-    //   notification: {
-    //     title: notification.title,
-    //     body: notification.message
-    //   },
-    //   data: notification.metadata
-    // };
-    // await sendToPushProvider(payload);
+    // Android routes call notifications through their own high-importance
+    // channel; everything else uses the default channel declared in the app.
+    const channelId =
+      notification.type === 'INCOMING_CALL' ? 'incoming-calls' : 'default';
 
+    await sendExpoPushMessages([
+      {
+        to: user.pushToken,
+        title: notification.title,
+        body: notification.message,
+        // Carried through to the client tap handler so it can deep-link to the
+        // entity the notification is about.
+        data: {
+          type,
+          entityId: notification.entityId,
+          entityType: notification.entityType,
+          senderId: notification.senderId,
+          notificationId: notification.id,
+          ...(notification.metadata || {}),
+        },
+        sound: 'default',
+        channelId,
+      },
+    ]);
   } catch (error) {
     console.error('Error sending push notification:', error);
   }
