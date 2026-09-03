@@ -16,6 +16,59 @@ import authMiddleware from "../middleware/authMiddleware.js";
  * here — this route is a read/write aggregate, not a second source of truth.
  */
 
+/**
+ * Derives the device list shown in Login Activity from recorded sign-ins.
+ *
+ * There is no device table; sign-ins are logged as SecurityEvents carrying the
+ * user agent and IP. Grouping successful logins by user agent gives one entry
+ * per device, which is what the screen expects — it previously received an
+ * empty array and always read "No login activity found".
+ */
+function classifyUserAgent(ua = "") {
+  const s = ua.toLowerCase();
+  if (/ipad|tablet/.test(s)) return { type: "tablet", name: "Tablet" };
+  if (/iphone|android|mobile|okhttp|expo/.test(s)) {
+    if (s.includes("iphone")) return { type: "mobile", name: "iPhone" };
+    if (s.includes("android")) return { type: "mobile", name: "Android device" };
+    return { type: "mobile", name: "Mobile device" };
+  }
+  if (/macintosh|mac os/.test(s)) return { type: "desktop", name: "Mac" };
+  if (/windows/.test(s)) return { type: "desktop", name: "Windows PC" };
+  if (/linux/.test(s)) return { type: "desktop", name: "Linux PC" };
+  return { type: "desktop", name: "Unknown device" };
+}
+
+async function buildLoginDevices(userId, req) {
+  const events = await prisma.securityEvent.findMany({
+    where: { userId, eventType: "login", success: true },
+    orderBy: { timestamp: "desc" },
+    take: 100,
+    select: { id: true, userAgent: true, ipAddress: true, timestamp: true },
+  });
+
+  const currentUa = req.headers["user-agent"] || "";
+  const byAgent = new Map();
+
+  for (const e of events) {
+    const key = e.userAgent || "unknown";
+    // Events are newest-first, so the first occurrence is the latest sign-in.
+    if (byAgent.has(key)) continue;
+    const { type, name } = classifyUserAgent(key);
+    byAgent.set(key, {
+      id: e.id,
+      deviceName: name,
+      deviceType: type,
+      // No geo-IP lookup is wired up; showing the IP is honest, inventing a
+      // city is not.
+      location: e.ipAddress && e.ipAddress !== "unknown" ? e.ipAddress : "Unknown location",
+      lastActive: e.timestamp.toISOString(),
+      isCurrentDevice: key === currentUa,
+    });
+  }
+
+  return [...byAgent.values()];
+}
+
 const router = express.Router();
 
 const DEFAULT_PREFERENCES = {
@@ -92,9 +145,7 @@ router.get("/", authMiddleware, async (req, res) => {
         isEnabled: Boolean(twoFactor.isEnabled),
         ...(twoFactor.enabledAt ? { enabledAt: twoFactor.enabledAt } : {}),
       },
-      // Device history is served by /api/security; an empty list keeps the
-      // client's shape valid without duplicating that source of truth here.
-      loginDevices: [],
+      loginDevices: await buildLoginDevices(userId, req),
     });
   } catch (error) {
     console.error("Get settings error:", error);

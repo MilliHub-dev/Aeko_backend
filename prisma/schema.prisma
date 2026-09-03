@@ -616,6 +616,8 @@ model User {
   bio String?
   blueTick Boolean @default(false)
   goldenTick Boolean @default(false)
+  prideTick Boolean @default(false)
+  businessTick Boolean @default(false)
   subscriptionStatus String @default("inactive")
   subscriptionExpiry DateTime?
   subscriptionPlanId String?

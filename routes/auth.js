@@ -24,6 +24,7 @@ import TwoFactorService from "../services/twoFactorService.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { getJwtSecret } from "../utils/authConfig.js";
 import { sendError } from "../utils/apiErrors.js";
+import securityLogger from "../services/securityLogger.js";
 
 /**
  * @swagger
@@ -798,6 +799,12 @@ if (isGoogleIdTokenVerificationConfigured()) {
         { expiresIn: "7d" },
       );
 
+      // Google sign-ins were not recorded either, so an account using only
+      // Google saw an empty Login Activity list.
+      securityLogger
+        .logLoginEvent(dbUser.id, req, { method: "google" })
+        .catch((err) => console.error("Failed to log login event:", err));
+
       res.json({
         success: true,
         message: "Login successful",
@@ -1197,6 +1204,13 @@ router.post(
         console.log(
           `Login attempt failed: Invalid password for email ${email}`,
         );
+        // Logged against the real account so the owner can see the attempt.
+        securityLogger
+          .logLoginEvent(user.id, req, {
+            success: false,
+            errorMessage: "Invalid password",
+          })
+          .catch((err) => console.error("Failed to log login event:", err));
         return res.status(401).json({
           success: false,
           message: "Invalid credentials",
@@ -1347,6 +1361,14 @@ router.post(
         getJwtSecret(),
         { expiresIn: "7d" },
       );
+
+      // Record the sign-in so it appears in Settings -> Login Activity. Not
+      // awaited: a logging failure must never block a valid login.
+      securityLogger
+        .logLoginEvent(user.id, req, {
+          method: twoFactorToken || backupCode ? "2fa" : "password",
+        })
+        .catch((err) => console.error("Failed to log login event:", err));
 
       // Send login notification email
       const userAgent = req.headers["user-agent"] || "Unknown Device";

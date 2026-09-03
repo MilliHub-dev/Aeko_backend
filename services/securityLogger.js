@@ -70,6 +70,30 @@ class SecurityLogger {
   }
 
   /**
+   * Log a sign-in.
+   *
+   * Everything else in this service was already wired up, but sign-ins were
+   * never recorded — which meant the Login Activity screen, whose entire
+   * purpose is to show them, was permanently empty. Failed attempts are logged
+   * too so a user can spot someone trying their password.
+   *
+   * @param {string} userId
+   * @param {import('express').Request} req
+   * @param {{ method?: 'password'|'google'|'2fa', success?: boolean, errorMessage?: string }} [options]
+   */
+  async logLoginEvent(userId, req, options = {}) {
+    const { method = 'password', success = true, errorMessage = null } = options;
+    return this.logEvent({
+      user: userId,
+      eventType: success ? 'login' : 'login_failed',
+      req,
+      success,
+      errorMessage,
+      metadata: { method },
+    });
+  }
+
+  /**
    * Log blocking events
    */
   async logBlockEvent(userId, targetUserId, req, success = true, errorMessage = null, metadata = {}) {
