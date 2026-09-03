@@ -210,7 +210,11 @@ router.post('/:streamId/start', authMiddleware, async (req, res) => {
         streamId: updatedStream.id,
         _id: updatedStream.id,
         status: updatedStream.status,
-        startedAt: updatedStream.startedAt
+        startedAt: updatedStream.startedAt,
+        // The full record, so a client going live has the title, host details,
+        // room id and playback URLs it needs to render the broadcast screen.
+        // Returning only the id left those fields undefined on the client.
+        stream: updatedStream
       }
     });
   } catch (error) {
