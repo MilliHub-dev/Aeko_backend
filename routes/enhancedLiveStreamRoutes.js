@@ -8,6 +8,7 @@ import authMiddleware from "../middleware/authMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { uploadImage } from '../middleware/upload.js';
 import { GIFT_CATALOG, getGiftById, HOST_COIN_SHARE } from "../config/giftCatalog.js";
+import { sendError } from '../utils/apiErrors.js';
 
 const router = express.Router();
 
@@ -664,6 +665,184 @@ router.get('/search', async (req, res) => {
  * @desc    Get available stream categories
  * @access  Public
  */
+/**
+ * @route   GET /api/livestream/home
+ * @desc    Aggregated payload for the mobile Live tab: what is live now, what is
+ *          scheduled next, and the category chips.
+ * @access  Private
+ *
+ * The client previously called /api/live/home, which never existed, so the Live
+ * screen rendered empty with no error visible to the user.
+ *
+ * Note the icons: this returns Ionicons glyph names, not the emoji that
+ * GET /categories returns, because the Live screen renders them through
+ * <Ionicons name={category.icon} />. Emoji would render as nothing there.
+ */
+const HOME_CATEGORIES = [
+  { value: 'gaming', name: 'Gaming', icon: 'game-controller-outline' },
+  { value: 'music', name: 'Music', icon: 'musical-notes-outline' },
+  { value: 'education', name: 'Education', icon: 'school-outline' },
+  { value: 'entertainment', name: 'Entertainment', icon: 'film-outline' },
+  { value: 'sports', name: 'Sports', icon: 'football-outline' },
+  { value: 'news', name: 'News', icon: 'newspaper-outline' },
+  { value: 'technology', name: 'Technology', icon: 'laptop-outline' },
+  { value: 'lifestyle', name: 'Lifestyle', icon: 'home-outline' },
+  { value: 'cooking', name: 'Cooking', icon: 'restaurant-outline' },
+  { value: 'art', name: 'Art', icon: 'color-palette-outline' },
+  { value: 'other', name: 'Other', icon: 'ellipsis-horizontal-outline' },
+];
+
+/** Formats a scheduled time for the compact label the upcoming card shows. */
+const formatScheduledLabel = (date) => {
+  if (!date) return '';
+  const when = new Date(date);
+  const diffMs = when.getTime() - Date.now();
+  const diffMins = Math.round(diffMs / 60000);
+
+  if (diffMins <= 0) return 'Starting now';
+  if (diffMins < 60) return `in ${diffMins}m`;
+  const diffHours = Math.round(diffMins / 60);
+  if (diffHours < 24) return `in ${diffHours}h`;
+  return when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+router.get('/home', authMiddleware, async (req, res) => {
+  try {
+    const [live, upcoming, categoryCounts] = await Promise.all([
+      prisma.liveStream.findMany({
+        where: { status: 'live', streamType: 'public' },
+        orderBy: { currentViewers: 'desc' },
+        take: 20,
+      }),
+      prisma.liveStream.findMany({
+        where: {
+          status: 'scheduled',
+          streamType: 'public',
+          scheduledFor: { gt: new Date() },
+        },
+        orderBy: { scheduledFor: 'asc' },
+        take: 20,
+      }),
+      prisma.liveStream.groupBy({
+        by: ['category'],
+        where: { status: 'live' },
+        _count: { category: true },
+      }),
+    ]);
+
+    const counts = Object.fromEntries(
+      categoryCounts.map((c) => [c.category, c._count.category]),
+    );
+
+    res.json({
+      liveNow: live.map((s) => ({
+        id: s.id,
+        title: s.title,
+        category: s.category,
+        thumbnail: s.thumbnail ?? '',
+        streamer: s.hostName,
+        streamerId: s.hostId,
+        avatar: s.hostProfilePicture ?? '',
+        viewers: s.currentViewers,
+        startedAt: (s.startedAt ?? s.createdAt).toISOString(),
+      })),
+      upcoming: upcoming.map((s) => ({
+        id: s.id,
+        title: s.title,
+        category: s.category,
+        scheduledAt: s.scheduledFor ? s.scheduledFor.toISOString() : '',
+        // The card renders `time` directly; scheduledAt is kept for clients
+        // that want to format it themselves.
+        time: formatScheduledLabel(s.scheduledFor),
+        streamer: s.hostName,
+        streamerId: s.hostId,
+        avatar: s.hostProfilePicture ?? '',
+        description: s.description ?? undefined,
+        isReminderSet: false,
+      })),
+      categories: HOME_CATEGORIES.map((c) => ({
+        name: c.name,
+        icon: c.icon,
+        value: c.value,
+        count: counts[c.value] ?? 0,
+      })),
+    });
+  } catch (error) {
+    return sendError(res, error, 'livestream.home');
+  }
+});
+
+/** Shapes an ended stream into the replay card the client renders. */
+const toVod = (s) => ({
+  id: s.id,
+  title: s.title,
+  category: s.category,
+  thumbnail: s.thumbnail ?? '',
+  streamer: s.hostName,
+  streamerId: s.hostId,
+  avatar: s.hostProfilePicture ?? '',
+  videoUrl: s.hlsUrl ?? '',
+  duration: s.duration ?? 0,
+  viewCount: s.totalViews ?? 0,
+  recordedAt: (s.endedAt ?? s.updatedAt).toISOString(),
+});
+
+/**
+ * @route   GET /api/livestream/vod
+ * @desc    Replays: streams that have ended and still have a playable recording.
+ * @access  Private
+ */
+router.get('/vod', authMiddleware, async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+
+    const where = {
+      status: 'ended',
+      streamType: 'public',
+      // Without a playback URL there is nothing to replay, so those rows are
+      // excluded rather than returned as broken cards.
+      hlsUrl: { not: null },
+    };
+
+    const [vods, total] = await Promise.all([
+      prisma.liveStream.findMany({
+        where,
+        orderBy: { endedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.liveStream.count({ where }),
+    ]);
+
+    res.json({
+      vods: vods.map(toVod),
+      hasMore: page * limit < total,
+      page,
+    });
+  } catch (error) {
+    return sendError(res, error, 'livestream.vod.list');
+  }
+});
+
+/**
+ * @route   GET /api/livestream/vod/:vodId
+ * @access  Private
+ */
+router.get('/vod/:vodId', authMiddleware, async (req, res) => {
+  try {
+    const stream = await prisma.liveStream.findUnique({
+      where: { id: req.params.vodId },
+    });
+    if (!stream || stream.status !== 'ended') {
+      return res.status(404).json({ success: false, message: 'Replay not found' });
+    }
+    res.json({ vod: toVod(stream) });
+  } catch (error) {
+    return sendError(res, error, 'livestream.vod.get');
+  }
+});
+
 router.get('/categories', (req, res) => {
   const categories = [
     { value: 'gaming', label: 'Gaming', icon: '🎮' },
@@ -1824,6 +2003,44 @@ router.use((error, req, res, next) => {
     message: 'Internal server error',
     error: process.env.NODE_ENV === "production" ? undefined : error.message
   });
+});
+
+/**
+ * @route   POST /api/livestream/:streamId/like
+ * @desc    Toggles the caller's like on a stream.
+ * @access  Private
+ */
+router.post('/:streamId/like', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.userId;
+    const { streamId } = req.params;
+
+    const stream = await prisma.liveStream.findUnique({
+      where: { id: streamId },
+      select: { likedBy: true, likes: true },
+    });
+    if (!stream) {
+      return res.status(404).json({ success: false, message: 'Stream not found' });
+    }
+
+    const likedBy = Array.isArray(stream.likedBy) ? stream.likedBy : [];
+    const hasLiked = likedBy.includes(userId);
+    const nextLikedBy = hasLiked
+      ? likedBy.filter((id) => id !== userId)
+      : [...likedBy, userId];
+
+    const updated = await prisma.liveStream.update({
+      where: { id: streamId },
+      // Derived from the array rather than incrementing a counter, so the two
+      // cannot drift apart on repeated taps.
+      data: { likedBy: nextLikedBy, likes: nextLikedBy.length },
+      select: { likes: true },
+    });
+
+    res.json({ success: true, liked: !hasLiked, likes: updated.likes });
+  } catch (error) {
+    return sendError(res, error, 'livestream.like');
+  }
 });
 
 export default router;
