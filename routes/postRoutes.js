@@ -566,57 +566,86 @@ router.get("/feed", authMiddleware, async (req, res) => {
         const requestingUserId = req.user.id || req.user._id;
         const privacyWhere = await getPrivacyWhereClause(requestingUserId);
         
-        // Get following IDs for prioritization
         const user = await prisma.user.findUnique({
             where: { id: requestingUserId },
             select: { following: true, notInterested: true }
         });
         const followingIds = Array.isArray(user?.following) ? user.following : [];
-        
+
         // Filter out not interested posts
         const notInterested = user?.notInterested || {};
         const excludedPostIds = Array.isArray(notInterested.posts) ? notInterested.posts : [];
         const notInExcluded = { id: { notIn: excludedPostIds } };
 
-        // 1. Get posts from followed users (Prioritized)
-        const followedPosts = await prisma.post.findMany({
-            where: {
-                AND: [
-                    privacyWhere,
-                    notInExcluded,
-                    { userId: { in: followingIds } }
-                ]
-            },
-            include: {
-                users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } },
-                _count: { select: { comments: true } }
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 50
-        });
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+        const skip = (page - 1) * limit;
 
-        // 2. If we need more posts to fill the feed, get other visible posts
-        let allPosts = [...followedPosts];
-        if (allPosts.length < 50) {
-            const remainingSlots = 50 - allPosts.length;
-            const otherPosts = await prisma.post.findMany({
-                where: {
-                    AND: [
-                        privacyWhere,
-                        notInExcluded,
-                        { userId: { notIn: followingIds } }
-                    ]
-                },
-                include: {
-                    users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } },
-                    _count: { select: { comments: true } }
-                },
+        const postInclude = {
+            users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } },
+            _count: { select: { comments: true } }
+        };
+
+        // Two tiers: posts from people you follow come first, then everyone
+        // else fills the remainder. Each tier is strictly newest-first.
+        //
+        // The original code did this by fetching both and concatenating —
+        // `[...followedPosts, ...otherPosts]` — which was never sorted as a
+        // whole and ignored page/limit entirely, so the same 50 rows came back
+        // in a fixed, arbitrary-looking order on every request.
+        //
+        // Paginating across two tiers means treating them as one list: the
+        // followed tier occupies positions 0..followedTotal-1, and the rest
+        // continues from there. Counting the followed tier first is what lets a
+        // page land in the right place without ever repeating or skipping a post.
+        const followedWhere = followingIds.length
+            ? { AND: [privacyWhere, notInExcluded, { userId: { in: followingIds } }] }
+            : null;
+        const othersWhere = {
+            AND: [
+                privacyWhere,
+                notInExcluded,
+                ...(followingIds.length ? [{ userId: { notIn: followingIds } }] : [])
+            ]
+        };
+
+        const followedTotal = followedWhere
+            ? await prisma.post.count({ where: followedWhere })
+            : 0;
+
+        let allPosts = [];
+
+        if (skip < followedTotal) {
+            allPosts = await prisma.post.findMany({
+                where: followedWhere,
+                include: postInclude,
                 orderBy: { createdAt: 'desc' },
-                take: remainingSlots
+                skip,
+                take: limit
             });
-            allPosts = [...allPosts, ...otherPosts];
+
+            // Followed posts ran out part-way through this page, so top it up
+            // from everyone else, starting at their beginning.
+            if (allPosts.length < limit) {
+                const fill = await prisma.post.findMany({
+                    where: othersWhere,
+                    include: postInclude,
+                    orderBy: { createdAt: 'desc' },
+                    take: limit - allPosts.length
+                });
+                allPosts = [...allPosts, ...fill];
+            }
+        } else {
+            // Entirely past the followed tier; continue through the rest.
+            allPosts = await prisma.post.findMany({
+                where: othersWhere,
+                include: postInclude,
+                orderBy: { createdAt: 'desc' },
+                skip: skip - followedTotal,
+                take: limit
+            });
         }
-        
+
         // Map relation back to 'user' for frontend compatibility
         const mappedPosts = allPosts.map(post => {
             const likes = Array.isArray(post.likes) ? post.likes : [];
@@ -1083,7 +1112,8 @@ router.get("/mixed", authMiddleware, async (req, res) => {
             user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true } }
         },
         orderBy: { createdAt: 'desc' },
-        take: 50
+        skip: (page - 1) * limit,
+        take: limit
     });
     
     res.json(posts);
@@ -1096,6 +1126,10 @@ router.get("/mixed", authMiddleware, async (req, res) => {
 router.get("/videos", authMiddleware, async (req, res) => {
   try {
     const { effect } = req.query;
+    // Paginated so a reels list can scroll past the first batch; previously it
+    // always returned the same 50 rows.
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
     const requestingUserId = req.user.id || req.user._id;
     
     const effectMap = {
