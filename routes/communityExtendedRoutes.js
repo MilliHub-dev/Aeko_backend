@@ -160,25 +160,128 @@ router.put(
   }
 );
 
+/**
+ * Update the community profile.
+ *
+ * Documented shape (api.md -> "Update community profile"): name 3-50,
+ * description up to 500, plus optional website and location. Owner or
+ * moderators, unlike settings which is owner-only.
+ */
+router.put(
+  "/:id/profile",
+  protect,
+  isCommunityAdminOrModerator,
+  async (req, res) => {
+    try {
+      const { name, description, website, location } = req.body || {};
+      const errors = [];
+
+      if (name !== undefined) {
+        const trimmed = String(name).trim();
+        if (trimmed.length < 3 || trimmed.length > 50) {
+          errors.push("Name must be between 3 and 50 characters");
+        }
+      }
+      if (description !== undefined && String(description).length > 500) {
+        errors.push("Description must be 500 characters or fewer");
+      }
+      if (website !== undefined && String(website).trim()) {
+        try {
+          new URL(String(website));
+        } catch {
+          errors.push("Website must be a valid URL");
+        }
+      }
+      if (errors.length) {
+        return res.status(400).json({ success: false, message: errors[0], errors });
+      }
+
+      const existing = await prisma.community.findUnique({
+        where: { id: req.params.id },
+        select: { profile: true },
+      });
+      if (!existing) {
+        return res.status(404).json({ success: false, message: "Community not found" });
+      }
+
+      // name and description are real columns; website and location live in the
+      // profile JSON, which has no schema of its own.
+      const data = {};
+      if (name !== undefined) data.name = String(name).trim();
+      if (description !== undefined) data.description = String(description).trim();
+
+      if (website !== undefined || location !== undefined) {
+        const profile =
+          existing.profile && typeof existing.profile === "object" && !Array.isArray(existing.profile)
+            ? existing.profile
+            : {};
+        data.profile = {
+          ...profile,
+          ...(website !== undefined ? { website: String(website).trim() } : {}),
+          ...(location !== undefined ? { location: String(location).trim() } : {}),
+        };
+      }
+
+      if (!Object.keys(data).length) {
+        return res.status(400).json({ success: false, message: "No profile fields supplied" });
+      }
+
+      const community = await prisma.community.update({
+        where: { id: req.params.id },
+        data,
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          profile: true,
+        },
+      });
+
+      res.json({ success: true, community });
+    } catch (error) {
+      return sendError(res, error, "community.profile.update");
+    }
+  },
+);
+
+/**
+ * Upload the community avatar or cover.
+ *
+ * The documented field name is `photo` and `type` (avatar|cover) may arrive as
+ * a query parameter or a form field. The first version of this route read a
+ * field called `image` and only ever checked the body, so a request following
+ * the documented shape was rejected as "An image file is required".
+ */
 router.post(
   "/:id/upload-photo",
   protect,
-  isCommunityAdmin,
-  uploadImage.single("image"),
+  isCommunityAdminOrModerator,
+  uploadImage.single("photo"),
   async (req, res) => {
     try {
-      if (!req.file) return res.status(400).json({ error: "An image file is required" });
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "A photo file is required" });
+      }
+
+      const type = String(req.query.type || req.body?.type || "avatar").toLowerCase();
+      if (type !== "avatar" && type !== "cover") {
+        return res.status(400).json({ success: false, message: "type must be 'avatar' or 'cover'" });
+      }
 
       // Cloudinary storage puts the hosted URL on path/secure_url.
       const url = req.file.path || req.file.secure_url;
-      const field = req.body?.type === "cover" ? "coverPhoto" : "profilePhoto";
+      const field = type === "cover" ? "coverPhoto" : "profilePhoto";
 
       const community = await prisma.community.findUnique({
         where: { id: req.params.id },
         select: { profile: true },
       });
+      if (!community) {
+        return res.status(404).json({ success: false, message: "Community not found" });
+      }
+
       const profile =
-        community?.profile && typeof community.profile === "object"
+        community.profile && typeof community.profile === "object" && !Array.isArray(community.profile)
           ? community.profile
           : {};
 
@@ -187,10 +290,9 @@ router.post(
         data: { profile: { ...profile, [field]: url } },
       });
 
-      res.json({ success: true, url, field });
+      res.json({ success: true, photoUrl: url, url, type, field });
     } catch (error) {
-      console.error("Community photo upload error:", error);
-      res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
+      return sendError(res, error, "community.uploadPhoto");
     }
   },
 );
