@@ -17,6 +17,7 @@ import {
 import authMiddleware from '../middleware/authMiddleware.js';
 import { adminAuth } from '../middleware/adminAuth.js';
 import twoFactorMiddleware from '../middleware/twoFactorMiddleware.js';
+import { upload } from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -673,7 +674,24 @@ const router = express.Router();
  */
 
 // Advertisement management routes
-router.post('/', authMiddleware, createAd);
+// Accepts either JSON (with mediaUrl already hosted, or a promoted post) or
+// multipart with files under `media`. Without the upload middleware there was
+// no way to attach creative to a campaign at all — the controller only ever saw
+// a mediaUrl string the client had no way to produce.
+router.post(
+  '/',
+  authMiddleware,
+  (req, res, next) => {
+    upload.array('media', 5)(req, res, (err) => {
+      if (err) {
+        const status = err.name === 'MulterError' ? 400 : 500;
+        return res.status(status).json({ success: false, message: err.message || 'Upload failed' });
+      }
+      next();
+    });
+  },
+  createAd
+);
 router.get('/', authMiddleware, getUserAds);
 router.get('/targeted', authMiddleware, getTargetedAds);
 router.get('/dashboard', authMiddleware, getAdDashboard);

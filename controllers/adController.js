@@ -30,19 +30,70 @@ const calculatePerformanceScore = (ad) => {
 // Create new advertisement
 export async function createAd(req, res) {
     try {
+        // Multipart bodies arrive as strings, so structured fields (budget,
+        // campaign, targetAudience...) have to be parsed back. JSON bodies pass
+        // through untouched.
+        const parseField = (value, fallback) => {
+            if (value === undefined || value === null) return fallback;
+            if (typeof value !== 'string') return value;
+            try {
+                return JSON.parse(value);
+            } catch {
+                return fallback;
+            }
+        };
+
         const {
             title,
             description,
             mediaType,
-            mediaUrl,
-            mediaUrls,
-            targetAudience,
-            budget,
-            pricing,
-            campaign,
-            callToAction,
-            placement
+            promotedPostId
         } = req.body;
+
+        const targetAudience = parseField(req.body.targetAudience, undefined);
+        const budget = parseField(req.body.budget, undefined);
+        const pricing = parseField(req.body.pricing, undefined);
+        const campaign = parseField(req.body.campaign, undefined);
+        const callToAction = parseField(req.body.callToAction, undefined);
+        const placement = parseField(req.body.placement, undefined);
+
+        // Creative can come from three places, in order of precedence:
+        // uploaded files, an explicit URL, or a post being promoted.
+        const uploadedUrls = Array.isArray(req.files) && req.files.length
+            ? req.files.map(f => f.path).filter(Boolean)
+            : [];
+
+        let mediaUrls = uploadedUrls.length
+            ? uploadedUrls
+            : parseField(req.body.mediaUrls, []) || [];
+        let mediaUrl = uploadedUrls[0] || req.body.mediaUrl || mediaUrls[0] || null;
+
+        // Promoting an existing post reuses that post's media as the creative,
+        // so the advertiser does not have to re-upload what they already posted.
+        if (promotedPostId) {
+            const post = await prisma.post.findUnique({
+                where: { id: promotedPostId },
+                select: { id: true, userId: true, media: true }
+            });
+
+            if (!post) {
+                return res.status(404).json({ success: false, message: 'Post to promote was not found' });
+            }
+            if (post.userId !== req.user.id) {
+                return res.status(403).json({ success: false, message: 'You can only promote your own posts' });
+            }
+
+            if (!mediaUrl && post.media) {
+                const postMedia = Array.isArray(post.media) ? post.media : [post.media];
+                const urls = postMedia
+                    .map(m => (typeof m === 'string' ? m : m?.url))
+                    .filter(Boolean);
+                if (urls.length) {
+                    mediaUrls = urls;
+                    mediaUrl = urls[0];
+                }
+            }
+        }
 
         // Validate required fields
         if (!title || !description || !mediaType || !campaign?.objective) {
@@ -109,6 +160,8 @@ export async function createAd(req, res) {
                 },
                 callToAction: callToAction || { type: 'learn_more' },
                 placement: placement || { feed: true },
+                // Recorded so the ad can link through to the original post.
+                ...(promotedPostId ? { review: { promotedPostId } } : {}),
                 advertiserId: req.user.id,
                 Status: 'pending',
                 analytics: {

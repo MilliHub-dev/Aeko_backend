@@ -9,6 +9,9 @@ import {
   checkPrivateCommunityAccess,
 } from "../middleware/communityMiddleware.js";
 import { uploadImage } from "../middleware/upload.js";
+import { validateCommunityPaymentSettings } from "../middleware/paymentValidation.js";
+import { handleValidationErrors } from "../middleware/securityValidation.js";
+import { sendError } from "../utils/apiErrors.js";
 
 /**
  * Community endpoints the mobile client already calls.
@@ -105,19 +108,57 @@ router.get("/:id/settings", protect, isCommunityAdminOrModerator, async (req, re
   }
 });
 
-router.put("/:id/settings", protect, isCommunityAdmin, async (req, res) => {
-  try {
-    const incoming = req.body || {};
-    const settings = await writeSettings(req.params.id, (current) => ({
-      ...current,
-      ...incoming,
-    }));
-    res.json({ success: true, settings });
-  } catch (error) {
-    console.error("Update community settings error:", error);
-    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
+/**
+ * Update community settings.
+ *
+ * The documented contract (api.md -> "Update community settings") nests
+ * everything under a `settings` object, and validateCommunityPaymentSettings
+ * validates exactly those paths (settings.payment.price, .currency, ...). The
+ * first version of this route merged a FLAT req.body straight into the column,
+ * which both mismatched the documented shape and bypassed validation entirely —
+ * a paid community could be saved with a negative price or an unsupported
+ * currency.
+ *
+ * Sub-objects are merged one level deep so updating `payment` does not wipe
+ * `postSettings`, and vice versa.
+ */
+router.put(
+  "/:id/settings",
+  protect,
+  isCommunityAdmin,
+  validateCommunityPaymentSettings,
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const incoming = req.body?.settings;
+      if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
+        return res.status(400).json({
+          success: false,
+          message: "A `settings` object is required"
+        });
+      }
+
+      const NESTED_KEYS = ["payment", "postSettings"];
+
+      const settings = await writeSettings(req.params.id, (current) => {
+        const next = { ...current };
+
+        for (const [key, value] of Object.entries(incoming)) {
+          if (NESTED_KEYS.includes(key) && value && typeof value === "object") {
+            next[key] = { ...(current[key] ?? {}), ...value };
+          } else {
+            next[key] = value;
+          }
+        }
+        return next;
+      });
+
+      res.json({ success: true, settings });
+    } catch (error) {
+      return sendError(res, error, "community.settings");
+    }
   }
-});
+);
 
 router.post(
   "/:id/upload-photo",

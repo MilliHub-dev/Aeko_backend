@@ -279,11 +279,16 @@ class SecurityLogger {
     
     const skip = (page - 1) * limit;
     
-    const [events, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       prisma.securityEvent.findMany({
         where,
         include: {
-          targetUser: {
+          // The relation is named users_security_events_targetUserIdTousers on
+          // the model. Including a non-existent `targetUser` made Prisma reject
+          // the query outright, so this endpoint returned 500 on every call —
+          // the client swallowed it, which is why Login Activity always looked
+          // empty rather than broken.
+          users_security_events_targetUserIdTousers: {
             select: {
               username: true,
               name: true
@@ -296,7 +301,13 @@ class SecurityLogger {
       }),
       prisma.securityEvent.count({ where })
     ]);
-    
+
+    // Exposed as `targetUser`, which is what callers expect.
+    const events = rows.map(({ users_security_events_targetUserIdTousers, ...event }) => ({
+      ...event,
+      targetUser: users_security_events_targetUserIdTousers ?? null
+    }));
+
     return {
       events,
       pagination: {
