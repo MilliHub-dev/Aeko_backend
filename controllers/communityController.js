@@ -289,6 +289,8 @@ export const getCommunity = async (req, res) => {
 
     // Check if user is member (for private communities)
     let isMember = false;
+    let memberRole = null;
+    let memberStatus = null;
     if (userId) {
       const memberRecord = await prisma.communityMember.findUnique({
         where: {
@@ -299,6 +301,8 @@ export const getCommunity = async (req, res) => {
         }
       });
       isMember = !!memberRecord;
+      memberRole = memberRecord?.role || null;
+      memberStatus = memberRecord?.status || null;
     }
 
     if (community.isPrivate && !isMember) {
@@ -336,7 +340,15 @@ export const getCommunity = async (req, res) => {
         users: undefined,
         members: (community.community_members || []).map(m => m.user),
         community_members: undefined,
-        moderators: moderators.map(m => m.user)
+        moderators: moderators.map(m => m.user),
+        // The viewer's own standing. This was computed above for the private
+        // access check and then discarded, so the app had no way to know you
+        // already belonged — it fell back to a local "joined this session" set
+        // and offered to let you join a community you own.
+        isMember,
+        isOwner: community.ownerId === userId,
+        memberRole,
+        memberStatus
       }
     });
   } catch (error) {
