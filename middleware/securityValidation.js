@@ -16,14 +16,22 @@ export const handleValidationErrors = (req, res, next) => {
   if (!errors.isEmpty()) {
     const errorDetails = errors.array().map(error => ({
       field: error.path || error.param,
-      message: error.msg,
-      value: error.value
+      message: error.msg
+      // `value` is deliberately omitted: these bodies carry passwords and 2FA
+      // tokens, and echoing a rejected value back puts it in client logs.
     }));
-    
-    return SecurityErrorHandler.handleError(
-      new Error('Validation failed'), // Generic error, details are passed
-      res
-    );
+
+    // Previously this passed a bare `new Error('Validation failed')` to
+    // SecurityErrorHandler, which types every unrecognised error as a 500 — so a
+    // missing required field was reported to users as "the server is having
+    // trouble" and the collected field details were discarded. It is a 400, and
+    // the caller needs to know which field is wrong.
+    return res.status(400).json({
+      success: false,
+      message: errorDetails[0]?.message || 'Validation failed',
+      code: 'VALIDATION_FAILED',
+      details: errorDetails
+    });
   }
   next();
 };

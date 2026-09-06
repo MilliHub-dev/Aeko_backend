@@ -26,6 +26,8 @@ import {
   validateSecurityRules
 } from '../middleware/securityValidation.js';
 import { SecurityErrorHandler } from '../utils/securityErrors.js';
+import bcrypt from 'bcrypt';
+import { prisma } from '../config/db.js';
 
 const router = express.Router();
 
@@ -647,6 +649,7 @@ router.get('/follow-requests', authMiddleware, validateGetFollowRequests, handle
 router.post('/2fa/setup', authMiddleware, validate2FASetup, handleValidationErrors, validateSecurityRules, async (req, res) => {
   try {
     const userId = req.user.id;
+    const { password } = req.body;
 
     // Check if 2FA is already enabled
     const status = await TwoFactorService.get2FAStatus(userId);
@@ -654,6 +657,23 @@ router.post('/2fa/setup', authMiddleware, validate2FASetup, handleValidationErro
       return res.status(400).json({
         success: false,
         message: '2FA is already enabled for this account'
+      });
+    }
+
+    // The route demanded a password but never checked it, so validation only
+    // ever confirmed the field was non-empty. Enrolling a second factor is
+    // exactly the operation a hijacked session would attempt, so it is confirmed
+    // here the same way disabling 2FA already is.
+    const account = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { password: true }
+    });
+
+    if (!account?.password || !(await bcrypt.compare(password, account.password))) {
+      return res.status(401).json({
+        success: false,
+        message: 'That password is not correct.',
+        code: 'INVALID_PASSWORD'
       });
     }
 

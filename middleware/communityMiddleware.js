@@ -14,6 +14,18 @@ export const isCommunityAdmin = async (req, res, next) => {
       });
     }
 
+    // `GET /:id` matches any single path segment, so a request for an endpoint
+    // that does not exist (`/api/communities/trending-posts`) arrived here as a
+    // community lookup and answered "Community not found" — which the app showed
+    // to users as though their community had vanished. Anything that cannot be
+    // an id is reported as the routing mistake it is.
+    if (!looksLikeCommunityId(communityId)) {
+      return res.status(404).json({
+        success: false,
+        message: `No such community endpoint: /${communityId}`
+      });
+    }
+
     const community = await prisma.community.findUnique({
       where: { id: communityId }
     });
@@ -173,6 +185,15 @@ export const isCommunityMember = async (req, res, next) => {
 /**
  * Middleware to check if user can access private community
  */
+/**
+ * Community ids are UUIDs; users and some pre-migration rows still carry
+ * 24-character Mongo ObjectIds. Both are accepted, nothing else is.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+const looksLikeCommunityId = (value) =>
+  UUID.test(value) || OBJECT_ID.test(value);
+
 export const checkPrivateCommunityAccess = async (req, res, next) => {
   try {
     const communityId = req.params.id || req.params.communityId || req.body.communityId;

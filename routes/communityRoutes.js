@@ -8,7 +8,9 @@ import {
   joinCommunity,
   leaveCommunity,
   updateCommunity,
-  deleteCommunity
+  deleteCommunity,
+  getTrendingCommunityPosts,
+  searchCommunities
 } from '../controllers/communityController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { validateCommunityPaymentSettings } from '../middleware/paymentValidation.js';
@@ -114,6 +116,49 @@ router.post(
 router.get('/', getCommunities);
 
 router.get('/my', protect, getMyCommunities);
+
+/**
+ * Literal paths MUST stay above `/:id`.
+ *
+ * Express matches in declaration order, so before these existed a request for
+ * `/api/communities/trending-posts` fell through to `GET /:id` and was looked up
+ * as a community with the id "trending-posts". That returned 404 "Community not
+ * found" — which the app then displayed across the whole Communities screen,
+ * making a missing endpoint look like a missing community.
+ */
+
+/**
+ * @swagger
+ * /api/communities/trending-posts:
+ *   get:
+ *     summary: Trending posts across public communities
+ *     tags: [Communities]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Trending community posts
+ */
+router.get('/trending-posts', protect, getTrendingCommunityPosts);
+
+/**
+ * @swagger
+ * /api/communities/search:
+ *   get:
+ *     summary: Search public communities by name, description or tag
+ *     tags: [Communities]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Matching communities
+ */
+router.get('/search', protect, searchCommunities);
 
 /**
  * @swagger

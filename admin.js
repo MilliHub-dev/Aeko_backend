@@ -1,10 +1,12 @@
-import AdminJS from "adminjs";
+import AdminJS, { ComponentLoader } from "adminjs";
 import AdminJSExpress from "@adminjs/express";
 import { Database, Resource } from "@adminjs/prisma";
 import express from "express";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { randomBytes } from "crypto";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -131,7 +133,35 @@ const buildWaitlistCsv = (entries) => {
 
 AdminJS.registerAdapter({ Database, Resource });
 
+/**
+ * Custom React components for the panel.
+ *
+ * The files under admin/components/ already existed but nothing ever rendered
+ * them: AdminJS 7 will only load a component that has been registered through a
+ * ComponentLoader, and there was none — so `dashboard.component` was pinned to
+ * `false` and the panel fell back to stock AdminJS throughout.
+ *
+ * `admin.initialize()` (called for us by buildAuthenticatedRouter) bundles these
+ * on boot in production; `admin.watch()` below covers local development.
+ */
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const componentLoader = new ComponentLoader();
+
+const Components = {
+  Dashboard: componentLoader.add(
+    "Dashboard",
+    join(currentDir, "admin/components/Dashboard"),
+  ),
+};
+
+// Replaces the built-in sign-in screen rather than adding a page next to it.
+componentLoader.override(
+  "Login",
+  join(currentDir, "admin/components/Login"),
+);
+
 const admin = new AdminJS({
+  componentLoader,
   resources: [
     // ===== COMMUNITY MANAGEMENT =====
     {
@@ -1089,32 +1119,120 @@ const admin = new AdminJS({
 
   // ===== BRANDING & UI CUSTOMIZATION =====
   branding: {
-    companyName: "Aeko Platform Admin",
+    companyName: "Aeko Admin",
     logo: "/uploads/admin-logo.png",
     softwareBrothers: false,
     favicon: "/uploads/favicon.ico",
+    // The previous palette was a generic purple/pink gradient unrelated to the
+    // product. These are the app's own tokens (aeko-mobile/constants/Colors.ts),
+    // so the panel and the app now read as the same product.
     theme: {
       colors: {
-        primary100: "#667eea",
-        primary80: "#764ba2",
-        primary60: "#f093fb",
-        primary40: "#4facfe",
-        primary20: "#00f2fe",
-        grey100: "#151515",
-        grey80: "#333333",
-        grey60: "#666666",
-        grey40: "#999999",
-        grey20: "#cccccc",
-        filterBg: "#333333",
-        accent: "#ff6b6b",
-        hoverBg: "#4a5568",
+        primary100: "#00BFA5", // brand teal
+        primary80: "#00897B",
+        primary60: "#4DD0C4",
+        primary40: "#B2DFDB",
+        primary20: "#E6F6F4",
+        grey100: "#003D3D", // dark teal, used for headings and the sidebar
+        grey80: "#2F4F4F",
+        grey60: "#5E7A7A",
+        grey40: "#9BB0B0",
+        grey20: "#D7E2E2",
+        filterBg: "#003D3D",
+        accent: "#99FF00", // lime, for highlights and active states
+        hoverBg: "#E6F6F4",
+        bg: "#F7FAFA",
+        border: "#DCE7E7",
       },
     },
   },
 
   // ===== DASHBOARD CUSTOMIZATION =====
   dashboard: {
-    component: false,
+    component: Components.Dashboard,
+    /**
+     * Feeds the dashboard. Every figure is counted with `allSettled` so one
+     * failing query degrades a single card instead of blanking the whole page —
+     * an admin landing page that errors out is worse than one missing a number.
+     */
+    handler: async (_req, _res, context) => {
+      const since = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      const week = since(7);
+
+      const queries = {
+        users: () => prisma.user.count(),
+        usersThisWeek: () =>
+          prisma.user.count({ where: { createdAt: { gte: week } } }),
+        posts: () => prisma.post.count(),
+        postsThisWeek: () =>
+          prisma.post.count({ where: { createdAt: { gte: week } } }),
+        communities: () => prisma.community.count(),
+        liveNow: () =>
+          prisma.liveStream.count({ where: { status: "live" } }),
+        openReports: () =>
+          prisma.report.count({ where: { status: "pending" } }),
+        openTickets: () =>
+          prisma.supportTicket.count({
+            where: { status: { in: ["open", "in_progress"] } },
+          }),
+        waitlist: () => prisma.waitlistEntry.count(),
+        recentUsers: () =>
+          prisma.user.findMany({
+            orderBy: { createdAt: "desc" },
+            take: 6,
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              profilePicture: true,
+              blueTick: true,
+              goldenTick: true,
+              createdAt: true,
+            },
+          }),
+        signupTrend: async () => {
+          // 14 daily buckets for the sparkline. Grouped in SQL rather than
+          // pulling every user row back into Node.
+          const rows = await prisma.$queryRaw`
+            SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::int AS count
+            FROM "users"
+            WHERE "createdAt" >= ${since(14)}
+            GROUP BY 1
+            ORDER BY 1 ASC
+          `;
+          return rows.map((r) => ({
+            day: r.day.toISOString().slice(0, 10),
+            count: Number(r.count),
+          }));
+        },
+      };
+
+      const keys = Object.keys(queries);
+      const settled = await Promise.allSettled(
+        keys.map((key) => queries[key]()),
+      );
+
+      const data = {};
+      const failed = [];
+      settled.forEach((result, i) => {
+        if (result.status === "fulfilled") {
+          data[keys[i]] = result.value;
+        } else {
+          failed.push(keys[i]);
+          console.error(`[admin dashboard] ${keys[i]} failed:`, result.reason);
+          data[keys[i]] = null;
+        }
+      });
+
+      return {
+        ...data,
+        failed,
+        adminName: context?.currentAdmin?.name
+          ?? context?.currentAdmin?.username
+          ?? null,
+        generatedAt: new Date().toISOString(),
+      };
+    },
   },
 
   // ===== CUSTOM PAGES =====
@@ -1317,5 +1435,15 @@ adminRouter.get("/waitlist-export", async (req, res) => {
     res.status(500).send("Failed to export waitlist CSV");
   }
 });
+
+// In production `buildAuthenticatedRouter` already triggered `admin.initialize()`,
+// which bundles the components above. `watch()` is the development equivalent and
+// is a no-op when NODE_ENV is production — without it, local edits to the
+// dashboard or login page would never reach the browser.
+if (process.env.NODE_ENV !== "production") {
+  admin.watch().catch((error) => {
+    console.error("AdminJS: component watcher failed to start:", error);
+  });
+}
 
 export { admin, adminRouter, adminSessionMiddleware, adminSessionVersionGuard };

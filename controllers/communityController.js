@@ -759,3 +759,132 @@ export const deleteCommunity = async (req, res) => {
     });
   }
 };
+
+/**
+ * Trending posts across public communities.
+ *
+ * `likes` is a `Json?` column, so a like count cannot be ordered in SQL. Recent
+ * candidates are pulled first and scored in memory instead — cheap because the
+ * candidate window is bounded.
+ */
+export const getTrendingCommunityPosts = async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10));
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const candidates = await prisma.post.findMany({
+      where: {
+        communityId: { not: null },
+        createdAt: { gte: since },
+        communities: { isPrivate: false }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        // The author relation is named `users_posts_userIdTouser` on the model;
+        // a plain `users` include throws at query time.
+        users_posts_userIdTouser: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            profilePicture: true,
+            blueTick: true,
+            goldenTick: true
+          }
+        },
+        communities: { select: { id: true, name: true, profile: true } },
+        _count: { select: { comments: true } }
+      }
+    });
+
+    const countLikes = (likes) => (Array.isArray(likes) ? likes.length : 0);
+
+    const scored = candidates
+      .map((post) => {
+        const likeCount = countLikes(post.likes);
+        const commentCount = post._count?.comments ?? 0;
+        // Comments signal more engagement than a like; views are the weakest
+        // signal, so they only break ties.
+        const engagement = likeCount * 2 + commentCount * 3 + (post.views || 0) * 0.1;
+        // Decay so a months-old post can't sit at the top forever.
+        const ageHours = (Date.now() - new Date(post.createdAt).getTime()) / 3_600_000;
+        const score = engagement / (ageHours + 2) ** 0.8;
+
+        return {
+          ...post,
+          _id: post.id,
+          likeCount,
+          commentCount,
+          community: post.communities
+            ? { ...post.communities, _id: post.communities.id }
+            : null,
+          author: post.users_posts_userIdTouser,
+          users_posts_userIdTouser: undefined,
+          communities: undefined,
+          _score: score
+        };
+      })
+      .sort((a, b) => b._score - a._score)
+      .slice(0, limit)
+      .map(({ _score, ...post }) => post);
+
+    res.status(200).json({ success: true, posts: scored });
+  } catch (error) {
+    console.error('Error fetching trending community posts:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Search public communities by name, description or tag.
+ */
+export const searchCommunities = async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+
+    if (!q) {
+      return res.status(200).json({ success: true, data: [], communities: [] });
+    }
+
+    const communities = await prisma.community.findMany({
+      where: {
+        isPrivate: false,
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { description: { contains: q, mode: 'insensitive' } },
+          { tags: { has: q.toLowerCase() } }
+        ]
+      },
+      orderBy: { memberCount: 'desc' },
+      take: limit,
+      include: {
+        users: { select: { name: true, username: true, profilePicture: true } }
+      }
+    });
+
+    const mapped = communities.map((community) => ({
+      ...community,
+      _id: community.id,
+      owner: community.users,
+      users: undefined
+    }));
+
+    // `data` matches every other community endpoint; `communities` is kept
+    // because the search sheet reads that key.
+    res.status(200).json({ success: true, data: mapped, communities: mapped });
+  } catch (error) {
+    console.error('Error searching communities:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};

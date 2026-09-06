@@ -84,6 +84,24 @@ export class SecurityErrorHandler {
       errorResponse.error.details = error.details;
     }
 
+    // Clients read a top-level `message`; without one they fell back to a
+    // generic "the server is having trouble" even for ordinary 4xx responses.
+    // Genuine 500s stay generic on purpose — `error.message` at that point is an
+    // internal failure and must not be shown to users.
+    errorResponse.message =
+      statusCode >= 500
+        ? 'Something went wrong on our end. Please try again.'
+        : errorResponse.error.message;
+    errorResponse.code = errorResponse.error.code;
+
+    if (statusCode >= 500) {
+      console.error('[SecurityErrorHandler]', error);
+      if (process.env.NODE_ENV === 'production') {
+        // Never ship internal error text to a client in production.
+        errorResponse.error = { code: errorResponse.code };
+      }
+    }
+
     return res.status(statusCode).json(errorResponse);
   }
 
