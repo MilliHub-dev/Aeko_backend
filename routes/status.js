@@ -209,7 +209,7 @@ router.post(
           expiresAt: new Date(Date.now() + STORY_TTL_MS),
           reactions: [],
         },
-        include: { users: { select: { id: true, username: true, name: true, profilePicture: true, avatar: true, blueTick: true, goldenTick: true } } },
+        include: { users: { select: { id: true, username: true, name: true, profilePicture: true, avatar: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } } },
       });
 
       // @mentions in the text or caption notify and deep-link, reusing the same
@@ -716,7 +716,7 @@ router.post("/:id/reshare", authMiddleware, async (req, res) => {
         users: {
           select: {
             id: true, username: true, name: true, profilePicture: true,
-            avatar: true, blueTick: true, goldenTick: true,
+            avatar: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true,
           },
         },
       },
@@ -760,7 +760,7 @@ router.post("/:id/reshare", authMiddleware, async (req, res) => {
           originalStatusId: original.id,
         },
       },
-      include: { users: { select: { id: true, username: true, name: true, profilePicture: true, avatar: true, blueTick: true, goldenTick: true } } },
+      include: { users: { select: { id: true, username: true, name: true, profilePicture: true, avatar: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } } },
     });
 
     res.status(201).json({

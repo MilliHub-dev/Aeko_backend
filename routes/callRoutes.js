@@ -27,7 +27,7 @@ const userSelect = {
   username: true,
   profilePicture: true,
   blueTick: true,
-  goldenTick: true,
+  goldenTick: true, prideTick: true, businessTick: true,
 };
 
 const handleValidation = (req, res) => {

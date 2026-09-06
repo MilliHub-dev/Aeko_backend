@@ -596,7 +596,7 @@ router.get("/:id/followers", authMiddleware, async (req, res) => {
         profilePicture: true,
         bio: true,
         blueTick: true,
-        goldenTick: true,
+        goldenTick: true, prideTick: true, businessTick: true,
       },
     });
 
@@ -723,7 +723,7 @@ router.get("/:id/following", authMiddleware, async (req, res) => {
         profilePicture: true,
         bio: true,
         blueTick: true,
-        goldenTick: true,
+        goldenTick: true, prideTick: true, businessTick: true,
       },
     });
 

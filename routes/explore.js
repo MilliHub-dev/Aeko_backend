@@ -98,7 +98,7 @@ router.get("/", protect, async (req, res) => {
             name: true,
             profilePicture: true,
             blueTick: true,
-            goldenTick: true
+            goldenTick: true, prideTick: true, businessTick: true
           }
         }
       }
@@ -139,7 +139,7 @@ router.get("/", protect, async (req, res) => {
         profilePicture: true,
         bio: true,
         blueTick: true,
-        goldenTick: true,
+        goldenTick: true, prideTick: true, businessTick: true,
         followers: true // Needed for sorting
       }
     });
@@ -203,7 +203,7 @@ router.get("/", protect, async (req, res) => {
             name: true,
             profilePicture: true,
             blueTick: true,
-            goldenTick: true
+            goldenTick: true, prideTick: true, businessTick: true
           }
         }
       }
@@ -234,7 +234,7 @@ router.get("/", protect, async (req, res) => {
             name: true,
             profilePicture: true,
             blueTick: true,
-            goldenTick: true
+            goldenTick: true, prideTick: true, businessTick: true
           }
         }
       }
@@ -271,7 +271,7 @@ router.get("/", protect, async (req, res) => {
                 name: true,
                 profilePicture: true,
                 blueTick: true,
-                goldenTick: true
+                goldenTick: true, prideTick: true, businessTick: true
               }
             }
           }

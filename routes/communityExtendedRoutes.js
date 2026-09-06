@@ -64,7 +64,7 @@ const userSelect = {
   username: true,
   profilePicture: true,
   blueTick: true,
-  goldenTick: true,
+  goldenTick: true, prideTick: true, businessTick: true,
 };
 
 const currentUserId = (req) => req.user?.id || req.userId || req.user?._id;
