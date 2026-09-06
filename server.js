@@ -43,6 +43,7 @@ import enhancedChatRoutes from "./routes/enhancedChatRoutes.js";
 import enhancedLiveStreamRoutes from "./routes/enhancedLiveStreamRoutes.js";
 import interestRoutes from "./routes/interestRoutes.js";
 import userInterestRoutes from "./routes/userInterestRoutes.js";
+import callRoutes from "./routes/callRoutes.js";
 import communityRoutes from "./routes/communityRoutes.js";
 import communityExtendedRoutes from "./routes/communityExtendedRoutes.js";
 import communityProfileRoutes from "./routes/communityProfileRoutes.js";
@@ -253,6 +254,14 @@ app.use(
   apiRateLimit,
   blockingMiddleware.checkMessagingAccess(),
   enhancedChatRoutes,
+);
+// Call history. Calls are stored as chat messages, so this sits with messaging
+// and behind the same blocking check.
+app.use(
+  "/api/calls",
+  apiRateLimit,
+  blockingMiddleware.checkMessagingAccess(),
+  callRoutes,
 );
 app.use(
   "/api/livestream",

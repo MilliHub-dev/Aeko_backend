@@ -270,9 +270,18 @@ router.get('/messages/:chatId', authenticate, async (req, res) => {
     // If reactions contain userIds, the frontend will receive them as is.
     // If full user objects are needed, we would need to manually fetch and map them here.
 
+    // `callData` is stored under `metadata.call`, but every client reads it from
+    // the top level (utils/chatMapper.ts). Surfacing it here is what makes a call
+    // render as a call bubble instead of a plain "Call ended" text message.
+    const withCallData = messages.map((message) =>
+      message.messageType === 'call' && message.metadata?.call
+        ? { ...message, callData: message.metadata.call }
+        : message
+    );
+
     res.json({
       success: true,
-      messages: messages.reverse(), // Reverse to show oldest first
+      messages: withCallData.reverse(), // Reverse to show oldest first
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -318,7 +327,7 @@ router.get('/messages/:chatId', authenticate, async (req, res) => {
  */
 router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAccess(), async (req, res) => {
   try {
-    const { receiverId, chatId, content, messageType = 'text', replyToId } = req.body;
+    const { receiverId, chatId, content, messageType = 'text', replyToId, callData } = req.body;
 
     if (!chatId || !content) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -333,6 +342,21 @@ router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAcce
       status: 'sent',
       replyToId: replyToId || null
     };
+
+    // The app has always sent `callData` alongside a call message, but it was
+    // never destructured here — so every call row was stored with a null
+    // metadata and the call history screen had nothing to read. Stored under
+    // `metadata.call` because EnhancedMessage has no dedicated column.
+    if (messageType === 'call' && callData && typeof callData === 'object') {
+      messageData.metadata = {
+        call: {
+          status: callData.status || 'completed',
+          duration: Number(callData.duration) || 0,
+          isVideo: Boolean(callData.isVideo),
+          callerId: req.user.id
+        }
+      };
+    }
 
     const message = await prisma.enhancedMessage.create({
       data: messageData,
