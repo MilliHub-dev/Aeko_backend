@@ -560,6 +560,69 @@ router.get("/search", authMiddleware, async (req, res) => {
     }
 });
 
+/**
+ * Hashtag suggestions for the explore search.
+ *
+ * This endpoint did not exist. The app calls it as one of three parallel
+ * requests behind explore search, so its 404 rejected the whole `Promise.all`
+ * and the entire search — users and posts included — returned nothing.
+ *
+ * There is no hashtag table: hashtags live inside `Post.text`, so matching posts
+ * are pulled and the tags counted. The candidate set is bounded, which is fine
+ * for a type-ahead and avoids scanning every post ever written.
+ */
+router.get("/hashtags", authMiddleware, async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim().replace(/^#/, "");
+    const limit = Math.min(25, Math.max(1, Number(req.query.limit) || 10));
+
+    if (!q) {
+      return res.json({ success: true, hashtags: [] });
+    }
+
+    const posts = await prisma.post.findMany({
+      where: {
+        status: "active",
+        text: { contains: `#${q}`, mode: "insensitive" },
+      },
+      select: { text: true },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+
+    // Unicode-aware so non-Latin hashtags are not silently dropped.
+    const HASHTAG = /#([\p{L}\p{N}_]+)/gu;
+    const needle = q.toLowerCase();
+    const counts = new Map();
+
+    for (const post of posts) {
+      for (const match of (post.text || "").matchAll(HASHTAG)) {
+        const tag = match[1];
+        const key = tag.toLowerCase();
+        if (!key.startsWith(needle)) continue;
+        const existing = counts.get(key);
+        // Keep the first spelling seen so casing stays natural in the UI.
+        if (existing) existing.postCount += 1;
+        else counts.set(key, { name: tag, postCount: 1 });
+      }
+    }
+
+    const hashtags = [...counts.values()]
+      .sort((a, b) => b.postCount - a.postCount || a.name.localeCompare(b.name))
+      .slice(0, limit);
+
+    res.json({ success: true, hashtags });
+  } catch (error) {
+    console.error("Hashtag search error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Could not load hashtags.",
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
+    });
+  }
+});
+
+
 // Feed
 router.get("/feed", authMiddleware, async (req, res) => {
     try {
@@ -712,7 +775,11 @@ router.get("/feed", authMiddleware, async (req, res) => {
 });
 
 // Get single post
-router.get("/:postId", authMiddleware, async (req, res) => {
+// The param is constrained to an id shape (UUID or legacy ObjectId).
+// Express matches in declaration order, so an unconstrained "/:postId" swallowed
+// every literal path declared below it — `/mixed` and `/videos` both resolved
+// here and 404'd as "Post not found". `/videos` is what the reels feed calls.
+router.get("/:postId([0-9a-fA-F]{24}|[0-9a-fA-F-]{36})", authMiddleware, async (req, res) => {
     try {
         const { postId } = req.params;
         const userId = req.userId || req.user?.id || req.user?._id;
@@ -895,7 +962,7 @@ router.post("/:postId/like", authMiddleware, async (req, res) => {
 });
 
 // Get reposts
-router.get("/:postId/reposts", authMiddleware, async (req, res) => {
+router.get("/:postId([0-9a-fA-F]{24}|[0-9a-fA-F-]{36})/reposts", authMiddleware, async (req, res) => {
   try {
     const { postId } = req.params;
     const reposts = await prisma.post.findMany({
@@ -1016,12 +1083,26 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
          return res.status(404).json({ error: "User not found" }); // Hide existence
     }
 
+    // The profile's Media and Texts tabs have always sent `?type=media|text`,
+    // but this handler never read it — both tabs ran the same unfiltered query,
+    // so text posts appeared in the media grid.
+    //
+    // `Post.type` is the post's declared kind: "text", "image" or "video".
+    const requestedType = String(req.query.type || '').toLowerCase();
+    const typeWhere =
+      requestedType === 'media'
+        ? { type: { in: ['image', 'video'] } }
+        : requestedType === 'text'
+          ? { type: 'text' }
+          : {};
+
     // Privacy check logic
     const privacyWhere = await getPrivacyWhereClause(requestingUserId);
     
     const where = {
         AND: [
             { userId: userId },
+            typeWhere,
             privacyWhere
         ]
     };
@@ -1029,9 +1110,10 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
     // If viewing own profile, skip privacy check (already covered by OR logic but to be safe/optimized)
     if (userId === requestingUserId) {
          // simplified query for own posts
+         const ownWhere = { userId, ...typeWhere };
          const [posts, total] = await Promise.all([
              prisma.post.findMany({
-                 where: { userId },
+                 where: ownWhere,
                  skip,
                  take: limit,
                  include: {
@@ -1041,7 +1123,9 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
         },
                  orderBy: { createdAt: 'desc' }
              }),
-             prisma.post.count({ where: { userId } })
+             // Counted with the same filter, or the tab's pagination would be
+             // computed from every post the user has ever made.
+             prisma.post.count({ where: ownWhere })
          ]);
 
          const mappedPosts = posts.map(post => ({
@@ -1478,7 +1562,7 @@ router.post("/:postId/mint-as-nft", authMiddleware, async (req, res) => {
   }
 });
 
-router.get("/:postId/verify", async (req, res) => {
+router.get("/:postId([0-9a-fA-F]{24}|[0-9a-fA-F-]{36})/verify", async (req, res) => {
   try {
     const { postId } = req.params;
 

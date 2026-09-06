@@ -1069,16 +1069,34 @@ router.get('/search', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Search query is required' });
     }
 
+    // Scoped by chat membership, not by sender/receiver.
+    //
+    // `receiverId` is null for every group message and for any direct message
+    // sent without one (40% of the messages currently stored), so the old clause
+    // could only ever find those where the searcher happened to be the sender —
+    // messages sent *to* you in your own conversations were invisible.
+    const memberships = await prisma.chatMember.findMany({
+      where: { userId: req.user.id },
+      select: { chatId: true }
+    });
+    const memberChatIds = memberships.map((m) => m.chatId);
+
+    if (memberChatIds.length === 0) {
+      return res.json({ success: true, results: [], messages: [], count: 0, query: q });
+    }
+
     let whereClause = {
-      OR: [
-        { senderId: req.user.id },
-        { receiverId: req.user.id }
-      ],
+      chatId: { in: memberChatIds },
       deleted: false,
       content: { contains: q.trim(), mode: 'insensitive' }
     };
 
     if (chatId) {
+      // Narrowing only: assigning it outright would let a caller search a chat
+      // they are not a member of.
+      if (!memberChatIds.includes(chatId)) {
+        return res.status(403).json({ success: false, message: 'You are not part of that conversation.' });
+      }
       whereClause.chatId = chatId;
     }
 
@@ -1099,7 +1117,10 @@ router.get('/search', authenticate, async (req, res) => {
 
     res.json({
       success: true,
+      // Both keys: `results` is the original contract, `messages` is what the
+      // apps actually read — the mismatch meant search always rendered empty.
       results: messages,
+      messages,
       count: messages.length,
       query: q
     });

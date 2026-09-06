@@ -14,8 +14,84 @@ class EnhancedLiveStreamSocket {
     this.streamConnections = new Map(); // streamId -> Set of socket connections
     this.userSockets = new Map(); // userId -> socket
     this.rtcConnections = new Map(); // streamId -> WebRTC connections
-    
+    // hostId -> timeout that ends their streams if they never come back.
+    this.hostGraceTimers = new Map();
+
     this.setupSocket();
+    this.startStaleStreamSweep();
+  }
+
+  /** Seconds a host may be gone before their stream is considered over. */
+  static HOST_GRACE_SECONDS = 90;
+  /** A live stream with no host connection is swept after this long. */
+  static STALE_STREAM_MINUTES = 15;
+
+  /**
+   * Ends a stream that its host has abandoned.
+   *
+   * Nothing ever did this: `handleDisconnection` cleaned up viewer bookkeeping
+   * and left the stream row at `status: "live"` forever, so closing the app,
+   * crashing, or losing signal left a stream showing as live indefinitely.
+   */
+  async endAbandonedStream(streamId, reason) {
+    try {
+      const liveStream = await prisma.liveStream.findUnique({ where: { id: streamId } });
+      if (!liveStream || liveStream.status !== 'live') return false;
+
+      const endedAt = new Date();
+      const duration = liveStream.startedAt
+        ? Math.floor((endedAt.getTime() - new Date(liveStream.startedAt).getTime()) / 1000)
+        : 0;
+
+      await prisma.liveStream.update({
+        where: { id: streamId },
+        data: { status: 'ended', endedAt, duration },
+      });
+
+      this.activeStreams.delete(streamId);
+      this.viewers.delete(streamId);
+      this.streamConnections.delete(streamId);
+      this.rtcConnections.delete(streamId);
+
+      this.io.to(streamId).emit('stream_ended', { streamId, endedAt, duration, status: 'ended', reason });
+      this.io.emit('live_stream_ended', { streamId, status: 'ended', endedAt, reason });
+
+      console.log(`⚫ Stream ended (${reason}): ${liveStream.title}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to end abandoned stream:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Safety net for streams whose host vanished without a clean disconnect —
+   * a killed app, a lost process, or a server restart mid-broadcast, none of
+   * which fire the grace timer above.
+   */
+  startStaleStreamSweep() {
+    const sweep = async () => {
+      try {
+        const cutoff = new Date(Date.now() - EnhancedLiveStreamSocket.STALE_STREAM_MINUTES * 60 * 1000);
+        const stale = await prisma.liveStream.findMany({
+          where: { status: 'live', startedAt: { lt: cutoff } },
+          select: { id: true, hostId: true },
+        });
+
+        for (const stream of stale) {
+          // A host who is still connected is genuinely still broadcasting.
+          if (this.userSockets.has(stream.hostId)) continue;
+          await this.endAbandonedStream(stream.id, 'host_disconnected');
+        }
+      } catch (error) {
+        console.error('Stale stream sweep failed:', error);
+      }
+    };
+
+    // Once shortly after boot to clear anything left over from a previous
+    // process, then on an interval.
+    setTimeout(sweep, 30_000).unref?.();
+    setInterval(sweep, 5 * 60 * 1000).unref?.();
   }
 
   getCollaborationState(features = {}) {
@@ -164,6 +240,14 @@ class EnhancedLiveStreamSocket {
     // Store user socket
     socket.joinedStreams = new Set();
     socket.publishedStreams = new Set();
+    // Cancels any pending "host abandoned the stream" timer from a previous
+    // socket, so a reconnect within the grace period keeps the broadcast alive.
+    const pendingGrace = this.hostGraceTimers.get(socket.userId);
+    if (pendingGrace) {
+      clearTimeout(pendingGrace);
+      this.hostGraceTimers.delete(socket.userId);
+    }
+
     this.userSockets.set(socket.userId, socket);
     
     // Register event handlers
@@ -224,7 +308,38 @@ class EnhancedLiveStreamSocket {
     }
 
     this.userSockets.delete(socket.userId);
-    // Cleanup viewers and active streams if necessary
+
+    // If this socket was hosting anything, give it a grace period to come back —
+    // a tunnel or a brief network drop should not kill a broadcast — then end
+    // the stream. Without this the row stayed "live" forever.
+    //
+    // The host's live streams are read from the database rather than from
+    // `socket.publishedStreams`, which is only populated once WebRTC publishing
+    // starts: a host who began a stream and closed the app before publishing
+    // would not be tracked in memory at all.
+    const hostId = socket.userId;
+    clearTimeout(this.hostGraceTimers.get(hostId));
+
+    const timer = setTimeout(async () => {
+      this.hostGraceTimers.delete(hostId);
+      // Reconnected in the meantime — leave the broadcast alone.
+      if (this.userSockets.has(hostId)) return;
+
+      try {
+        const hosted = await prisma.liveStream.findMany({
+          where: { hostId, status: 'live' },
+          select: { id: true },
+        });
+        for (const stream of hosted) {
+          await this.endAbandonedStream(stream.id, 'host_disconnected');
+        }
+      } catch (error) {
+        console.error('Failed to end streams for disconnected host:', error);
+      }
+    }, EnhancedLiveStreamSocket.HOST_GRACE_SECONDS * 1000);
+
+    timer.unref?.();
+    this.hostGraceTimers.set(hostId, timer);
   }
 
   registerEventHandlers(socket) {
