@@ -192,6 +192,20 @@ router.post("/:postId/bookmark", authMiddleware, async (req, res) => {
 });
 
 // Get user bookmarks
+/**
+ * Prisma exposes a post's author as `users_posts_userIdTouser`; every client
+ * reads `user`. Five queries in this file included a `user` relation that does
+ * not exist on Post, which makes Prisma reject the whole query — `/mixed` and
+ * `/videos` (the reels feed) among them.
+ */
+const withAuthor = (post) =>
+  post && {
+    ...post,
+    _id: post.id,
+    user: post.users_posts_userIdTouser ?? post.user,
+    users_posts_userIdTouser: undefined,
+  };
+
 router.get("/user/bookmarks", authMiddleware, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -506,14 +520,14 @@ router.put("/:postId/privacy", authMiddleware, async (req, res) => {
         where: { id: postId },
         data: { privacy: newPrivacy },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
+            users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
         }
     });
 
     res.json({
       success: true,
       message: "Privacy settings updated successfully",
-      post: updatedPost
+      post: withAuthor(updatedPost)
     });
 
   } catch (error) {
@@ -968,11 +982,11 @@ router.get("/:postId([0-9a-fA-F]{24}|[0-9a-fA-F-]{36})/reposts", authMiddleware,
     const reposts = await prisma.post.findMany({
         where: { originalPostId: postId },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
+            users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
         },
         orderBy: { createdAt: 'desc' }
     });
-    res.json(reposts);
+    res.json(reposts.map(withAuthor));
   } catch (error) {
     res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
@@ -1193,14 +1207,14 @@ router.get("/mixed", authMiddleware, async (req, res) => {
             ]
         },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
+            users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit
     });
     
-    res.json(posts);
+    res.json(posts.map(withAuthor));
   } catch (error) {
     res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
@@ -1234,18 +1248,18 @@ router.get("/videos", authMiddleware, async (req, res) => {
             ]
         },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
+            users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
         },
         orderBy: { createdAt: 'desc' },
         take: 50
     });
 
     if (!transformation) {
-      return res.json(posts);
+      return res.json(posts.map(withAuthor));
     }
 
     const transformed = posts.map((p) => {
-      const obj = { ...p };
+      const obj = { ...withAuthor(p) };
       obj.media = transformCloudinaryUrl(obj.media, transformation);
       return obj;
     });
@@ -1274,12 +1288,12 @@ router.post("/repost/:postId", authMiddleware, async (req, res) => {
             media: originalPost.media || ""
         },
         include: {
-            user: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
+            users_posts_userIdTouser: { select: { name: true, email: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
         }
     });
 
     res.status(201).json({
-      ...newRepost,
+      ...withAuthor(newRepost),
       likesCount: 0,
       commentsCount: 0
     });

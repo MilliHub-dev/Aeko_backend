@@ -171,9 +171,12 @@ class PrivacyMiddleware {
       const postId = req.params.postId || req.params.id;
       if (!postId) return next();
 
+      // `userId` is a column on Post, so the author's id needs no join at all —
+      // and the `user` relation this included does not exist, which made every
+      // request through this middleware fail.
       const post = await prisma.post.findUnique({
         where: { id: postId },
-        include: { user: { select: { id: true } } }
+        select: { id: true, userId: true, privacy: true }
       });
 
       if (!post) {

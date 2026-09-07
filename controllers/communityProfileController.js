@@ -19,7 +19,9 @@ export const updateCommunityProfile = async (req, res) => {
     const community = await prisma.community.findUnique({
       where: { id: communityId },
       include: {
-        memberships: {
+        // The relation is `community_members`; `memberships` is not a field on
+        // Community, and Prisma rejects the query when an include names one.
+        community_members: {
           where: { userId: userId }
         }
       }
@@ -33,7 +35,7 @@ export const updateCommunityProfile = async (req, res) => {
     }
 
     // Check if user is owner or moderator
-    const member = community.memberships[0];
+    const member = community.community_members[0];
     const isAuthorized = community.ownerId === userId || (member && (member.role === 'owner' || member.role === 'moderator'));
 
     if (!isAuthorized) {
@@ -89,7 +91,9 @@ export const uploadCommunityPhoto = async (req, res) => {
     const community = await prisma.community.findUnique({
       where: { id: communityId },
       include: {
-        memberships: {
+        // The relation is `community_members`; `memberships` is not a field on
+        // Community, and Prisma rejects the query when an include names one.
+        community_members: {
           where: { userId: userId }
         }
       }
@@ -103,7 +107,7 @@ export const uploadCommunityPhoto = async (req, res) => {
     }
 
     // Check authorization
-    const member = community.memberships[0];
+    const member = community.community_members[0];
     const isAuthorized = community.ownerId === userId || (member && (member.role === 'owner' || member.role === 'moderator'));
 
     if (!isAuthorized) {
@@ -488,10 +492,12 @@ export const getCommunityPosts = async (req, res) => {
       prisma.post.findMany({
         where,
         include: {
-          user: {
-            select: { name: true, username: true, profilePicture: true, blueTick: true, goldenTick: true }
+          // Post's author relation is `users_posts_userIdTouser` and its
+          // community relation is `communities`. Both were named wrong here.
+          users_posts_userIdTouser: {
+            select: { name: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true }
           },
-          community: {
+          communities: {
             select: { name: true, profile: true }
           }
         },
@@ -504,7 +510,15 @@ export const getCommunityPosts = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: posts,
+      // Prisma's relation names are exposed under the names clients read.
+      data: posts.map((post) => ({
+        ...post,
+        _id: post.id,
+        user: post.users_posts_userIdTouser,
+        community: post.communities,
+        users_posts_userIdTouser: undefined,
+        communities: undefined,
+      })),
       pagination: {
         total,
         page: parseInt(page),

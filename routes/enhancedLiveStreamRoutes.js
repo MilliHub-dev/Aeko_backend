@@ -1117,7 +1117,8 @@ router.get('/user/streams', authMiddleware, async (req, res) => {
         skip: skip,
         take: parseInt(limit),
         include: {
-            host: {
+            // LiveStream's host relation is named `user` (FK hostId).
+            user: {
                 select: {
                     username: true,
                     profilePicture: true,

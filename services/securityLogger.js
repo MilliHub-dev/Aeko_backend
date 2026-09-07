@@ -397,13 +397,16 @@ class SecurityLogger {
       prisma.securityEvent.findMany({
         where,
         include: {
-          user: {
+          // SecurityEvent's two user relations are named for their foreign keys;
+          // `user` and `targetUser` are not fields on the model, so this
+          // query was rejected and fetching security events always failed.
+          users_security_events_userIdTouser: {
             select: {
               username: true,
               name: true
             }
           },
-          targetUser: {
+          users_security_events_targetUserIdTousers: {
             select: {
               username: true,
               name: true
@@ -418,7 +421,14 @@ class SecurityLogger {
     ]);
     
     return {
-      events,
+      // Aliased back to the names callers read.
+      events: events.map((event) => ({
+        ...event,
+        user: event.users_security_events_userIdTouser,
+        targetUser: event.users_security_events_targetUserIdTousers,
+        users_security_events_userIdTouser: undefined,
+        users_security_events_targetUserIdTousers: undefined,
+      })),
       pagination: {
         page,
         limit,

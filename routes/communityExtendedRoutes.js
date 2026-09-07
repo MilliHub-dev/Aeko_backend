@@ -359,7 +359,11 @@ router.get("/:id/posts", protect, checkPrivateCommunityAccess, async (req, res) 
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          user: { select: userSelect },
+          // The author relation on Post is `users_posts_userIdTouser`. `user` is
+          // not a field on the model, and Prisma rejects the whole query when an
+          // include names one that does not exist — so listing a community's
+          // posts always failed.
+          users_posts_userIdTouser: { select: userSelect },
           _count: { select: { comments: true } },
         },
       }),
@@ -368,7 +372,15 @@ router.get("/:id/posts", protect, checkPrivateCommunityAccess, async (req, res) 
 
     res.json({
       success: true,
-      posts: posts.map((post) => ({ ...post, isPinned: pinnedIds.includes(post.id) })),
+      posts: posts.map((post) => ({
+        ...post,
+        _id: post.id,
+        // Exposed as `user` because that is what the app reads.
+        user: post.users_posts_userIdTouser,
+        users_posts_userIdTouser: undefined,
+        commentsCount: post._count?.comments ?? 0,
+        isPinned: pinnedIds.includes(post.id),
+      })),
       pagination: { page, limit, total, hasMore: page * limit < total },
     });
   } catch (error) {

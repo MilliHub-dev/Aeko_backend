@@ -130,7 +130,8 @@ router.get("/", async (req, res) => {
         take: limitNum,
         skip: (pageNum - 1) * limitNum,
         include: {
-          creator: {
+          // Challenge's author relation is `user` (FK creatorId), not `creator`.
+          user: {
             select: { username: true, profilePicture: true }
           }
         }

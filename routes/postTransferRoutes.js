@@ -41,6 +41,18 @@ const router = express.Router();
  *       404:
  *         description: Post or user not found
  */
+/** Prisma names these relations after their foreign keys; clients read `user`
+ *  and `originalOwner`. */
+const withOwners = (post) =>
+  post && {
+    ...post,
+    _id: post.id,
+    user: post.users_posts_userIdTouser ?? post.user,
+    originalOwner: post.users_posts_originalOwnerIdTousers ?? post.originalOwner,
+    users_posts_userIdTouser: undefined,
+    users_posts_originalOwnerIdTousers: undefined,
+  };
+
 router.post("/transfer", authMiddleware, async (req, res) => {
   try {
     const { postId, toUserId, reason = "" } = req.body;
@@ -115,8 +127,12 @@ router.post("/transfer", authMiddleware, async (req, res) => {
         ownershipChain
       },
       include: {
-        user: { select: { username: true, profilePicture: true } },
-        originalOwner: { select: { username: true, profilePicture: true } }
+        // Post's relations are named for their foreign keys: the author is
+        // `users_posts_userIdTouser` and the previous owner is
+        // `users_posts_originalOwnerIdTousers`. Neither `user` nor
+        // `originalOwner` exists, so both of these queries were rejected.
+        users_posts_userIdTouser: { select: { username: true, profilePicture: true } },
+        users_posts_originalOwnerIdTousers: { select: { username: true, profilePicture: true } }
       }
     });
 
@@ -124,7 +140,7 @@ router.post("/transfer", authMiddleware, async (req, res) => {
       success: true,
       message: "Post transferred successfully",
       data: {
-        post: updatedPost,
+        post: withOwners(updatedPost),
         transferDetails: {
           fromUser: req.user.username,
           toUser: targetUser.username,
@@ -169,8 +185,8 @@ router.get("/transfer-history/:postId", async (req, res) => {
     const post = await prisma.post.findUnique({
       where: { id: postId },
       include: {
-        originalOwner: { select: { username: true, profilePicture: true } },
-        user: { select: { username: true, profilePicture: true } }
+        users_posts_originalOwnerIdTousers: { select: { username: true, profilePicture: true } },
+        users_posts_userIdTouser: { select: { username: true, profilePicture: true } }
       }
     });
 
@@ -209,8 +225,8 @@ router.get("/transfer-history/:postId", async (req, res) => {
         postId,
         ownershipChain: post.ownershipChain,
         transferHistory: transferHistory,
-        currentOwner: post.user,
-        originalOwner: post.originalOwner
+        currentOwner: post.users_posts_userIdTouser,
+        originalOwner: post.users_posts_originalOwnerIdTousers
       }
     });
 
