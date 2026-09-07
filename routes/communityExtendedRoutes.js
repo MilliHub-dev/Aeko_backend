@@ -8,7 +8,7 @@ import {
   isCommunityMember,
   checkPrivateCommunityAccess,
 } from "../middleware/communityMiddleware.js";
-import { uploadImage } from "../middleware/upload.js";
+import { upload, uploadImage } from "../middleware/upload.js";
 import { validateCommunityPaymentSettings } from "../middleware/paymentValidation.js";
 import { handleValidationErrors } from "../middleware/securityValidation.js";
 import { sendError } from "../utils/apiErrors.js";
@@ -377,29 +377,85 @@ router.get("/:id/posts", protect, checkPrivateCommunityAccess, async (req, res) 
   }
 });
 
-router.post("/:id/posts", protect, isCommunityMember, async (req, res) => {
+/**
+ * Create a post inside a community.
+ *
+ * This endpoint could never have worked:
+ *
+ *  - `Post.type` is required and has no default, so every create failed with
+ *    "Argument `type` is missing" before reaching anything else.
+ *  - It included a `user` relation; the relation is `users_posts_userIdTouser`,
+ *    and naming one that does not exist makes Prisma reject the query.
+ *  - It read `media` off `req.body` with no upload middleware, so an attached
+ *    image had nowhere to go.
+ */
+router.post(
+  "/:id/posts",
+  protect,
+  isCommunityMember,
+  upload.array("media", 10),
+  async (req, res) => {
   try {
-    const { text, media, privacy } = req.body || {};
-    if (!text && !media) {
-      return res.status(400).json({ error: "A post needs text or media" });
+    const { text, privacy } = req.body || {};
+
+    // Cloudinary storage exposes the hosted URL on path/secure_url.
+    const uploaded = (req.files || [])
+      .map((file) => file.path || file.secure_url)
+      .filter(Boolean);
+
+    // Media may also arrive as already-hosted URLs in the body.
+    let bodyMedia = [];
+    if (req.body?.media) {
+      try {
+        const parsed =
+          typeof req.body.media === "string" ? JSON.parse(req.body.media) : req.body.media;
+        bodyMedia = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        bodyMedia = [req.body.media];
+      }
     }
+
+    const media = [...uploaded, ...bodyMedia].filter(Boolean);
+    const trimmedText = typeof text === "string" ? text.trim() : "";
+
+    if (!trimmedText && media.length === 0) {
+      return res.status(400).json({ success: false, message: "A post needs text or media" });
+    }
+
+    // `type` drives the profile tabs and the reels feed, so it has to reflect
+    // what the post actually is.
+    const isVideo = media.some((url) => /\.(mp4|mov|m4v|webm|avi)(\?|$)/i.test(String(url)));
+    const type = media.length === 0 ? "text" : isVideo ? "video" : "image";
 
     const post = await prisma.post.create({
       data: {
-        text: text ?? "",
-        media: media ?? null,
+        text: trimmedText,
+        type,
+        media: media.length > 0 ? media : null,
         userId: currentUserId(req),
         communityId: req.params.id,
         isCommunityPost: true,
         ...(privacy ? { privacy } : {}),
       },
-      include: { user: { select: userSelect } },
+      include: { users_posts_userIdTouser: { select: userSelect } },
     });
 
-    res.status(201).json({ success: true, post });
+    res.status(201).json({
+      success: true,
+      post: {
+        ...post,
+        _id: post.id,
+        user: post.users_posts_userIdTouser,
+        users_posts_userIdTouser: undefined,
+      },
+    });
   } catch (error) {
     console.error("Create community post error:", error);
-    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
+    res.status(500).json({
+      success: false,
+      message: "Could not publish your post.",
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
+    });
   }
 });
 

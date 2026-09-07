@@ -300,7 +300,13 @@ export const getCommunity = async (req, res) => {
           }
         }
       });
-      isMember = !!memberRecord;
+      // Active only, matching `isCommunityMember` on the server. A pending or
+      // banned member has a row too, and reporting them as members made the app
+      // offer actions the endpoints then refused with a 403.
+      isMember =
+        memberRecord?.status === 'active' ||
+        memberRecord?.role === 'owner' ||
+        memberRecord?.role === 'moderator';
       memberRole = memberRecord?.role || null;
       memberStatus = memberRecord?.status || null;
     }
