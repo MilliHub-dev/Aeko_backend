@@ -815,7 +815,9 @@ export const getTrendingCommunityPosts = async (req, res) => {
             username: true,
             profilePicture: true,
             blueTick: true,
-            goldenTick: true
+            goldenTick: true,
+            prideTick: true,
+            businessTick: true
           }
         },
         communities: { select: { id: true, name: true, profile: true } },
