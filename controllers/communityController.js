@@ -372,7 +372,9 @@ export const joinCommunity = async (req, res) => {
     const community = await prisma.community.findUnique({
       where: { id },
       include: {
-        chat: true
+        // The relation is `chats` (Chat?), not `chat`. Including a field that
+        // does not exist makes Prisma reject the query outright.
+        chats: true
       }
     });
 
@@ -480,12 +482,12 @@ export const joinCommunity = async (req, res) => {
         });
 
         // Add to chat if active
-        if (community.chat) {
+        if (community.chats) {
           // Check if already in chat to avoid unique constraint error
           const inChat = await prisma.chatMember.findUnique({
             where: {
               chatId_userId: {
-                chatId: community.chat.id,
+                chatId: community.chats.id,
                 userId: userId
               }
             }
@@ -494,7 +496,7 @@ export const joinCommunity = async (req, res) => {
           if (!inChat) {
             await prisma.chatMember.create({
               data: {
-                chatId: community.chat.id,
+                chatId: community.chats.id,
                 userId: userId
               }
             });
@@ -531,7 +533,9 @@ export const leaveCommunity = async (req, res) => {
     const community = await prisma.community.findUnique({
       where: { id },
       include: {
-        chat: true
+        // The relation is `chats` (Chat?), not `chat`. Including a field that
+        // does not exist makes Prisma reject the query outright.
+        chats: true
       }
     });
 
@@ -588,12 +592,12 @@ export const leaveCommunity = async (req, res) => {
         });
 
         // Remove from chat
-        if (community.chat) {
+        if (community.chats) {
            // Check if in chat first
            const inChat = await prisma.chatMember.findUnique({
              where: {
                chatId_userId: {
-                 chatId: community.chat.id,
+                 chatId: community.chats.id,
                  userId: userId
                }
              }
@@ -603,7 +607,7 @@ export const leaveCommunity = async (req, res) => {
              await prisma.chatMember.delete({
                where: {
                  chatId_userId: {
-                   chatId: community.chat.id,
+                   chatId: community.chats.id,
                    userId: userId
                  }
                }
@@ -710,7 +714,9 @@ export const deleteCommunity = async (req, res) => {
     const community = await prisma.community.findUnique({
       where: { id },
       include: {
-        chat: true
+        // The relation is `chats` (Chat?), not `chat`. Including a field that
+        // does not exist makes Prisma reject the query outright.
+        chats: true
       }
     });
 
@@ -749,11 +755,11 @@ export const deleteCommunity = async (req, res) => {
 
       // 3. Handle chat (optional, maybe mark inactive too?)
       // For now, let's leave chat but remove members from it?
-      if (community.chat) {
+      if (community.chats) {
         // Find all chat members that are in this community chat
         // Actually, since we removed community members, we should probably clear chat members too
         await prisma.chatMember.deleteMany({
-          where: { chatId: community.chat.id }
+          where: { chatId: community.chats.id }
         });
       }
     });

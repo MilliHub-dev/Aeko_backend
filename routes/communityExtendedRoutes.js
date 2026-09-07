@@ -86,12 +86,19 @@ router.get("/:id/profile", protect, checkPrivateCommunityAccess, async (req, res
         isPrivate: true,
         memberCount: true,
         createdAt: true,
+        ownerId: true,
         users: { select: userSelect },
       },
     });
 
     if (!community) return res.status(404).json({ error: "Community not found" });
-    res.json({ success: true, community });
+
+    // The edit screen shows owner-only actions (deleting the community), and a
+    // moderator can reach that screen too — so it needs to know which one you are.
+    res.json({
+      success: true,
+      community: { ...community, isOwner: community.ownerId === currentUserId(req) },
+    });
   } catch (error) {
     console.error("Get community profile error:", error);
     res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
