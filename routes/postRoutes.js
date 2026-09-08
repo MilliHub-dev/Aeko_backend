@@ -215,24 +215,64 @@ const withAuthor = (post) =>
 // is a product lever, so it lives in config rather than being hardcoded here.
 // ---------------------------------------------------------------------------
 
-const NFT_ENGAGEMENT_THRESHOLD =
-  Number(process.env.AEKO_NFT_ENGAGEMENT_THRESHOLD) || 5;
+const NFT_SETTINGS_DEFAULTS = {
+  engagementThreshold: Number(process.env.AEKO_NFT_ENGAGEMENT_THRESHOLD) || 5,
+  likeWeight: 1,
+  commentWeight: 2,
+  viewsPerPoint: 100,
+  mintingEnabled: true,
+  maxRoyaltyBps: 1000,
+};
+
+// Read per request would mean a query per post list; the rules change rarely,
+// so a short cache keeps the admin edit responsive without the traffic.
+const NFT_SETTINGS_TTL_MS = 30_000;
+let nftSettingsCache = { value: null, expiresAt: 0 };
+
+/**
+ * The live post-to-NFT rules.
+ *
+ * These used to be a hardcoded env var, so tuning the threshold required a
+ * redeploy. They now live in a single `nft_settings` row that the admin panel
+ * edits. The defaults above apply until a row exists, and are also the fallback
+ * if the table cannot be read — a settings lookup must never take down the feed.
+ */
+async function getNftSettings() {
+  if (nftSettingsCache.value && Date.now() < nftSettingsCache.expiresAt) {
+    return nftSettingsCache.value;
+  }
+  try {
+    const row = await prisma.nftSettings.findFirst();
+    const value = row ? { ...NFT_SETTINGS_DEFAULTS, ...row } : NFT_SETTINGS_DEFAULTS;
+    nftSettingsCache = { value, expiresAt: Date.now() + NFT_SETTINGS_TTL_MS };
+    return value;
+  } catch (error) {
+    console.error("nft settings read failed, using defaults:", error);
+    return NFT_SETTINGS_DEFAULTS;
+  }
+}
 
 /**
  * One number standing in for "this post did well".
  *
  * Comments are weighted above likes because they cost more effort, and views
- * are divided down so a post cannot qualify on passive impressions alone.
+ * are divided down so a post cannot qualify on passive impressions alone. All
+ * three weights are admin-tunable.
  */
-const engagementScore = (post) => {
+const engagementScore = (post, settings = NFT_SETTINGS_DEFAULTS) => {
   const likes = Array.isArray(post.likes) ? post.likes.length : 0;
   const comments = post._count?.comments ?? 0;
   const views = post.views ?? 0;
-  return likes + comments * 2 + Math.floor(views / 100);
+  const perPoint = settings.viewsPerPoint > 0 ? settings.viewsPerPoint : 100;
+  return (
+    likes * settings.likeWeight +
+    comments * settings.commentWeight +
+    Math.floor(views / perPoint)
+  );
 };
 
-const toEligibilityEntry = (post) => {
-  const score = engagementScore(post);
+const toEligibilityEntry = (post, settings) => {
+  const score = engagementScore(post, settings);
   return {
     id: post.id,
     _id: post.id,
@@ -244,8 +284,11 @@ const toEligibilityEntry = (post) => {
     comments: post._count?.comments ?? 0,
     views: post.views ?? 0,
     engagementScore: score,
-    threshold: NFT_ENGAGEMENT_THRESHOLD,
-    eligible: score >= NFT_ENGAGEMENT_THRESHOLD && !post.nftTokenId,
+    threshold: settings.engagementThreshold,
+    eligible:
+      settings.mintingEnabled &&
+      score >= settings.engagementThreshold &&
+      !post.nftTokenId,
     alreadyMinted: Boolean(post.nftTokenId),
     nftTokenId: post.nftTokenId ?? null,
   };
@@ -264,6 +307,7 @@ router.get("/nft-eligible", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id || req.userId;
     const includeAll = String(req.query.all || "") === "true";
+    const settings = await getNftSettings();
 
     const posts = await prisma.post.findMany({
       where: { userId, status: "active", communityId: null },
@@ -276,11 +320,13 @@ router.get("/nft-eligible", authMiddleware, async (req, res) => {
       },
     });
 
-    const annotated = posts.map(toEligibilityEntry);
+    const annotated = posts.map((post) => toEligibilityEntry(post, settings));
 
     res.json({
       success: true,
-      threshold: NFT_ENGAGEMENT_THRESHOLD,
+      threshold: settings.engagementThreshold,
+      mintingEnabled: settings.mintingEnabled,
+      maxRoyaltyBps: settings.maxRoyaltyBps,
       // `all=true` lets the app show near-misses with their progress, which is
       // more useful than an empty list when nothing qualifies yet.
       posts: includeAll ? annotated : annotated.filter((p) => p.eligible),
@@ -362,14 +408,24 @@ router.post(
       });
     }
 
-    const score = engagementScore(post);
-    if (score < NFT_ENGAGEMENT_THRESHOLD) {
+    const settings = await getNftSettings();
+
+    if (!settings.mintingEnabled) {
+      return res.status(403).json({
+        success: false,
+        message: "Turning posts into NFTs is currently switched off.",
+        code: "MINTING_DISABLED",
+      });
+    }
+
+    const score = engagementScore(post, settings);
+    if (score < settings.engagementThreshold) {
       return res.status(400).json({
         success: false,
-        message: `This post needs ${NFT_ENGAGEMENT_THRESHOLD} engagement points to become an NFT. It has ${score}.`,
+        message: `This post needs ${settings.engagementThreshold} engagement points to become an NFT. It has ${score}.`,
         code: "NOT_ELIGIBLE",
         engagementScore: score,
-        threshold: NFT_ENGAGEMENT_THRESHOLD,
+        threshold: settings.engagementThreshold,
       });
     }
 
@@ -411,7 +467,10 @@ router.post(
       payer: creator, recentBlockhash: blockhash, tokenAddress: tokenAccount,
       base: creator, tokenSeed, lamports, space, collection,
       authority: creator, owner: creator, tokenId,
-      royaltyBps: Number(royaltyBps) || 0, metadata,
+      // Capped by the admin setting so a creator cannot list an NFT with a
+      // royalty above the platform limit.
+      royaltyBps: Math.min(settings.maxRoyaltyBps, Math.max(0, Number(royaltyBps) || 0)),
+      metadata,
     });
 
     res.json({ success: true, txBase64, tokenAccount, tokenId, metadata, engagementScore: score });

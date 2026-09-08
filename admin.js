@@ -1062,6 +1062,59 @@ const admin = new AdminJS({
       },
     },
 
+    // ===== NFT RULES =====
+    {
+      resource: { model: modelMap.NftSettings, client: prisma },
+      options: {
+        parent: { name: "Platform Rules", icon: "Settings" },
+        id: "nft-settings",
+        // A single row of platform-wide rules. Creating a second one would make
+        // "which settings apply?" ambiguous, so only editing is offered.
+        actions: {
+          new: { isVisible: true },
+          edit: { isVisible: true },
+          delete: { isVisible: false },
+          bulkDelete: { isVisible: false },
+        },
+        properties: {
+          id: { isVisible: { list: false, show: true, edit: false } },
+          engagementThreshold: {
+            position: 1,
+            description:
+              "Engagement points a post needs before its author can mint it as an NFT.",
+          },
+          likeWeight: {
+            position: 2,
+            description: "Points awarded per like.",
+          },
+          commentWeight: {
+            position: 3,
+            description: "Points per comment — usually higher than a like, since it takes more effort.",
+          },
+          viewsPerPoint: {
+            position: 4,
+            description: "Views needed for one point. Higher means views count for less.",
+          },
+          mintingEnabled: {
+            position: 5,
+            description: "Turn post-to-NFT conversion on or off for everyone.",
+          },
+          maxRoyaltyBps: {
+            position: 6,
+            description: "Highest royalty a creator may set, in basis points (1000 = 10%).",
+          },
+          updatedAt: { isVisible: { list: true, show: true, edit: false } },
+          updatedBy: { isVisible: { list: false, show: true, edit: false } },
+        },
+        listProperties: [
+          "engagementThreshold",
+          "mintingEnabled",
+          "maxRoyaltyBps",
+          "updatedAt",
+        ],
+      },
+    },
+
     // ===== SUBSCRIPTION MANAGEMENT =====
     {
       resource: { model: modelMap.SubscriptionPlan, client: prisma },

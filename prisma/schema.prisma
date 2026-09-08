@@ -778,3 +778,23 @@ model LiveStreamGift {
   stream LiveStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
   sender User @relation("sentGifts", fields: [senderId], references: [id], onDelete: Cascade)
 }
+
+/// Platform-wide rules for turning a post into an NFT. A single row, edited
+/// from the admin panel — the threshold was a hardcoded env var, so changing it
+/// meant a redeploy.
+model NftSettings {
+  @@map("nft_settings")
+  id String @id @default(uuid())
+  /// Engagement points a post must earn before it can be minted.
+  engagementThreshold Int @default(5)
+  /// Weights behind the score, so the formula itself is tunable.
+  likeWeight Int @default(1)
+  commentWeight Int @default(2)
+  viewsPerPoint Int @default(100)
+  /// Kill switch for the whole post-to-NFT feature.
+  mintingEnabled Boolean @default(true)
+  /// Highest royalty a creator may set, in basis points (1000 = 10%).
+  maxRoyaltyBps Int @default(1000)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
