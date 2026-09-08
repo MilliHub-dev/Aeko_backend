@@ -353,13 +353,19 @@ router.get('/activity', authMiddleware, async (req, res) => {
 router.put('/update', authMiddleware, twoFactorMiddleware.requireTwoFactor(), async (req, res) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-    const { username, email, profilePic, coverPic, bio, location } = req.body;
-    
+    // `name` was missing from this list while the app has always sent it, so
+    // editing your display name saved bio and location and silently discarded
+    // the rename.
+    const { name, username, profilePic, coverPic, bio, location } = req.body;
+
+    // `email` is deliberately not accepted here. It is the password-reset
+    // channel, and there is no verification flow for changing it — allowing a
+    // silent swap would hand over the account to anyone with a live session.
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { 
-        username, 
-        email, 
+      data: {
+        name,
+        username,
         profilePicture: profilePic,
         coverPicture: coverPic,
         bio,
