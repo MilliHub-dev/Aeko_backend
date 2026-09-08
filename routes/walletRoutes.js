@@ -272,10 +272,13 @@ const isValidAddress = (address) => {
 /** Flat fee applied to withdrawals to an external address, in AEKO. */
 const WITHDRAWAL_FEE_AEKO = 0.8;
 
+// Guards every custodial route, not just transfers, and the message now
+// reaches users directly — the app surfaces the server's `message`.
 const custodyUnavailable = (res) =>
   res.status(503).json({
     success: false,
-    message: "Wallet transfers are temporarily unavailable.",
+    message: "Wallet services are temporarily unavailable. Please try again shortly.",
+    code: "CUSTODY_UNAVAILABLE",
   });
 
 /**
