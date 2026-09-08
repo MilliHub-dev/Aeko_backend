@@ -114,6 +114,9 @@ class EnhancedChatSocket {
     // Notify user's contacts about online status
     this.broadcastUserStatus(socket.userId, 'online');
 
+    // ...and tell this socket who is already online.
+    this.sendPresenceSnapshot(socket);
+
     // Send user their unread message count
     this.sendUnreadCount(socket);
 
@@ -757,11 +760,40 @@ class EnhancedChatSocket {
   }
 
   broadcastUserStatus(userId, status) {
+    const entry = this.connectedUsers.get(userId);
     this.io.emit('user_status_update', {
       userId,
       status,
+      // The app shows "last seen ..." beside an offline contact, which needs a
+      // timestamp rather than just the transition.
+      lastSeen: (entry?.lastSeen ?? new Date()).toISOString(),
+      socketId: entry?.socketId ?? null,
+      name: entry?.user?.name ?? entry?.user?.username ?? null,
+      avatar: entry?.user?.profilePicture ?? null,
       timestamp: new Date()
     });
+  }
+
+  /**
+   * Presence snapshot for a socket that has just connected.
+   *
+   * `broadcastUserStatus` only fires on a transition, so anyone who was already
+   * online before you connected was invisible to you — their dot never lit up
+   * until they happened to reconnect.
+   */
+  sendPresenceSnapshot(socket) {
+    const online = [];
+    for (const [userId, entry] of this.connectedUsers) {
+      if (entry.status !== 'online' || userId === socket.userId) continue;
+      online.push({
+        userId,
+        socketId: entry.socketId,
+        name: entry.user?.name ?? entry.user?.username ?? null,
+        avatar: entry.user?.profilePicture ?? null,
+        lastSeen: (entry.lastSeen ?? new Date()).toISOString(),
+      });
+    }
+    socket.emit('presence_snapshot', { online });
   }
 
   getOnlineUsersInChat(chatId) {

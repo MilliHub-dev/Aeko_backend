@@ -54,11 +54,21 @@ const statusFromContent = (content) => {
   return 'completed';
 };
 
-/** Shapes a stored row into what the app's call history renders. */
-const toCallEntry = (message, currentUserId) => {
+/**
+ * Shapes a stored row into what the app's call history renders.
+ *
+ * `partnerByChat` covers rows written before the app sent a `receiverId`: two
+ * thirds of existing call rows have none, so an outgoing call had no `receiver`
+ * to name and every one of them displayed as "Unknown". The other participant
+ * is looked up from the chat's membership instead.
+ */
+const toCallEntry = (message, currentUserId, partnerByChat = {}) => {
   const call = message.metadata?.call || {};
   const isOutgoing = message.senderId === currentUserId;
-  const other = isOutgoing ? message.receiver : message.sender;
+  const other =
+    (isOutgoing ? message.receiver : message.sender) ??
+    partnerByChat[message.chatId] ??
+    null;
 
   return {
     id: message.id,
@@ -128,9 +138,27 @@ router.get(
         prisma.enhancedMessage.count({ where }),
       ]);
 
+      // One lookup for every chat in this page, so a missing `receiverId` still
+      // resolves to a real person.
+      const partnerByChat = {};
+      const pageChatIds = [...new Set(messages.map((m) => m.chatId))];
+      if (pageChatIds.length > 0) {
+        const others = await prisma.chatMember.findMany({
+          where: { chatId: { in: pageChatIds }, userId: { not: userId } },
+          include: { user: { select: userSelect } },
+        });
+        for (const member of others) {
+          // Only meaningful for 1:1 chats; a group keeps the first match, which
+          // is still better than "Unknown".
+          if (!partnerByChat[member.chatId]) {
+            partnerByChat[member.chatId] = member.user;
+          }
+        }
+      }
+
       res.json({
         success: true,
-        calls: messages.map((m) => toCallEntry(m, userId)),
+        calls: messages.map((m) => toCallEntry(m, userId, partnerByChat)),
         pagination: { page, limit, total, hasMore: page * limit < total },
       });
     } catch (error) {

@@ -64,7 +64,14 @@ router.post("/chat", authMiddleware, async (req, res) => {
     const { message, instruction, personalityOverride } = req.body;
     
     if (!message || message.trim().length === 0) {
-      return res.status(400).json({ error: "Message is required" });
+      // Clients read `message`; returning only `error` meant every failure here
+      // surfaced as the generic "Something went wrong. Please try again."
+      return res.status(400).json({
+        success: false,
+        error: "Message is required",
+        message: "Type a message first.",
+        code: "MESSAGE_REQUIRED",
+      });
     }
 
     const startTime = Date.now();
@@ -78,7 +85,18 @@ router.post("/chat", authMiddleware, async (req, res) => {
     const responseTime = Date.now() - startTime;
 
     if (response.error) {
-      return res.status(403).json({ error: response.error });
+      // `botEnabled` defaults to false, so this is the answer almost every user
+      // gets — and with no `message` key the app could only say "Something went
+      // wrong", giving no hint that the assistant is simply switched off.
+      const disabled = /disabled/i.test(String(response.error));
+      return res.status(403).json({
+        success: false,
+        error: response.error,
+        message: disabled
+          ? "Your AI assistant is turned off. Turn it on in Settings → Bot settings."
+          : response.error,
+        code: disabled ? "BOT_DISABLED" : "BOT_UNAVAILABLE",
+      });
     }
 
     // Update user analytics
