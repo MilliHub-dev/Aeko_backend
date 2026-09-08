@@ -4,7 +4,8 @@ import { Prisma } from "@prisma/client";
 import upload from "../middleware/upload.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingService from "../services/blockingService.js";
-import { connection, explorer } from "../chain/client.js";
+import { connection, explorer, sendChainError } from "../chain/client.js";
+import { getCustodialAddress, isCustodyConfigured } from "../chain/custodialKeypair.js";
 import { toBase58Hash } from "../chain/utils.js";
 import { deriveWithSeed, getMinBalanceForRentExemption } from "../chain/utils.js";
 import { buildPreparedAnchorPostTransaction } from "@aeko-chain/sdk";
@@ -205,6 +206,220 @@ const withAuthor = (post) =>
     user: post.users_posts_userIdTouser ?? post.user,
     users_posts_userIdTouser: undefined,
   };
+
+
+// ---------------------------------------------------------------------------
+// Post → NFT
+//
+// A post becomes mintable once it has earned enough engagement. The threshold
+// is a product lever, so it lives in config rather than being hardcoded here.
+// ---------------------------------------------------------------------------
+
+const NFT_ENGAGEMENT_THRESHOLD =
+  Number(process.env.AEKO_NFT_ENGAGEMENT_THRESHOLD) || 5;
+
+/**
+ * One number standing in for "this post did well".
+ *
+ * Comments are weighted above likes because they cost more effort, and views
+ * are divided down so a post cannot qualify on passive impressions alone.
+ */
+const engagementScore = (post) => {
+  const likes = Array.isArray(post.likes) ? post.likes.length : 0;
+  const comments = post._count?.comments ?? 0;
+  const views = post.views ?? 0;
+  return likes + comments * 2 + Math.floor(views / 100);
+};
+
+const toEligibilityEntry = (post) => {
+  const score = engagementScore(post);
+  return {
+    id: post.id,
+    _id: post.id,
+    text: post.text ?? "",
+    type: post.type,
+    media: post.media ?? null,
+    createdAt: post.createdAt,
+    likes: Array.isArray(post.likes) ? post.likes.length : 0,
+    comments: post._count?.comments ?? 0,
+    views: post.views ?? 0,
+    engagementScore: score,
+    threshold: NFT_ENGAGEMENT_THRESHOLD,
+    eligible: score >= NFT_ENGAGEMENT_THRESHOLD && !post.nftTokenId,
+    alreadyMinted: Boolean(post.nftTokenId),
+    nftTokenId: post.nftTokenId ?? null,
+  };
+};
+
+/**
+ * @swagger
+ * /api/posts/nft-eligible:
+ *   get:
+ *     tags: [Posts]
+ *     summary: The caller's posts, annotated with whether they can be minted as an NFT
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/nft-eligible", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id || req.userId;
+    const includeAll = String(req.query.all || "") === "true";
+
+    const posts = await prisma.post.findMany({
+      where: { userId, status: "active", communityId: null },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      select: {
+        id: true, text: true, type: true, media: true, views: true,
+        likes: true, createdAt: true, nftTokenId: true,
+        _count: { select: { comments: true } },
+      },
+    });
+
+    const annotated = posts.map(toEligibilityEntry);
+
+    res.json({
+      success: true,
+      threshold: NFT_ENGAGEMENT_THRESHOLD,
+      // `all=true` lets the app show near-misses with their progress, which is
+      // more useful than an empty list when nothing qualifies yet.
+      posts: includeAll ? annotated : annotated.filter((p) => p.eligible),
+      eligibleCount: annotated.filter((p) => p.eligible).length,
+      totalCount: annotated.length,
+    });
+  } catch (error) {
+    console.error("nft-eligible error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Could not check which posts can become NFTs.",
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
+    });
+  }
+});
+
+
+/**
+ * The address a mint is paid from and owned by.
+ *
+ * Prefers the user's stored `walletAddress` (a linked external wallet), and
+ * otherwise derives their custodial address. Returns null when custody is not
+ * configured and no wallet is linked, so the caller can answer 503 rather than
+ * throwing.
+ */
+async function resolveMintingAddress(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { walletAddress: true },
+  });
+  if (user?.walletAddress) return user.walletAddress;
+
+  if (!isCustodyConfigured()) return null;
+
+  const address = getCustodialAddress(userId);
+  await prisma.user
+    .updateMany({ where: { id: userId }, data: { walletAddress: address } })
+    .catch((error) => console.error("wallet address sync failed:", error));
+  return address;
+}
+
+/**
+ * @swagger
+ * /api/posts/{postId}/prepare-mint-nft:
+ *   post:
+ *     tags: [Posts]
+ *     summary: Prepare an unsigned transaction minting one of your posts as an NFT
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  "/:postId([0-9a-fA-F]{24}|[0-9a-fA-F-]{36})/prepare-mint-nft",
+  authMiddleware,
+  async (req, res) => {
+  try {
+    const userId = req.user.id || req.userId;
+    const { postId } = req.params;
+    const { collectionAccount, royaltyBps } = req.body || {};
+
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: {
+        id: true, userId: true, text: true, type: true, media: true,
+        views: true, likes: true, createdAt: true, nftTokenId: true,
+        _count: { select: { comments: true } },
+      },
+    });
+
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+    if (post.userId !== userId) {
+      return res.status(403).json({ success: false, message: "You can only mint your own posts" });
+    }
+    if (post.nftTokenId) {
+      return res.status(400).json({
+        success: false,
+        message: "This post has already been minted as an NFT.",
+        code: "ALREADY_MINTED",
+        nftTokenId: post.nftTokenId,
+      });
+    }
+
+    const score = engagementScore(post);
+    if (score < NFT_ENGAGEMENT_THRESHOLD) {
+      return res.status(400).json({
+        success: false,
+        message: `This post needs ${NFT_ENGAGEMENT_THRESHOLD} engagement points to become an NFT. It has ${score}.`,
+        code: "NOT_ELIGIBLE",
+        engagementScore: score,
+        threshold: NFT_ENGAGEMENT_THRESHOLD,
+      });
+    }
+
+    const creator = await resolveMintingAddress(userId);
+    if (!creator) {
+      return res.status(503).json({
+        success: false,
+        message: "Wallet services are temporarily unavailable. Please try again shortly.",
+        code: "CUSTODY_UNAVAILABLE",
+      });
+    }
+
+    // The chain team's dedicated `MintPostAsNft` instruction is not in the SDK
+    // yet (see aeko_chain_implement.md). Until it ships, the post is minted
+    // through the standard token-721 path with the post recorded in metadata,
+    // which produces a real, tradeable NFT that points back at the post.
+    const collection = collectionAccount || creator;
+    const tokenId    = Date.now();
+    const tokenSeed  = `post:${postId}`.slice(0, 32);
+    const tokenAccount = deriveWithSeed(creator, tokenSeed, PROGRAM_IDS.TOKEN_721);
+
+    const firstMedia = Array.isArray(post.media) ? post.media[0] : post.media;
+    const metadata = {
+      name: (post.text || "Aeko post").trim().slice(0, 32) || "Aeko post",
+      symbol: "AEKO",
+      uri: typeof firstMedia === "string" ? firstMedia : "",
+      attributes: [
+        { trait_type: "postId", value: postId },
+        { trait_type: "engagementScore", value: String(score) },
+        { trait_type: "mintedAt", value: new Date().toISOString() },
+      ],
+    };
+
+    const space    = estimateTokenAccountSpace({ metadata });
+    const lamports = await getMinBalanceForRentExemption(connection, space);
+    const blockhash = await connection.getLatestBlockhash();
+
+    const txBase64 = buildPreparedMintWithAccountSetupTransaction({
+      payer: creator, recentBlockhash: blockhash, tokenAddress: tokenAccount,
+      base: creator, tokenSeed, lamports, space, collection,
+      authority: creator, owner: creator, tokenId,
+      royaltyBps: Number(royaltyBps) || 0, metadata,
+    });
+
+    res.json({ success: true, txBase64, tokenAccount, tokenId, metadata, engagementScore: score });
+  } catch (error) {
+    console.error("prepare-mint-nft error:", error);
+    sendChainError(res, error, "Failed to prepare the mint transaction");
+  }
+});
 
 router.get("/user/bookmarks", authMiddleware, async (req, res) => {
     try {
