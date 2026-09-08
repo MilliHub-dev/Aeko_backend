@@ -1,6 +1,6 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
-import { connection } from "../chain/client.js";
+import { connection, sendChainError } from "../chain/client.js";
 import { aekoToLamports, lamportsToAeko, deriveWithSeed, getMinBalanceForRentExemption, sendAndConfirmSigned } from "../chain/utils.js";
 import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeypair.js";
 import { buildPreparedMultiInstructionTransaction, buildSystemTransferInstruction } from "../chain/txBuilder.js";
@@ -107,7 +107,7 @@ router.get("/listings", async (req, res) => {
     res.json({ success: true, listings: listings.slice(0, Number(limit) || 25) });
   } catch (error) {
     console.error("marketplace listings error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch listings" });
+    sendChainError(res, error, "Failed to fetch listings");
   }
 });
 
@@ -188,7 +188,7 @@ router.post("/prepare-list", authMiddleware, async (req, res) => {
     res.json({ success: true, txBase64, listingAccount });
   } catch (error) {
     console.error("prepare-list error:", error);
-    res.status(500).json({ success: false, message: "Failed to prepare listing transaction" });
+    sendChainError(res, error, "Failed to prepare listing transaction");
   }
 });
 
@@ -278,7 +278,7 @@ router.post("/prepare-buy", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error("prepare-buy error:", error);
-    res.status(500).json({ success: false, message: "Failed to prepare buy transaction" });
+    sendChainError(res, error, "Failed to prepare buy transaction");
   }
 });
 
@@ -333,7 +333,7 @@ router.post("/prepare-cancel", authMiddleware, async (req, res) => {
     res.json({ success: true, txBase64 });
   } catch (error) {
     console.error("prepare-cancel error:", error);
-    res.status(500).json({ success: false, message: "Failed to prepare cancel transaction" });
+    sendChainError(res, error, "Failed to prepare cancel transaction");
   }
 });
 
@@ -417,7 +417,7 @@ router.post("/buy", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error("marketplace buy error:", error);
-    res.status(500).json({ success: false, message: "Purchase failed" });
+    sendChainError(res, error, "Purchase failed");
   }
 });
 

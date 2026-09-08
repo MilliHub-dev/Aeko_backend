@@ -68,11 +68,21 @@ function buildLegacyMessage(payer, recentBlockhash, instructions) {
   ].filter(Boolean);
 
   const idx = new Map(ordered.map((m, i) => [Array.from(m.pubkey).join(","), i]));
+  // Legacy message header is exactly:
+  //   [numRequiredSignatures, numReadonlySignedAccounts, numReadonlyUnsignedAccounts]
+  //
+  // This emitted [numSigners, <all readonly>, <readonly signed>] — the wrong
+  // value in slot 2 and the wrong order for slots 2 and 3. For a plain transfer
+  // it produced [1, 1, 0] instead of [1, 0, 1], telling the validator the second
+  // account was a read-only *signer* while the account flags said otherwise. The
+  // chain rejected every such transaction with "Transaction failed to sanitize
+  // accounts offsets correctly", which took down transfers, withdrawals, NFT
+  // mints and every marketplace action that goes through this builder.
   const numSigners    = ordered.filter(m => m.isSigner).length;
-  const numReadonly   = ordered.filter(m => !m.isWritable).length;
   const numSignedRO   = ordered.filter(m => m.isSigner && !m.isWritable).length;
+  const numUnsignedRO = ordered.filter(m => !m.isSigner && !m.isWritable).length;
 
-  const header = Uint8Array.from([numSigners, numReadonly, numSignedRO]);
+  const header = Uint8Array.from([numSigners, numSignedRO, numUnsignedRO]);
 
   const compiledIxs = instructions.map(ix =>
     concatBytes(

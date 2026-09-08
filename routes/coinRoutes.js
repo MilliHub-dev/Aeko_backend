@@ -1,4 +1,5 @@
 import express from "express";
+import { sendChainError } from "../chain/client.js";
 import axios from "axios";
 import Stripe from "stripe";
 import { v4 as uuidV4 } from "uuid";
@@ -31,7 +32,7 @@ router.get("/balance", authMiddleware, async (req, res) => {
     });
     res.json({ success: true, data: { coinBalance: user.coinBalance } });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to fetch balance" });
+    sendChainError(res, error, "Failed to fetch balance");
   }
 });
 
@@ -58,7 +59,7 @@ router.get("/history", authMiddleware, async (req, res) => {
       data: { transactions, total, page: parseInt(page), limit: parseInt(limit) },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to fetch history" });
+    sendChainError(res, error, "Failed to fetch history");
   }
 });
 

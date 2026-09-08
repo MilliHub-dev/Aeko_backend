@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import authMiddleware from "../middleware/authMiddleware.js";
-import { connection, explorer } from "../chain/client.js";
+import { connection, explorer, sendChainError } from "../chain/client.js";
 import { getMinBalanceForRentExemption, deriveWithSeed } from "../chain/utils.js";
 import {
   PROGRAM_IDS,
@@ -44,7 +44,7 @@ router.get("/", async (req, res) => {
     res.json({ success: true, nfts });
   } catch (error) {
     console.error("list nfts error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch NFTs" });
+    sendChainError(res, error, "Failed to fetch NFTs");
   }
 });
 
@@ -72,7 +72,7 @@ router.get("/collections/:collectionId", async (req, res) => {
     res.json({ success: true, collection });
   } catch (error) {
     console.error("get collection error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch collection" });
+    sendChainError(res, error, "Failed to fetch collection");
   }
 });
 
@@ -100,7 +100,7 @@ router.get("/:tokenId", async (req, res) => {
     res.json({ success: true, nft });
   } catch (error) {
     console.error("get nft error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch NFT" });
+    sendChainError(res, error, "Failed to fetch NFT");
   }
 });
 
@@ -165,7 +165,7 @@ router.post("/upload-metadata", authMiddleware, memoryUpload.single("image"), as
     res.json({ success: true, uri, imageUri });
   } catch (error) {
     console.error("upload-metadata error:", error);
-    res.status(500).json({ success: false, message: "Failed to upload metadata to IPFS" });
+    sendChainError(res, error, "Failed to upload metadata to IPFS");
   }
 });
 
@@ -247,7 +247,7 @@ router.post("/prepare-mint", authMiddleware, async (req, res) => {
     res.json({ success: true, txBase64, tokenAccount });
   } catch (error) {
     console.error("prepare-mint error:", error);
-    res.status(500).json({ success: false, message: "Failed to prepare mint transaction" });
+    sendChainError(res, error, "Failed to prepare mint transaction");
   }
 });
 
@@ -298,7 +298,7 @@ router.post("/prepare-transfer", authMiddleware, async (req, res) => {
     res.json({ success: true, txBase64 });
   } catch (error) {
     console.error("prepare-transfer nft error:", error);
-    res.status(500).json({ success: false, message: "Failed to prepare NFT transfer transaction" });
+    sendChainError(res, error, "Failed to prepare NFT transfer transaction");
   }
 });
 

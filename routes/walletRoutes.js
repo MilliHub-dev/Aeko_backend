@@ -1,6 +1,6 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
-import { connection, explorer } from "../chain/client.js";
+import { connection, explorer, sendChainError } from "../chain/client.js";
 import { aekoToLamports, lamportsToAeko, getMinBalanceForRentExemption, sendAndConfirmSigned } from "../chain/utils.js";
 import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeypair.js";
 import { decodeBase58 } from "@aeko-chain/web3.js";
@@ -64,7 +64,7 @@ router.post("/link", authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, message: "This wallet address is already linked to another account" });
     }
     console.error("wallet link error:", error);
-    res.status(500).json({ success: false, message: "Failed to link wallet" });
+    sendChainError(res, error, "Failed to link wallet");
   }
 });
 
@@ -89,7 +89,7 @@ router.delete("/link", authMiddleware, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error("wallet unlink error:", error);
-    res.status(500).json({ success: false, message: "Failed to unlink wallet" });
+    sendChainError(res, error, "Failed to unlink wallet");
   }
 });
 
@@ -124,7 +124,7 @@ router.get("/:address/balance", async (req, res) => {
     res.json({ success: true, address, lamports, aeko: lamportsToAeko(lamports) });
   } catch (error) {
     console.error("wallet balance error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch balance" });
+    sendChainError(res, error, "Failed to fetch balance");
   }
 });
 
@@ -160,7 +160,7 @@ router.get("/:address/history", async (req, res) => {
     });
   } catch (error) {
     console.error("wallet history error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch history" });
+    sendChainError(res, error, "Failed to fetch history");
   }
 });
 
@@ -186,7 +186,7 @@ router.get("/:address/nfts", async (req, res) => {
     res.json({ success: true, nfts });
   } catch (error) {
     console.error("wallet nfts error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch NFTs" });
+    sendChainError(res, error, "Failed to fetch NFTs");
   }
 });
 
@@ -241,7 +241,7 @@ router.post("/prepare-transfer", authMiddleware, async (req, res) => {
     res.json({ success: true, txBase64 });
   } catch (error) {
     console.error("prepare-transfer error:", error);
-    res.status(500).json({ success: false, message: "Failed to prepare transfer" });
+    sendChainError(res, error, "Failed to prepare transfer");
   }
 });
 
@@ -362,7 +362,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error("wallet summary error:", error);
-    res.status(500).json({ success: false, message: "Failed to load wallet" });
+    sendChainError(res, error, "Failed to load wallet");
   }
 });
 
@@ -417,7 +417,7 @@ router.get("/transactions", authMiddleware, async (req, res) => {
     res.json({ transactions, page, hasMore: raw.length > start + limit });
   } catch (error) {
     console.error("wallet transactions error:", error);
-    res.status(500).json({ success: false, message: "Failed to load transactions" });
+    sendChainError(res, error, "Failed to load transactions");
   }
 });
 
@@ -514,7 +514,7 @@ router.post("/transfer", authMiddleware, async (req, res) => {
     res.status(status).json(body);
   } catch (error) {
     console.error("wallet transfer error:", error);
-    res.status(500).json({ success: false, message: "Transfer failed" });
+    sendChainError(res, error, "Transfer failed");
   }
 });
 
@@ -542,7 +542,7 @@ router.post("/withdraw", authMiddleware, async (req, res) => {
     res.status(status).json(body);
   } catch (error) {
     console.error("wallet withdraw error:", error);
-    res.status(500).json({ success: false, message: "Withdrawal failed" });
+    sendChainError(res, error, "Withdrawal failed");
   }
 });
 
