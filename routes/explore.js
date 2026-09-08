@@ -82,6 +82,8 @@ router.get("/", protect, async (req, res) => {
       where: {
         userId: { notIn: baseExcludedUserIds }, // Changed to allow posts from followed users
         id: { notIn: excludedPostIds },
+        // Community posts live in their community, not in public discovery.
+        communityId: null,
         privacy: {
           path: ['level'],
           equals: 'public'
@@ -219,6 +221,7 @@ router.get("/", protect, async (req, res) => {
     const viralPostsRaw = await prisma.post.findMany({
       where: {
         userId: { notIn: baseExcludedUserIds },
+        communityId: null,
         privacy: {
           path: ['level'],
           equals: 'public'
@@ -256,6 +259,7 @@ router.get("/", protect, async (req, res) => {
        const interestBasedPostsRaw = await prisma.post.findMany({
           where: {
             userId: { notIn: discoveryExcludedUserIds },
+            communityId: null,
             privacy: {
                path: ['level'],
                equals: 'public'

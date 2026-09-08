@@ -549,6 +549,15 @@ router.get("/search", authMiddleware, async (req, res) => {
             where: {
                 AND: [
                     { text: { contains: q, mode: 'insensitive' } },
+                    // Search deliberately surfaces community posts — it returns the
+                    // community alongside each hit — but nothing stopped a *private*
+                    // community's posts appearing in a stranger's search results.
+                    {
+                        OR: [
+                            { communityId: null },
+                            { communities: { isPrivate: false } }
+                        ]
+                    },
                     privacyWhere
                 ]
             },
@@ -675,13 +684,26 @@ router.get("/feed", authMiddleware, async (req, res) => {
         // followed tier occupies positions 0..followedTotal-1, and the rest
         // continues from there. Counting the followed tier first is what lets a
         // page land in the right place without ever repeating or skipping a post.
+        // A post made inside a community belongs to that community's own feed,
+        // not the main one. Neither tier excluded them, so posting to a community
+        // also published to everybody's home feed.
+        const notCommunityPost = { communityId: null };
+
         const followedWhere = followingIds.length
-            ? { AND: [privacyWhere, notInExcluded, { userId: { in: followingIds } }] }
+            ? {
+                AND: [
+                    privacyWhere,
+                    notInExcluded,
+                    notCommunityPost,
+                    { userId: { in: followingIds } }
+                ]
+            }
             : null;
         const othersWhere = {
             AND: [
                 privacyWhere,
                 notInExcluded,
+                notCommunityPost,
                 ...(followingIds.length ? [{ userId: { notIn: followingIds } }] : [])
             ]
         };
@@ -1203,6 +1225,8 @@ router.get("/mixed", authMiddleware, async (req, res) => {
         where: {
             AND: [
                 { type: { in: ["image", "video"] } },
+                // Community posts belong to their community, not the public feed.
+                { communityId: null },
                 privacyWhere
             ]
         },
@@ -1244,6 +1268,8 @@ router.get("/videos", authMiddleware, async (req, res) => {
         where: {
             AND: [
                 { type: "video" },
+                // Keeps a community's videos out of the public reels feed.
+                { communityId: null },
                 privacyWhere
             ]
         },
