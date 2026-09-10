@@ -25,6 +25,7 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { getJwtSecret } from "../utils/authConfig.js";
 import { sendError } from "../utils/apiErrors.js";
 import securityLogger from "../services/securityLogger.js";
+import { ensureUserWallet } from "../services/walletProvisioning.js";
 
 /**
  * @swagger
@@ -774,6 +775,10 @@ if (isGoogleIdTokenVerificationConfigured()) {
         }
       }
 
+      // New Google accounts get their wallet here; existing accounts created
+      // before signup assigned one pick it up on their next sign-in.
+      if (!dbUser.walletAddress) await ensureUserWallet(dbUser.id);
+
       // Refresh only data authenticated by Google and record the login.
       const currentEmailVerification = dbUser.emailVerification || {};
       dbUser = await prisma.user.update({
@@ -925,6 +930,10 @@ router.post("/signup", async (req, res) => {
         },
       },
     });
+
+    // Every account gets its wallet address at creation. Never throws, so a
+    // custody problem cannot fail the signup.
+    await ensureUserWallet(newUser.id);
 
     // Send verification email
     const emailResult = await emailService.sendVerificationCode(
@@ -1299,6 +1308,9 @@ router.post(
           message: "Your account has been suspended. Contact support.",
         });
       }
+
+      // Accounts created before signup assigned a wallet get one on login.
+      if (!user.walletAddress) await ensureUserWallet(user.id);
 
       // Check if 2FA is enabled for this user
       // Note: TwoFactorService will need to be checked if it uses Mongoose

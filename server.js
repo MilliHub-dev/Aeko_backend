@@ -15,6 +15,7 @@ import fs from "fs";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/userRoutes.js";
+import { backfillWalletAddresses } from "./services/walletProvisioning.js";
 import postRoutes from "./routes/postRoutes.js";
 import statusRoutes from "./routes/status.js";
 import debateRoutes from "./routes/debates.js";
@@ -389,6 +390,14 @@ server.listen(PORT, HOST, () => {
       `AdminJS available at http://localhost:${PORT}${admin.options.rootPath}`,
     );
   }
+
+  // Accounts created before signup assigned a wallet get one now. Delayed so
+  // it never competes with boot, and it skips itself without a custody seed.
+  setTimeout(() => {
+    backfillWalletAddresses().catch((error) =>
+      console.error("wallet backfill failed:", error),
+    );
+  }, 20_000);
 });
 
 export default app;

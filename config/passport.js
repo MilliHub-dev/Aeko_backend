@@ -4,6 +4,7 @@ import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { prisma } from './db.js';
+import { ensureUserWallet } from '../services/walletProvisioning.js';
 
 const googleClient = new OAuth2Client();
 
@@ -199,6 +200,10 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         console.log(`Created new user ${username} via Google OAuth`);
       }
     }
+
+    // New accounts get their wallet address here, and older accounts without
+    // one pick it up on their next Google sign-in.
+    if (!user.walletAddress) await ensureUserWallet(user.id);
 
     // Update last login timestamp and avatar if changed
     const updateData = { lastLoginAt: new Date() };

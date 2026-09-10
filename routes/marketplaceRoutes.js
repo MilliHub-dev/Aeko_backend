@@ -1,6 +1,7 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
 import { connection, sendChainError } from "../chain/client.js";
+import { presentListings } from "../services/nftPresenter.js";
 import { aekoToLamports, lamportsToAeko, deriveWithSeed, getMinBalanceForRentExemption, sendAndConfirmSigned } from "../chain/utils.js";
 import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeypair.js";
 import { buildPreparedMultiInstructionTransaction, buildSystemTransferInstruction } from "../chain/txBuilder.js";
@@ -87,7 +88,7 @@ async function fetchListing(listingId) {
  */
 router.get("/listings", async (req, res) => {
   try {
-    const { seller, collection, minPrice, maxPrice, limit } = req.query;
+    const { seller, collection, tokenAccount, minPrice, maxPrice, limit } = req.query;
 
     const accounts = await connection.getProgramAccounts(PROGRAM_IDS.NFT_MARKETPLACE);
     let listings = accounts
@@ -101,10 +102,20 @@ router.get("/listings", async (req, res) => {
 
     if (seller)     listings = listings.filter(l => l.seller === seller);
     if (collection) listings = listings.filter(l => l.collection === collection);
+    // Lets an NFT's detail screen ask "is this token for sale?" without pulling every listing.
+    if (tokenAccount) listings = listings.filter(l => l.tokenAccount === tokenAccount);
     if (minPrice)   listings = listings.filter(l => l.priceAeko >= Number(minPrice));
     if (maxPrice)   listings = listings.filter(l => l.priceAeko <= Number(maxPrice));
 
-    res.json({ success: true, listings: listings.slice(0, Number(limit) || 25) });
+    const page = listings.slice(0, Number(limit) || 25);
+    // `listings` stays raw for existing callers; `nfts` is the same page with
+    // names, images and resolved sellers, which listings alone do not carry.
+    res.json({
+      success: true,
+      listings: page,
+      nfts: await presentListings(page),
+      platformFeeBps: PLATFORM_FEE_BPS,
+    });
   } catch (error) {
     console.error("marketplace listings error:", error);
     sendChainError(res, error, "Failed to fetch listings");

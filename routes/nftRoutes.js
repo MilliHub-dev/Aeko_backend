@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import authMiddleware from "../middleware/authMiddleware.js";
 import { connection, explorer, sendChainError } from "../chain/client.js";
+import { presentNft, presentNfts } from "../services/nftPresenter.js";
 import { getMinBalanceForRentExemption, deriveWithSeed } from "../chain/utils.js";
 import {
   PROGRAM_IDS,
@@ -41,7 +42,7 @@ router.get("/", async (req, res) => {
   try {
     const { owner, collection, creator, limit } = req.query;
     const nfts = await explorer.listNfts({ owner, collection, creator, limit: Number(limit) || 25 });
-    res.json({ success: true, nfts });
+    res.json({ success: true, nfts: await presentNfts(nfts) });
   } catch (error) {
     console.error("list nfts error:", error);
     sendChainError(res, error, "Failed to fetch NFTs");
@@ -97,7 +98,7 @@ router.get("/:tokenId", async (req, res) => {
   try {
     const nft = await explorer.getNft(req.params.tokenId);
     if (!nft) return res.status(404).json({ success: false, message: "NFT not found" });
-    res.json({ success: true, nft });
+    res.json({ success: true, nft: await presentNft(nft) });
   } catch (error) {
     console.error("get nft error:", error);
     sendChainError(res, error, "Failed to fetch NFT");

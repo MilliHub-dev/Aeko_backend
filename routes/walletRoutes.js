@@ -1,6 +1,7 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
 import { connection, explorer, sendChainError } from "../chain/client.js";
+import { presentNfts } from "../services/nftPresenter.js";
 import { aekoToLamports, lamportsToAeko, getMinBalanceForRentExemption, sendAndConfirmSigned } from "../chain/utils.js";
 import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeypair.js";
 import { decodeBase58 } from "@aeko-chain/web3.js";
@@ -183,7 +184,7 @@ router.get("/:address/nfts", async (req, res) => {
   try {
     const { address } = req.params;
     const nfts = await explorer.listNfts({ owner: address });
-    res.json({ success: true, nfts });
+    res.json({ success: true, nfts: await presentNfts(nfts) });
   } catch (error) {
     console.error("wallet nfts error:", error);
     sendChainError(res, error, "Failed to fetch NFTs");

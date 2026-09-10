@@ -9,6 +9,7 @@ import privacyFilterMiddleware from "../middleware/privacyMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import BlockingService from "../services/blockingService.js";
 import PrivacyManager from "../services/privacyManager.js";
+import { ensureUserWallet } from "../services/walletProvisioning.js";
 
 /**
  * @swagger
@@ -55,7 +56,7 @@ router.post("/register", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         username,
         email,
@@ -63,6 +64,7 @@ router.post("/register", async (req, res) => {
         name: username, // Default name to username
       },
     });
+    await ensureUserWallet(user.id);
 
     res.status(201).json({ message: "User registered successfully" });
   } catch (error) {
