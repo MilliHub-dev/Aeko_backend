@@ -3,54 +3,81 @@ import { prisma } from "../config/db.js";
 import TwoFactorService from "../services/twoFactorService.js";
 import { hasCurrentAuthTokenVersion } from "../utils/authTokenUtils.js";
 import { getJwtSecret } from "../utils/authConfig.js";
+import { sendError } from "../utils/apiErrors.js";
+
+/**
+ * Rejects a request with a response the app can act on.
+ *
+ * These used to send only `error`, a field the app never displays, so an
+ * expired session, a deleted account and a database outage all reached users
+ * as the same "Something went wrong. Please try again." `message` is what the
+ * user sees; `code` is what the app branches on — TOKEN_INVALID, TOKEN_EXPIRED,
+ * TOKEN_MALFORMED and ACCOUNT_NOT_FOUND send it back to the login screen.
+ * `error` is kept for older clients.
+ */
+const reject = (res, status, code, message, error) =>
+  res.status(status).json({ success: false, code, message, error });
+
+const SESSION_INVALID = "Your session is no longer valid. Please log in again.";
+const SESSION_EXPIRED = "Your session has expired. Please log in again.";
 
 const authMiddleware = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
 
     if (!token) {
-      return res.status(401).json({ 
-        success: false,
-        error: "Unauthorized: No token provided" 
-      });
+      return reject(
+        res,
+        401,
+        "NO_TOKEN",
+        "Please log in to continue.",
+        "Unauthorized: No token provided",
+      );
     }
 
     const decoded = jwt.verify(token, getJwtSecret());
 
     if (decoded.purpose === "password-reset") {
-      return res.status(403).json({
-        success: false,
-        error: "Forbidden: Invalid token format",
-      });
+      return reject(
+        res,
+        403,
+        "TOKEN_MALFORMED",
+        SESSION_INVALID,
+        "Forbidden: Invalid token format",
+      );
     }
-    
+
     // Handle both 'id' and 'userId' from different token formats
     const userId = decoded.id || decoded.userId;
-    
+
     if (!userId) {
-      return res.status(403).json({ 
-        success: false,
-        error: "Forbidden: Invalid token format" 
-      });
+      return reject(
+        res,
+        403,
+        "TOKEN_MALFORMED",
+        SESSION_INVALID,
+        "Forbidden: Invalid token format",
+      );
     }
 
     // Fetch user and attach to request
     const user = await prisma.user.findUnique({
       where: { id: userId }
     });
-    
+
     if (!user) {
-      return res.status(404).json({ 
-        success: false,
-        error: "User not found" 
-      });
+      return reject(
+        res,
+        404,
+        "ACCOUNT_NOT_FOUND",
+        "This account no longer exists. Please log in again.",
+        "User not found",
+      );
     }
 
     if (!hasCurrentAuthTokenVersion(decoded, user)) {
-      return res.status(401).json({
-        success: false,
-        error: "Token expired",
-      });
+      // Issued before a password change.
+      return reject(res, 401, "TOKEN_EXPIRED", SESSION_EXPIRED, "Token expired");
     }
 
     // Remove password from user object
@@ -58,10 +85,13 @@ const authMiddleware = async (req, res, next) => {
 
     // Check if user is banned
     if (user.banned) {
-      return res.status(403).json({ 
-        success: false,
-        error: "Account suspended" 
-      });
+      return reject(
+        res,
+        403,
+        "ACCOUNT_SUSPENDED",
+        "Your account has been suspended. Contact support.",
+        "Account suspended",
+      );
     }
 
     // Add 2FA status to user object for convenience
@@ -69,7 +99,7 @@ const authMiddleware = async (req, res, next) => {
       const twoFactorStatus = await TwoFactorService.get2FAStatus(userId);
       user.twoFactorEnabled = twoFactorStatus.isEnabled;
       user.twoFactorStatus = twoFactorStatus;
-      
+
       // Check if this is a partial login (2FA required but not yet verified)
       if (decoded.partial && twoFactorStatus.isEnabled) {
         user.partialLogin = true;
@@ -84,27 +114,28 @@ const authMiddleware = async (req, res, next) => {
     req.user.id = userId; // Ensure req.user.id is set
     req.userId = userId; // For backward compatibility with routes that use req.userId
     next();
-    
+
   } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(403).json({ 
-        success: false,
-        error: "Forbidden: Invalid token" 
-      });
-    }
-    
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
-        success: false,
-        error: "Token expired" 
-      });
+      return reject(res, 401, "TOKEN_EXPIRED", SESSION_EXPIRED, "Token expired");
     }
-    
-    console.error('Auth middleware error:', error);
-    res.status(500).json({ 
-      success: false,
-      error: "Internal Server Error" 
-    });
+
+    // Includes a token signed with a different JWT_SECRET, e.g. after the
+    // secret is rotated on the server.
+    if (error.name === 'JsonWebTokenError' || error.name === 'NotBeforeError') {
+      return reject(
+        res,
+        403,
+        "TOKEN_INVALID",
+        SESSION_INVALID,
+        "Forbidden: Invalid token",
+      );
+    }
+
+    // Anything else is the server's fault. sendError tells a database outage
+    // (503, "temporarily unavailable") apart from a genuine bug (500), instead
+    // of a flat 500 for both.
+    return sendError(res, error, "authMiddleware");
   }
 };
 
@@ -125,6 +156,7 @@ const requireFullAuth = async (req, res, next) => {
     return res.status(403).json({
       success: false,
       error: "2FA verification required to complete login",
+      message: "Enter your two-factor code to finish logging in.",
       requiresTwoFactor: true,
       code: "2FA_REQUIRED"
     });
@@ -146,18 +178,21 @@ const requireTwoFactorAuth = async (req, res, next) => {
   });
 
   const userId = req.user?.id;
-  
+
   if (!userId) {
-    return res.status(401).json({
-      success: false,
-      error: "Authentication required"
-    });
+    return reject(
+      res,
+      401,
+      "NO_TOKEN",
+      "Please log in to continue.",
+      "Authentication required",
+    );
   }
 
   // Check if user has 2FA enabled
   if (req.user.twoFactorEnabled) {
     const twoFactorToken = req.headers['x-2fa-token'];
-    
+
     if (!twoFactorToken) {
       return res.status(403).json({
         success: false,
@@ -169,7 +204,7 @@ const requireTwoFactorAuth = async (req, res, next) => {
 
     try {
       const isValid = await TwoFactorService.verifyTOTP(userId, twoFactorToken);
-      
+
       if (!isValid) {
         return res.status(403).json({
           success: false,

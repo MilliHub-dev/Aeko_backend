@@ -25,6 +25,11 @@ import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { getJwtSecret } from "../utils/authConfig.js";
 import { sendError } from "../utils/apiErrors.js";
 import securityLogger from "../services/securityLogger.js";
+import {
+  AppleIdentityTokenError,
+  getVerifiedAppleIdentity,
+  verifyAppleIdentityToken,
+} from "../services/appleAuth.js";
 import { ensureUserWallet } from "../services/walletProvisioning.js";
 
 /**
@@ -863,6 +868,202 @@ if (isGoogleIdTokenVerificationConfigured()) {
     });
   });
 }
+
+/**
+ * @swagger
+ * /api/auth/apple/mobile:
+ *   post:
+ *     summary: Sign in or sign up with Apple from the iOS app
+ *     tags:
+ *       - Authentication
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [identityToken, rawNonce]
+ *             properties:
+ *               identityToken:
+ *                 type: string
+ *                 description: Identity token from Sign in with Apple. Its aud must be the app's bundle id.
+ *               rawNonce:
+ *                 type: string
+ *                 description: The unhashed nonce; the token's nonce claim must be its SHA-256.
+ *               fullName:
+ *                 type: string
+ *                 description: Name from the Apple sheet (sent only on first authorization). Used only to name a new account.
+ *     responses:
+ *       200:
+ *         description: Successful authentication
+ *       400:
+ *         description: Missing token, or Apple did not share an email for a new account
+ *       401:
+ *         description: Token failed verification
+ *       403:
+ *         description: Account suspended
+ *       409:
+ *         description: Email is already linked to a different sign-in method
+ */
+router.post("/apple/mobile", async (req, res) => {
+  try {
+    const { identityToken, rawNonce, fullName } = req.body || {};
+
+    if (typeof identityToken !== "string" || typeof rawNonce !== "string") {
+      return res.status(400).json({
+        success: false,
+        code: "APPLE_TOKEN_REQUIRED",
+        message: "An Apple identity token is required",
+      });
+    }
+
+    const payload = await verifyAppleIdentityToken(identityToken, { rawNonce });
+    const identity = getVerifiedAppleIdentity(payload);
+    if (!identity) throw new AppleIdentityTokenError();
+
+    const { oauthId, email } = identity;
+    const suspended = () =>
+      res.status(403).json({
+        success: false,
+        code: "ACCOUNT_SUSPENDED",
+        message: "Your account has been suspended. Contact support.",
+      });
+
+    // The stable Apple subject comes first; email is only a fallback link.
+    let dbUser = await prisma.user.findUnique({
+      where: { oauthProvider_oauthId: { oauthProvider: "apple", oauthId } },
+    });
+    if (dbUser?.banned) return suspended();
+
+    if (!dbUser && email) {
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing?.banned) return suspended();
+
+      if (existing) {
+        // Same rule as Google: an account already tied to another provider
+        // (or another Apple id) is never taken over by a matching email.
+        if (
+          existing.oauthProvider &&
+          (existing.oauthProvider !== "apple" ||
+            (existing.oauthId && existing.oauthId !== oauthId))
+        ) {
+          return res.status(409).json({
+            success: false,
+            code: "EMAIL_LINKED_ELSEWHERE",
+            message: "This email is already linked to a different sign-in method",
+          });
+        }
+
+        dbUser = await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            oauthProvider: "apple",
+            oauthId,
+            emailVerification: {
+              ...(existing.emailVerification || {}),
+              isVerified: true,
+            },
+          },
+        });
+      }
+    }
+
+    if (!dbUser) {
+      // Apple shares the email only the first time a person authorizes the
+      // app. If an earlier attempt never finished creating the account, the
+      // email is gone until they revoke Aeko in their Apple ID settings.
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          code: "APPLE_EMAIL_MISSING",
+          message:
+            "Apple didn't share an email for this account. On your iPhone, open Settings → your name → Sign in with Apple, remove Aeko Social, then try again.",
+        });
+      }
+
+      const cleanName =
+        typeof fullName === "string" ? fullName.trim().slice(0, 80) : "";
+      const usernameBase =
+        (cleanName || email.split("@")[0])
+          .replace(/[^a-zA-Z0-9_]/g, "")
+          .toLowerCase()
+          .slice(0, 24) || `user${oauthId.slice(-6).toLowerCase()}`;
+
+      let username = usernameBase;
+      let counter = 1;
+      while (await prisma.user.findUnique({ where: { username } })) {
+        username = `${usernameBase}${counter}`;
+        counter++;
+      }
+
+      dbUser = await prisma.user.create({
+        data: {
+          name: cleanName || username,
+          username,
+          email,
+          // OAuth accounts never get a password anyone knows.
+          password: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
+          oauthProvider: "apple",
+          oauthId,
+          emailVerification: { isVerified: true },
+        },
+      });
+    }
+
+    if (!dbUser.walletAddress) await ensureUserWallet(dbUser.id);
+
+    dbUser = await prisma.user.update({
+      where: { id: dbUser.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const token = jwt.sign(
+      {
+        id: dbUser.id,
+        email: dbUser.email,
+        authTokenVersion: dbUser.authTokenVersion ?? 0,
+      },
+      getJwtSecret(),
+      { expiresIn: "7d" },
+    );
+
+    securityLogger
+      .logLoginEvent(dbUser.id, req, { method: "apple" })
+      .catch((err) => console.error("Failed to log login event:", err));
+
+    res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        id: dbUser.id,
+        name: dbUser.name,
+        username: dbUser.username,
+        email: dbUser.email,
+        profilePicture: dbUser.profilePicture,
+        avatar: dbUser.avatar,
+        bio: dbUser.bio,
+        blueTick: dbUser.blueTick,
+        goldenTick: dbUser.goldenTick,
+        emailVerification: {
+          isVerified: dbUser.emailVerification?.isVerified,
+        },
+        profileCompletion: dbUser.profileCompletion,
+        isAdmin: dbUser.isAdmin,
+        oauthProvider: dbUser.oauthProvider,
+      },
+    });
+  } catch (error) {
+    if (error instanceof AppleIdentityTokenError) {
+      return res.status(401).json({
+        success: false,
+        code: "APPLE_TOKEN_INVALID",
+        message: "Apple sign-in could not be verified. Please try again.",
+      });
+    }
+    return sendError(res, error, "auth.apple.mobile");
+  }
+});
 
 router.post("/signup", async (req, res) => {
   try {
