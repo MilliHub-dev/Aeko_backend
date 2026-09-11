@@ -21,8 +21,9 @@ const APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys";
 const KEY_CACHE_MS = 6 * 60 * 60 * 1000;
 
 // The iOS bundle identifier from aeko-mobile/app.config.js. A native identity
-// token's `aud` is the bundle id of the app that requested it.
-const DEFAULT_AUDIENCES = ["com.millihub.aekomobile"];
+// token's `aud` is the bundle id of the app that requested it. Only list bundle
+// ids registered to our own Apple team.
+const DEFAULT_AUDIENCES = ["social.aekoapp.aeko"];
 
 export class AppleIdentityTokenError extends Error {
   constructor() {
