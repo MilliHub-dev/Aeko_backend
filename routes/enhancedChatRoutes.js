@@ -379,6 +379,32 @@ router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAcce
       }
     });
 
+    // Tell the other side in real time.
+    //
+    // The app sends messages over HTTP, and this route emitted nothing — only
+    // the socket `send_message` handler did. So a delivered message reached the
+    // recipient's screen only when they reopened the conversation.
+    //
+    // `_id` is added because the app maps messages by that field (Prisma
+    // returns `id`); without it the client generates a random id and cannot
+    // recognise the same message again when it reloads history.
+    const io = req.app.get("io");
+    if (io) {
+      const payload = {
+        message: { ...message, _id: message.id },
+        chatId,
+        sender: message.sender
+      };
+
+      if (receiverId) {
+        // Every socket joins a room named after its user id.
+        io.to(receiverId).emit("new_message", payload);
+      } else {
+        // Group chat: no single receiver, so it goes to the chat room.
+        io.to(chatId).emit("new_message", payload);
+      }
+    }
+
     res.json({
       success: true,
       message,
@@ -465,6 +491,18 @@ router.post('/upload-voice', authenticate, generalUpload.single('voice'), async 
       }
     });
 
+    // The chat screen is written expecting this event after an upload ("the
+    // server will send a socket event for the new voice message"), but nothing
+    // emitted it, so a voice note only showed up when the chat was reopened.
+    const io = req.app.get("io");
+    if (io) {
+      io.to(receiverId).emit("new_voice_message", {
+        // `_id` is the field the app maps messages by; Prisma returns `id`.
+        message: { ...message, _id: message.id },
+        chatId
+      });
+    }
+
     res.json({
       success: true,
       message,
@@ -546,6 +584,18 @@ router.post('/upload-file', authenticate, generalUpload.single('file'), async (r
         updatedAt: new Date()
       }
     });
+
+    // Same omission as the text and voice routes: an uploaded photo, video or
+    // file reached the recipient only when they reopened the conversation.
+    const io = req.app.get("io");
+    if (io) {
+      io.to(receiverId).emit("new_message", {
+        // `_id` is the field the app maps messages by; Prisma returns `id`.
+        message: { ...message, _id: message.id },
+        chatId,
+        sender: message.sender
+      });
+    }
 
     res.json({
       success: true,

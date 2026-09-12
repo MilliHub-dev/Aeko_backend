@@ -244,9 +244,11 @@ class EnhancedChatSocket {
         }
       });
 
-      // Send to receiver
+      // Send to receiver. `_id` is what the app maps messages by; Prisma
+      // returns `id`, so without it the client invents a random id and cannot
+      // match the message against the same row loaded from history.
       this.io.to(receiverId).emit('new_message', {
-        message,
+        message: { ...message, _id: message.id },
         chatId,
         sender: {
           id: socket.userId,
