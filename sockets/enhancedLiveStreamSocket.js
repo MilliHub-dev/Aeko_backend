@@ -304,6 +304,18 @@ class EnhancedLiveStreamSocket {
         if (this.streamConnections.has(streamId)) {
           this.streamConnections.get(streamId).delete(socket.id);
         }
+
+        // `handleLeaveStream` announces a viewer who leaves deliberately, but
+        // a dropped connection went unannounced — so the host was never told
+        // to close that peer connection, and with fan-out it kept encoding
+        // for someone who had gone.
+        const currentViewers = this.viewers.get(streamId)?.size || 0;
+        socket.to(streamId).emit('viewer_left', {
+          userId: socket.userId,
+          username: socket.user?.username,
+          currentViewers
+        });
+        this.io.to(streamId).emit('viewer_count_update', { currentViewers });
       }
     }
 
@@ -875,8 +887,24 @@ class EnhancedLiveStreamSocket {
     }
   }
   
-  handlePeerDisconnected(socket, data) {
-     // Implementation for peer disconnection
+  /**
+   * One side tore down its peer connection deliberately.
+   *
+   * Relayed so the other side can close its half instead of holding a dead
+   * connection. With fan-out the host keeps one connection per viewer, so a
+   * leak here costs the host an encoder slot for every viewer who left.
+   */
+  handlePeerDisconnected(socket, data = {}) {
+    const { streamId, targetUserId } = data;
+    if (!targetUserId) return;
+
+    const targetSocket = this.userSockets.get(targetUserId);
+    if (targetSocket) {
+      targetSocket.emit('peer_disconnected', {
+        streamId,
+        fromUserId: socket.userId
+      });
+    }
   }
 
   // === STREAM CHAT HANDLERS ===
