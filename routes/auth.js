@@ -1569,6 +1569,18 @@ router.post(
         console.log(`2FA verification successful for user ${email}`);
       }
 
+      // Record the sign-in time. Only the OAuth routes did this, so for
+      // password accounts `lastLoginAt` stayed null forever and anything
+      // measuring active users (the admin Analytics page) read zero. Placed
+      // after every rejection path above, so it only moves on a real login,
+      // and not awaited: a stats write must never fail a valid login.
+      prisma.user
+        .update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+        })
+        .catch((err) => console.error("Failed to record lastLoginAt:", err));
+
       const token = jwt.sign(
         { id: user.id, authTokenVersion: user.authTokenVersion ?? 0 },
         getJwtSecret(),

@@ -13,6 +13,10 @@ import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
 import { theme as designSystemTheme } from "@adminjs/design-system";
 import { prisma } from "./config/db.js";
+import {
+  getAnalyticsMetrics,
+  getOverviewMetrics,
+} from "./admin/metrics.js";
 import { sendExpoPushMessages } from "./services/pushProviderService.js";
 import { upgradeStickersForUser } from "./services/stickerUpgrade.js";
 import { hasCurrentAuthTokenVersion } from "./utils/authTokenUtils.js";
@@ -158,6 +162,10 @@ const Components = {
   PushNotifications: componentLoader.add(
     "PushNotifications",
     join(currentDir, "admin/components/PushNotifications"),
+  ),
+  Analytics: componentLoader.add(
+    "Analytics",
+    join(currentDir, "admin/components/Analytics"),
   ),
 };
 
@@ -1254,162 +1262,38 @@ const admin = new AdminJS({
   dashboard: {
     component: Components.Dashboard,
     /**
-     * Feeds the dashboard. Every figure is counted with `allSettled` so one
-     * failing query degrades a single card instead of blanking the whole page —
-     * an admin landing page that errors out is worse than one missing a number.
+     * Every figure comes from admin/metrics.js, which the Analytics page also
+     * reads — so a number is defined once and the two screens cannot disagree.
+     * Each query is settled independently there, so one failure degrades a
+     * single card instead of blanking the page.
      */
-    handler: async (_req, _res, context) => {
-      const since = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-      const week = since(7);
-
-      const queries = {
-        users: () => prisma.user.count(),
-        usersThisWeek: () =>
-          prisma.user.count({ where: { createdAt: { gte: week } } }),
-        posts: () => prisma.post.count(),
-        postsThisWeek: () =>
-          prisma.post.count({ where: { createdAt: { gte: week } } }),
-        communities: () => prisma.community.count(),
-        liveNow: () =>
-          prisma.liveStream.count({ where: { status: "live" } }),
-        openReports: () =>
-          prisma.report.count({ where: { status: "pending" } }),
-        openTickets: () =>
-          prisma.supportTicket.count({
-            where: { status: { in: ["open", "in_progress"] } },
-          }),
-        waitlist: () => prisma.waitlistEntry.count(),
-        recentUsers: () =>
-          prisma.user.findMany({
-            orderBy: { createdAt: "desc" },
-            take: 6,
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              profilePicture: true,
-              blueTick: true,
-              goldenTick: true,
-              createdAt: true,
-            },
-          }),
-        // --- Engagement -----------------------------------------------------
-        // `Post.likes` is a JSON array with no Like table, so likes are counted
-        // in SQL rather than by pulling every post into Node.
-        totalLikes: async () => {
-          const rows = await prisma.$queryRaw`
-            SELECT COALESCE(SUM(jsonb_array_length(
-              CASE WHEN jsonb_typeof("likes") = 'array' THEN "likes" ELSE '[]'::jsonb END
-            )), 0)::int AS total
-            FROM "posts"
-          `;
-          return Number(rows[0]?.total ?? 0);
-        },
-        totalViews: async () => {
-          const result = await prisma.post.aggregate({ _sum: { views: true } });
-          return result._sum.views ?? 0;
-        },
-        comments: () => prisma.comment.count(),
-        commentsThisWeek: () =>
-          prisma.comment.count({ where: { createdAt: { gte: week } } }),
-        stickers: () => prisma.sticker.count(),
-        messagesThisWeek: () =>
-          prisma.enhancedMessage.count({ where: { createdAt: { gte: week } } }),
-
-        // --- Monetisation ---------------------------------------------------
-        subscribers: () =>
-          prisma.user.count({ where: { subscriptionStatus: "active" } }),
-        revenue: async () => {
-          const result = await prisma.transaction.aggregate({
-            _sum: { amount: true },
-            where: { status: "completed" },
-          });
-          return result._sum.amount ?? 0;
-        },
-        pushReach: () =>
-          prisma.user.count({ where: { pushToken: { not: null } } }),
-
-        // `Community` has no image column — the avatar lives inside the
-        // `profile` JSON blob — and `memberCount` is the denormalised counter
-        // the app reads, kept alongside the true relation count.
-        topCommunities: () =>
-          prisma.community.findMany({
-            take: 5,
-            orderBy: { community_members: { _count: "desc" } },
-            select: {
-              id: true,
-              name: true,
-              memberCount: true,
-              _count: { select: { community_members: true } },
-            },
-          }),
-
-        postTrend: async () => {
-          // Same 14 buckets as the signup trend, so the two sparklines line up.
-          const rows = await prisma.$queryRaw`
-            SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::int AS count
-            FROM "posts"
-            WHERE "createdAt" >= ${since(14)}
-            GROUP BY 1
-            ORDER BY 1 ASC
-          `;
-          return rows.map((r) => ({
-            day: r.day.toISOString().slice(0, 10),
-            count: Number(r.count),
-          }));
-        },
-
-        signupTrend: async () => {
-          // 14 daily buckets for the sparkline. Grouped in SQL rather than
-          // pulling every user row back into Node.
-          const rows = await prisma.$queryRaw`
-            SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::int AS count
-            FROM "users"
-            WHERE "createdAt" >= ${since(14)}
-            GROUP BY 1
-            ORDER BY 1 ASC
-          `;
-          return rows.map((r) => ({
-            day: r.day.toISOString().slice(0, 10),
-            count: Number(r.count),
-          }));
-        },
-      };
-
-      const keys = Object.keys(queries);
-      const settled = await Promise.allSettled(
-        keys.map((key) => queries[key]()),
-      );
-
-      const data = {};
-      const failed = [];
-      settled.forEach((result, i) => {
-        if (result.status === "fulfilled") {
-          data[keys[i]] = result.value;
-        } else {
-          failed.push(keys[i]);
-          console.error(`[admin dashboard] ${keys[i]} failed:`, result.reason);
-          data[keys[i]] = null;
-        }
-      });
-
-      return {
-        ...data,
-        failed,
-        adminName: context?.currentAdmin?.name
-          ?? context?.currentAdmin?.username
-          ?? null,
-        generatedAt: new Date().toISOString(),
-      };
-    },
+    handler: async (_req, _res, context) =>
+      getOverviewMetrics({
+        adminName:
+          context?.currentAdmin?.name ?? context?.currentAdmin?.username ?? null,
+      }),
   },
 
   // ===== CUSTOM PAGES =====
   //
   // `analytics` and `reports` used to live here with `component: false`, so
   // both appeared in the sidebar and rendered an empty page when clicked.
-  // Analytics now lives on the dashboard; reports are a resource.
+  // `analytics` now has a real component and handler; reports are a resource.
   pages: {
+    analytics: {
+      component: Components.Analytics,
+      icon: "TrendingUp",
+      /**
+       * `days` arrives from the period selector. getAnalyticsMetrics clamps it
+       * to a known set, because it reaches query windows and raw SQL.
+       */
+      handler: async (request) =>
+        getAnalyticsMetrics({
+          days: Number(
+            request?.query?.days ?? request?.payload?.days ?? 30,
+          ),
+        }),
+    },
     pushNotifications: {
       component: Components.PushNotifications,
       icon: "Bell",
