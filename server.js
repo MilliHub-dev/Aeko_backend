@@ -194,6 +194,16 @@ const apiRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+// Liveness probe: no database, chain or email calls, and deliberately outside
+// the rate limiter. Render spins an idle instance down, and the first request
+// after that takes tens of seconds — long enough for the app's request
+// deadline to abort a login. The app pings this at launch so the instance is
+// already awake by the time someone submits a form, and Render can point its
+// own health check here to keep the instance warm.
+app.get(["/api/health", "/health"], (req, res) => {
+  res.json({ ok: true, uptimeSeconds: Math.round(process.uptime()) });
+});
+
 // API Routes with security middleware
 app.use("/api/auth", apiRateLimit, authRoutes);
 app.use("/api/users", apiRateLimit, userRoutes);
