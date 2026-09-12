@@ -69,3 +69,6 @@ uploads/
 # Test files with sensitive data
 test-*.js
 *-test.js
+# AdminJS bundles its custom components at boot (admin.initialize()).
+# A committed copy goes stale against the source and can be served instead.
+.adminjs/
