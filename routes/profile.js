@@ -597,7 +597,11 @@ router.put('/follow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess()
     const targetId = req.params.id;
 
     if (userId === targetId) {
-        return res.status(400).json({ error: "You cannot follow yourself" });
+        return res.status(400).json({
+            error: "You cannot follow yourself",
+            message: "You cannot follow yourself.",
+            code: "CANNOT_FOLLOW_SELF",
+        });
     }
     
     // Check if user can interact with the target user
@@ -619,7 +623,14 @@ router.put('/follow/:id', authMiddleware, BlockingMiddleware.checkFollowAccess()
 
     // Check if already following
     if (currentFollowing.includes(targetId)) {
-        return res.status(400).json({ error: "You are already following this user" });
+        // `error` is raw detail the app never shows; without a `message` the
+        // app fell back to "Something went wrong", so its reconciliation could
+        // not tell this apart from a real failure and reverted the follow.
+        return res.status(400).json({
+            error: "You are already following this user",
+            message: "You're already following this user.",
+            code: "ALREADY_FOLLOWING",
+        });
     }
 
     // Add to following

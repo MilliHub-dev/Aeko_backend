@@ -77,6 +77,7 @@ import cookieParser from "cookie-parser";
 import { sendError } from "./utils/apiErrors.js";
 import EnhancedChatSocket from "./sockets/enhancedChatSocket.js";
 import EnhancedLiveStreamSocket from "./sockets/enhancedLiveStreamSocket.js";
+import setupGroupCallSocket from "./sockets/groupCallSocket.js";
 import setupVideoCallSocket from "./sockets/videoCallSocket.js";
 // Import scheduled jobs
 import "./jobs/expireSubscriptions.js";
@@ -120,6 +121,9 @@ const enhancedLiveStreamSocket = new EnhancedLiveStreamSocket(io);
 
 // Initialize Video Call Socket System
 setupVideoCallSocket(io);
+// Mesh signalling for group calls. Shares the same `io`, so the auth
+// middleware installed by EnhancedChatSocket has already set `socket.userId`.
+setupGroupCallSocket(io);
 
 // Note: File uploads are handled by Cloudinary in production
 

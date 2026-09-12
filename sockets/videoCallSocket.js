@@ -55,5 +55,10 @@ export default function setupVideoCallSocket(io) {
     relay("call-ringing", () => ({}));
     relay("call-rejected", () => ({}));
     relay("call-ended", (data) => ({ reason: data.reason }));
+    // Mid-call upgrade from voice to video. It carries its own offer rather
+    // than reusing `call-offer`, because the app treats an offer arriving
+    // during a call as a second incoming call and rejects it — which would
+    // hang up the very call being upgraded.
+    relay("call-upgraded", (data) => ({ offer: data.offer }));
   });
 }
