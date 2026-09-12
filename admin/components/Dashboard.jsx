@@ -4,7 +4,11 @@ import { ApiClient } from "adminjs";
 // AdminJS re-exports its own helpers but not the router hooks; `useNavigate`
 // belongs to react-router-dom, which AdminJS already mounts the panel inside.
 import { useNavigate } from "react-router-dom";
-import styled from "styled-components";
+// The design system's re-export, not bare "styled-components": only this
+// specifier is aliased to the shared `styled` global by AdminJS's bundler, so a
+// bare import creates a second styled-components instance whose ThemeContext is
+// empty. See the note in Login.jsx.
+import styled from "@adminjs/design-system/styled-components";
 
 /**
  * Aeko admin overview.

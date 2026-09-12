@@ -10,7 +10,9 @@ import {
   TextArea,
 } from "@adminjs/design-system";
 import { ApiClient } from "adminjs";
-import styled from "styled-components";
+// The design system's re-export, not bare "styled-components" — see the note
+// in Login.jsx for why a bare import breaks theming.
+import styled from "@adminjs/design-system/styled-components";
 
 /**
  * Send a push notification to the app's users.

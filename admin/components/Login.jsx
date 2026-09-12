@@ -1,7 +1,14 @@
 import React from "react";
 import { Box, Input, Label, MessageBox, Text } from "@adminjs/design-system";
 import { useSelector } from "react-redux";
-import styled from "styled-components";
+// Imported through the design system's re-export, NOT bare "styled-components".
+// AdminJS's bundler aliases only `@adminjs/design-system/styled-components` to
+// the shared `styled` global (see adminjs/lib/backend/bundler/globals.bundler.js).
+// A bare import gets bundled as a SECOND styled-components copy with its own
+// ThemeContext, so components built here received an empty theme and the design
+// system's own styles then threw "Cannot read properties of undefined (reading
+// 'default')" on theme.space.default — the panel died on load.
+import styled from "@adminjs/design-system/styled-components";
 
 /**
  * Aeko sign-in screen, replacing the stock AdminJS login.
