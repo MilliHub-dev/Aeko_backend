@@ -164,7 +164,7 @@ router.get("/admin/stats", authMiddleware, adminMiddleware, async (req, res) => 
  *                 type: string
  *               paymentMethod:
  *                 type: string
- *                 enum: [paystack, stripe]
+ *                 enum: [whop, paystack, stripe]
  *     responses:
  *       200:
  *         description: Payment initialized
@@ -204,7 +204,7 @@ router.post("/initialize", authMiddleware, twoFactorMiddleware.requireTwoFactor(
  *         required: true
  *         schema:
  *           type: string
- *           enum: [paystack, stripe]
+ *           enum: [whop, paystack, stripe]
  *     responses:
  *       200:
  *         description: Payment verified

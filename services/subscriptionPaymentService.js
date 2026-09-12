@@ -64,7 +64,8 @@ async function callWithRetry(apiCall, maxRetries = 1) {
  * @param {Object} options - Payment options
  * @param {String} options.userId - User ID
  * @param {String} options.planId - Subscription Plan ID
- * @param {String} options.paymentMethod - Payment method (paystack, stripe)
+ * @param {String} options.paymentMethod - Payment method. `whop` is the
+ *   primary gateway; `paystack` and `stripe` remain for historical rows.
  * @returns {Promise<Object>} - Payment initialization response
  */
 export const initializeSubscriptionPayment = async ({ userId, planId, paymentMethod }) => {
