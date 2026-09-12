@@ -11,7 +11,10 @@ import dotenv from "dotenv";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
+import { theme as designSystemTheme } from "@adminjs/design-system";
 import { prisma } from "./config/db.js";
+import { sendExpoPushMessages } from "./services/pushProviderService.js";
+import { upgradeStickersForUser } from "./services/stickerUpgrade.js";
 import { hasCurrentAuthTokenVersion } from "./utils/authTokenUtils.js";
 
 dotenv.config();
@@ -152,6 +155,10 @@ const Components = {
     "Dashboard",
     join(currentDir, "admin/components/Dashboard"),
   ),
+  PushNotifications: componentLoader.add(
+    "PushNotifications",
+    join(currentDir, "admin/components/PushNotifications"),
+  ),
 };
 
 // Replaces the built-in sign-in screen rather than adding a page next to it.
@@ -168,7 +175,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Community, client: prisma },
       options: {
         parent: {
-          name: "Community Management",
+          name: "Communities",
           icon: "Users",
         },
         properties: {
@@ -188,7 +195,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Transaction, client: prisma },
       options: {
         parent: {
-          name: "Community Management",
+          name: "Monetisation",
           icon: "CreditCard",
         },
         properties: {
@@ -198,12 +205,43 @@ const admin = new AdminJS({
         },
       },
     },
+    // ===== STICKER MODERATION =====
+    // Stickers are a shared library: anything a user creates appears in every
+    // user's picker, so this is the only screen that can take one down.
+    // Hiding removes it from the pickers but leaves already-sent messages
+    // intact; deleting also removes the image from Cloudinary.
+    {
+      resource: { model: modelMap.Sticker, client: prisma },
+      options: {
+        parent: {
+          name: "Content",
+          icon: "Smile",
+        },
+        listProperties: ["url", "name", "creatorId", "isHidden", "createdAt"],
+        properties: {
+          id: { isVisible: { list: false, show: true, edit: false } },
+          url: { isVisible: { list: true, show: true, edit: false } },
+          publicId: { isVisible: { list: false, show: true, edit: false } },
+          creatorId: { isVisible: { list: true, show: true, edit: false } },
+          isHidden: { isVisible: { list: true, show: true, edit: true } },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
+          updatedAt: { isVisible: { list: false, show: true, edit: false } },
+        },
+        actions: {
+          // Created by users in the app, never here.
+          new: { isVisible: false },
+          edit: { isVisible: true },
+          delete: { isVisible: true },
+          bulkDelete: { isVisible: true },
+        },
+      },
+    },
     // ===== INTEREST MANAGEMENT =====
     {
       resource: { model: modelMap.Interest, client: prisma },
       options: {
         parent: {
-          name: "Content Management",
+          name: "Content",
           icon: "Tag",
         },
         properties: {
@@ -324,7 +362,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.WaitlistEntry, client: prisma },
       options: {
         parent: {
-          name: "Growth",
+          name: "Platform",
           icon: "TrendingUp",
         },
         properties: {
@@ -360,7 +398,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.User, client: prisma },
       options: {
         parent: {
-          name: "User Management",
+          name: "Users",
           icon: "Users",
         },
         properties: {
@@ -513,6 +551,9 @@ const admin = new AdminJS({
                   subscriptionExpiry: oneMonthFromNow,
                 },
               });
+              // Stickers they made while on the free tier kept their
+              // background; now that they are a subscriber, cut them out.
+              await upgradeStickersForUser(record.params.id);
               return {
                 record: record.toJSON(),
                 notice: {
@@ -594,7 +635,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Post, client: prisma },
       options: {
         parent: {
-          name: "Content Management",
+          name: "Content",
           icon: "FileText",
         },
         properties: {
@@ -672,7 +713,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Comment, client: prisma },
       options: {
         parent: {
-          name: "Content Management",
+          name: "Content",
           icon: "MessageCircle",
         },
         actions: {
@@ -701,7 +742,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.LiveStream, client: prisma },
       options: {
         parent: {
-          name: "LiveStream Management",
+          name: "Content",
           icon: "Video",
         },
         properties: {
@@ -824,7 +865,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.BotSettings, client: prisma },
       options: {
         parent: {
-          name: "AI & Bot Management",
+          name: "Messaging",
           icon: "Bot",
         },
         properties: {
@@ -857,7 +898,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.BotConversation, client: prisma },
       options: {
         parent: {
-          name: "AI & Bot Management",
+          name: "Messaging",
           icon: "MessageSquare",
         },
         listProperties: ["user", "userMessage", "botResponse", "updatedAt"],
@@ -895,7 +936,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Ad, client: prisma },
       options: {
         parent: {
-          name: "Advertising",
+          name: "Monetisation",
           icon: "DollarSign",
         },
         actions: {
@@ -970,7 +1011,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Debate, client: prisma },
       options: {
         parent: {
-          name: "Community Features",
+          name: "Communities",
           icon: "Users2",
         },
       },
@@ -980,7 +1021,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Challenge, client: prisma },
       options: {
         parent: {
-          name: "Community Features",
+          name: "Communities",
           icon: "Trophy",
         },
       },
@@ -990,7 +1031,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Space, client: prisma },
       options: {
         parent: {
-          name: "Community Features",
+          name: "Communities",
           icon: "Globe",
         },
       },
@@ -1055,7 +1096,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.Status, client: prisma },
       options: {
         parent: {
-          name: "User Activity",
+          name: "Content",
           icon: "Activity",
         },
         listProperties: ["users", "content", "createdAt"],
@@ -1066,7 +1107,7 @@ const admin = new AdminJS({
     {
       resource: { model: modelMap.NftSettings, client: prisma },
       options: {
-        parent: { name: "Platform Rules", icon: "Settings" },
+        parent: { name: "Platform", icon: "Settings" },
         id: "nft-settings",
         // A single row of platform-wide rules. Creating a second one would make
         // "which settings apply?" ambiguous, so only editing is offered.
@@ -1120,7 +1161,7 @@ const admin = new AdminJS({
       resource: { model: modelMap.SubscriptionPlan, client: prisma },
       options: {
         parent: {
-          name: "Subscription Management",
+          name: "Monetisation",
           icon: "Star",
         },
         properties: {
@@ -1179,8 +1220,17 @@ const admin = new AdminJS({
     // The previous palette was a generic purple/pink gradient unrelated to the
     // product. These are the app's own tokens (aeko-mobile/constants/Colors.ts),
     // so the panel and the app now read as the same product.
+    //
+    // Spread over the design system's own theme, NOT passed alone: AdminJS
+    // replaces `branding.theme` wholesale rather than deep-merging it. Passing
+    // just `{ colors }` left `space`, `fontSizes`, `lineHeights` and `borders`
+    // undefined, and every component reading e.g. `theme.space.default` threw
+    // "Cannot read properties of undefined (reading 'default')" — the panel
+    // died on load with a blank screen.
     theme: {
+      ...designSystemTheme,
       colors: {
+        ...designSystemTheme.colors,
         primary100: "#00BFA5", // brand teal
         primary80: "#00897B",
         primary60: "#4DD0C4",
@@ -1243,6 +1293,72 @@ const admin = new AdminJS({
               createdAt: true,
             },
           }),
+        // --- Engagement -----------------------------------------------------
+        // `Post.likes` is a JSON array with no Like table, so likes are counted
+        // in SQL rather than by pulling every post into Node.
+        totalLikes: async () => {
+          const rows = await prisma.$queryRaw`
+            SELECT COALESCE(SUM(jsonb_array_length(
+              CASE WHEN jsonb_typeof("likes") = 'array' THEN "likes" ELSE '[]'::jsonb END
+            )), 0)::int AS total
+            FROM "posts"
+          `;
+          return Number(rows[0]?.total ?? 0);
+        },
+        totalViews: async () => {
+          const result = await prisma.post.aggregate({ _sum: { views: true } });
+          return result._sum.views ?? 0;
+        },
+        comments: () => prisma.comment.count(),
+        commentsThisWeek: () =>
+          prisma.comment.count({ where: { createdAt: { gte: week } } }),
+        stickers: () => prisma.sticker.count(),
+        messagesThisWeek: () =>
+          prisma.enhancedMessage.count({ where: { createdAt: { gte: week } } }),
+
+        // --- Monetisation ---------------------------------------------------
+        subscribers: () =>
+          prisma.user.count({ where: { subscriptionStatus: "active" } }),
+        revenue: async () => {
+          const result = await prisma.transaction.aggregate({
+            _sum: { amount: true },
+            where: { status: "completed" },
+          });
+          return result._sum.amount ?? 0;
+        },
+        pushReach: () =>
+          prisma.user.count({ where: { pushToken: { not: null } } }),
+
+        // `Community` has no image column — the avatar lives inside the
+        // `profile` JSON blob — and `memberCount` is the denormalised counter
+        // the app reads, kept alongside the true relation count.
+        topCommunities: () =>
+          prisma.community.findMany({
+            take: 5,
+            orderBy: { community_members: { _count: "desc" } },
+            select: {
+              id: true,
+              name: true,
+              memberCount: true,
+              _count: { select: { community_members: true } },
+            },
+          }),
+
+        postTrend: async () => {
+          // Same 14 buckets as the signup trend, so the two sparklines line up.
+          const rows = await prisma.$queryRaw`
+            SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::int AS count
+            FROM "posts"
+            WHERE "createdAt" >= ${since(14)}
+            GROUP BY 1
+            ORDER BY 1 ASC
+          `;
+          return rows.map((r) => ({
+            day: r.day.toISOString().slice(0, 10),
+            count: Number(r.count),
+          }));
+        },
+
         signupTrend: async () => {
           // 14 daily buckets for the sparkline. Grouped in SQL rather than
           // pulling every user row back into Node.
@@ -1289,14 +1405,105 @@ const admin = new AdminJS({
   },
 
   // ===== CUSTOM PAGES =====
+  //
+  // `analytics` and `reports` used to live here with `component: false`, so
+  // both appeared in the sidebar and rendered an empty page when clicked.
+  // Analytics now lives on the dashboard; reports are a resource.
   pages: {
-    analytics: {
-      component: false,
-      icon: "Analytics",
-    },
-    reports: {
-      component: false,
-      icon: "FileText",
+    pushNotifications: {
+      component: Components.PushNotifications,
+      icon: "Bell",
+      handler: async (request, response, context) => {
+        // GET: the audience sizes the composer shows before sending.
+        if (request.method !== "post") {
+          const [total, reachable, subscribers] = await Promise.all([
+            prisma.user.count(),
+            prisma.user.count({ where: { pushToken: { not: null } } }),
+            prisma.user.count({
+              where: { subscriptionStatus: "active", pushToken: { not: null } },
+            }),
+          ]);
+          return { audience: { total, reachable, subscribers } };
+        }
+
+        const payload = request.payload ?? {};
+        const title = String(payload.title ?? "").trim();
+        const message = String(payload.message ?? "").trim();
+        const target = String(payload.target ?? "all");
+        const username = String(payload.username ?? "").trim();
+
+        if (!title || !message) {
+          return { error: "A title and a message are both required." };
+        }
+
+        // Only users with a token can be reached at all; sending to the rest
+        // would inflate the reported count with deliveries that cannot happen.
+        let where = { pushToken: { not: null } };
+        if (target === "subscribers") {
+          where = { ...where, subscriptionStatus: "active" };
+        } else if (target === "user") {
+          if (!username) return { error: "Enter the username to send to." };
+          where = { ...where, username };
+        }
+
+        const recipients = await prisma.user.findMany({
+          where,
+          select: {
+            id: true,
+            pushToken: true,
+            notificationSettings: true,
+          },
+        });
+
+        if (recipients.length === 0) {
+          return {
+            error:
+              target === "user"
+                ? "That user has no device registered for notifications."
+                : "Nobody in that audience has notifications enabled yet.",
+          };
+        }
+
+        // Someone who paused all notifications is recorded in-app but not
+        // pushed to, matching sendPushNotification's own behaviour.
+        const pushable = recipients.filter(
+          (user) => user.notificationSettings?.global?.pauseAll !== true,
+        );
+
+        const adminId = context?.currentAdmin?.id ?? null;
+
+        await prisma.notification.createMany({
+          data: recipients.map((user) => ({
+            recipientId: user.id,
+            senderId: adminId,
+            type: "ADMIN",
+            title,
+            message,
+            entityType: "SYSTEM",
+            metadata: { broadcast: true, target },
+          })),
+        });
+
+        const { sent, failed } = await sendExpoPushMessages(
+          pushable.map((user) => ({
+            to: user.pushToken,
+            title,
+            body: message,
+            data: { type: "ADMIN", entityType: "SYSTEM" },
+            sound: "default",
+            channelId: "default",
+          })),
+        );
+
+        return {
+          result: {
+            recorded: recipients.length,
+            sent,
+            failed,
+            paused: recipients.length - pushable.length,
+          },
+        };
+      },
     },
   },
 

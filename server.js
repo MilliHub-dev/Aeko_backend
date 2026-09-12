@@ -16,6 +16,7 @@ import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/userRoutes.js";
 import { backfillWalletAddresses } from "./services/walletProvisioning.js";
+import stickerRoutes from "./routes/stickerRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
 import statusRoutes from "./routes/status.js";
 import debateRoutes from "./routes/debates.js";
@@ -207,6 +208,7 @@ app.get(["/api/health", "/health"], (req, res) => {
 // API Routes with security middleware
 app.use("/api/auth", apiRateLimit, authRoutes);
 app.use("/api/users", apiRateLimit, userRoutes);
+app.use("/api/stickers", apiRateLimit, stickerRoutes);
 app.use(
   "/api/posts",
   apiRateLimit,

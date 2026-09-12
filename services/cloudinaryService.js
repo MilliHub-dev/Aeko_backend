@@ -111,6 +111,53 @@ const generalStorage = new CloudinaryStorage({
 
 export const generalUpload = createUpload(generalStorage);
 
+// ---------------------------------------------------------------------------
+// Stickers
+// ---------------------------------------------------------------------------
+
+const stickerStorage = createCloudinaryStorage('image', 'aeko/stickers');
+
+/**
+ * Sticker source images. Smaller cap than the general 100MB: a sticker is a
+ * single small graphic, and background removal is billed per image.
+ */
+export const stickerUpload = multer({
+    storage: stickerStorage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (/^image\/(jpeg|jpg|png|webp)$/i.test(file.mimetype)) return cb(null, true);
+        cb(new Error('A sticker must be a JPG, PNG or WebP image'));
+    },
+});
+
+/**
+ * The delivered sticker.
+ *
+ * Background removal is a paid Cloudinary add-on billed per image, so it is a
+ * subscriber feature: `withBackgroundRemoval` false produces a plain square
+ * crop that costs nothing extra.
+ *
+ * Removal is applied as a delivery transformation rather than at upload time.
+ * Upload-time removal is queued and finishes asynchronously, so the URL can
+ * briefly still show the original photo; this form is generated on first
+ * request and then cached by Cloudinary.
+ */
+export const buildStickerUrl = (publicId, { withBackgroundRemoval = false } = {}) =>
+    cloudinary.url(publicId, {
+        secure: true,
+        resource_type: 'image',
+        format: 'png',
+        transformation: withBackgroundRemoval
+            ? [
+                { effect: 'background_removal' },
+                { effect: 'trim' },
+                { width: 512, height: 512, crop: 'pad', background: 'transparent' },
+            ]
+            // No add-on: keep the whole photo, squared off by cropping to the
+            // centre rather than padding, which would letterbox it.
+            : [{ width: 512, height: 512, crop: 'fill', gravity: 'auto' }],
+    });
+
 // Utility functions for direct Cloudinary operations
 export const uploadToCloudinary = async (filePath, options = {}) => {
     try {

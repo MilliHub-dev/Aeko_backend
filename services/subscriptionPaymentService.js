@@ -1,6 +1,7 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
 import { prisma } from "../config/db.js";
+import { upgradeStickersForUser } from "./stickerUpgrade.js";
 import Stripe from 'stripe';
 
 dotenv.config();
@@ -143,6 +144,11 @@ export const initializeSubscriptionPayment = async ({ userId, planId, paymentMet
 /**
  * Handle successful payment processing (Used by Webhooks and Verification)
  */
+/**
+ * The single choke point for activating a paid subscription:
+ * verifySubscriptionPayment delegates here, so side effects of going paid
+ * belong in this function.
+ */
 export const handleSubscriptionPaymentSuccess = async (transactionId) => {
   const transaction = await prisma.transaction.findUnique({ where: { id: transactionId } });
 
@@ -167,6 +173,13 @@ export const handleSubscriptionPaymentSuccess = async (transactionId) => {
       data: { status: 'completed', verifiedAt: new Date() }
     });
   });
+
+  // After the commit, not inside it: the upgrade reads the user's subscription
+  // through the global client, which cannot see this transaction's uncommitted
+  // writes and would decide the user is still on the free tier.
+  //
+  // Stickers they made before subscribing keep their background otherwise.
+  await upgradeStickersForUser(transaction.userId);
 
   return { success: true };
 };

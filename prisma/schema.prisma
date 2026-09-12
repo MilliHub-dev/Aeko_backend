@@ -394,6 +394,32 @@ model SecurityEvent {
   users_security_events_userIdTouser User @relation("security_events_userIdTousers", fields: [userId], references: [id], onDelete: Cascade)
 }
 
+/// A chat sticker created by a user from a photo.
+///
+/// The library is shared: every sticker is offered to every user, so `isHidden`
+/// exists for moderation from the admin panel — it takes a sticker out of the
+/// pickers without touching messages already sent with it.
+model Sticker {
+  @@map("stickers")
+  id String @id @default(uuid())
+  creatorId String
+  /// Delivered form: padded square PNG, with the background removed for
+  /// subscribers (removal is a paid Cloudinary add-on).
+  url String
+  /// Cloudinary public id of the source image, needed to delete the asset.
+  publicId String
+  /// False for stickers made by free users, which are a plain square crop.
+  backgroundRemoved Boolean @default(false)
+  name String?
+  isHidden Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  creator User @relation("stickers_creatorIdTousers", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([isHidden, createdAt])
+}
+
 model Space {
   @@map("spaces")
   id String @id @default(uuid())
@@ -652,6 +678,7 @@ model User {
   closeFriends Json?
   mutedStoryUserIds Json?
   ads Ad[]
+  stickers Sticker[] @relation("stickers_creatorIdTousers")
   bookmarks Bookmark[]
   bot_conversations BotConversation[]
   bot_settings BotSettings?

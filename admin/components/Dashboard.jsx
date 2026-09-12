@@ -284,8 +284,59 @@ const Dashboard = () => {
     },
   ];
 
+  // Engagement and money, kept as a second row so the first stays a glance.
+  const engagement = [
+    {
+      label: "Post likes",
+      value: data.totalLikes,
+      note: "Across every post",
+    },
+    {
+      label: "Post views",
+      value: data.totalViews,
+    },
+    {
+      label: "Comments",
+      value: data.comments,
+      note: data.commentsThisWeek
+        ? `+${fmt(data.commentsThisWeek)} this week`
+        : "None this week",
+      href: "/admin/resources/Comment",
+    },
+    {
+      label: "Messages this week",
+      value: data.messagesThisWeek,
+    },
+    {
+      label: "Stickers",
+      value: data.stickers,
+      note: "Shared library",
+      href: "/admin/resources/Sticker",
+    },
+    {
+      label: "Subscribers",
+      value: data.subscribers,
+      href: "/admin/resources/User",
+    },
+    {
+      label: "Revenue",
+      value: data.revenue,
+      note: "Completed transactions",
+      href: "/admin/resources/Transaction",
+      money: true,
+    },
+    {
+      label: "Notifiable devices",
+      value: data.pushReach,
+      note: "Can receive a push",
+      href: "/admin/pages/pushNotifications",
+    },
+  ];
+
   const trend = data.signupTrend || [];
   const peak = Math.max(1, ...trend.map((point) => point.count));
+  const posts = data.postTrend || [];
+  const postPeak = Math.max(1, ...posts.map((point) => point.count));
 
   return (
     <Page>
@@ -330,6 +381,74 @@ const Dashboard = () => {
           </Card>
         ))}
       </Grid>
+
+      <H4 style={{ color: TEAL_DARK, margin: "4px 0 12px" }}>
+        Engagement &amp; revenue
+      </H4>
+      <Grid>
+        {engagement.map((card) => (
+          <Card
+            key={card.label}
+            $clickable={Boolean(card.href)}
+            onClick={card.href ? () => navigate(card.href) : undefined}
+          >
+            <CardLabel>{card.label}</CardLabel>
+            <CardValue>
+              {card.money && card.value !== null && card.value !== undefined
+                ? `$${fmt(card.value)}`
+                : fmt(card.value)}
+            </CardValue>
+            {card.note && <Delta>{card.note}</Delta>}
+          </Card>
+        ))}
+      </Grid>
+
+      <Columns>
+        <Panel>
+          <H4 style={{ marginTop: 0, color: TEAL_DARK }}>Posts, last 14 days</H4>
+          {posts.length === 0 ? (
+            <Text style={{ color: MUTED }}>No posts in this period.</Text>
+          ) : (
+            <>
+              <Bars>
+                {posts.map((point) => (
+                  <Bar
+                    key={point.day}
+                    $height={Math.max(4, (point.count / postPeak) * 100)}
+                    $empty={point.count === 0}
+                    title={`${point.day}: ${point.count}`}
+                  />
+                ))}
+              </Bars>
+              <Text style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>
+                Peak {fmt(postPeak)} in a day
+              </Text>
+            </>
+          )}
+        </Panel>
+
+        <Panel>
+          <H4 style={{ marginTop: 0, color: TEAL_DARK }}>Biggest communities</H4>
+          {!data.topCommunities?.length ? (
+            <Text style={{ color: MUTED }}>No communities yet.</Text>
+          ) : (
+            data.topCommunities.map((community) => (
+              <Row key={community.id}>
+                <Avatar>{initials(community.name, community.name)}</Avatar>
+                <RowText>
+                  <Text style={{ fontWeight: 600, color: TEAL_DARK }}>
+                    {community.name}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: MUTED }}>
+                    {fmt(community._count?.community_members ?? 0)} member
+                    {(community._count?.community_members ?? 0) === 1 ? "" : "s"}
+                  </Text>
+                </RowText>
+              </Row>
+            ))
+          )}
+        </Panel>
+      </Columns>
 
       <Columns>
         <Panel>
