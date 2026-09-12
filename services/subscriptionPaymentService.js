@@ -3,6 +3,13 @@ import dotenv from 'dotenv';
 import { prisma } from "../config/db.js";
 import { upgradeStickersForUser } from "./stickerUpgrade.js";
 import Stripe from 'stripe';
+import {
+  createCheckout,
+  getPayment,
+  isPaidStatus,
+  isPendingStatus,
+  isWhopConfigured
+} from './whopService.js';
 
 dotenv.config();
 
@@ -106,6 +113,24 @@ export const initializeSubscriptionPayment = async ({ userId, planId, paymentMet
 
     // Handle different payment methods
     switch (paymentMethod) {
+      // Whop is the primary gateway. It returns a hosted checkout URL, which
+      // is the same contract Paystack uses, so the app opens it unchanged.
+      case 'whop':
+        return await initializeWhopPayment({
+          amount,
+          currency,
+          title: plan.name,
+          reference,
+          isRecurring: plan.duration !== 'one_time',
+          metadata: {
+            userId,
+            planId,
+            transactionId: transaction.id,
+            reference,
+            type: 'subscription'
+          }
+        });
+
       case 'paystack':
         return await initializePaystackPayment({
           email: user.email,
@@ -208,6 +233,10 @@ export const verifySubscriptionPayment = async ({ reference, paymentMethod }) =>
     let verificationResult;
     
     switch (paymentMethod) {
+      case 'whop':
+        verificationResult = await verifyWhopPayment(transaction);
+        break;
+
       case 'paystack':
         verificationResult = await verifyPaystackPayment(reference);
         break;
@@ -232,6 +261,114 @@ export const verifySubscriptionPayment = async ({ reference, paymentMethod }) =>
 };
 
 // --- Helper Functions ---
+
+/**
+ * Creates a Whop hosted checkout.
+ *
+ * Returns the same shape as the other gateways — `authorizationUrl` is what
+ * the app opens — so adding Whop needed no mobile change at all.
+ */
+async function initializeWhopPayment({
+  amount,
+  currency,
+  title,
+  reference,
+  metadata,
+  isRecurring
+}) {
+  if (!isWhopConfigured()) {
+    throw new Error('Whop is not configured on this server');
+  }
+
+  try {
+    const { purchaseUrl, sessionId, planId: whopPlanId, raw } = await createCheckout({
+      amount,
+      currency,
+      title: `Aeko — ${title}`,
+      metadata,
+      isRecurring,
+      returnUrl: process.env.FRONTEND_URL
+        ? `${process.env.FRONTEND_URL}/subscription/callback`
+        : undefined
+    });
+
+    // The provider response is always persisted: Whop's checkout endpoint is
+    // documented inconsistently, so if the URL field is ever renamed this row
+    // is what shows why, instead of a bare failure.
+    await prisma.transaction.update({
+      where: { id: metadata.transactionId },
+      data: {
+        providerResponse: raw ?? undefined,
+        metadata: {
+          ...metadata,
+          whopSessionId: sessionId ?? undefined,
+          whopPlanId: whopPlanId ?? undefined
+        }
+      }
+    });
+
+    if (!purchaseUrl) {
+      throw new Error('Whop did not return a checkout URL');
+    }
+
+    return {
+      success: true,
+      authorizationUrl: purchaseUrl,
+      reference
+    };
+  } catch (error) {
+    console.error('Whop initialization error:', error.response || error.message);
+    if (metadata.transactionId) {
+      await prisma.transaction.update({
+        where: { id: metadata.transactionId },
+        data: { status: 'failed', failureReason: error.message }
+      });
+    }
+    throw new Error('Failed to initialize Whop payment');
+  }
+}
+
+/**
+ * Confirms a Whop payment server-side.
+ *
+ * The webhook is the primary path; this covers the app calling `verify` after
+ * the browser closes, which on its own proves nothing about payment.
+ */
+async function verifyWhopPayment(transaction) {
+  const paymentId =
+    transaction?.providerResponse?.payment_id ||
+    transaction?.metadata?.whopPaymentId ||
+    null;
+
+  if (!paymentId) {
+    // No id to check yet: the webhook is what will settle this, so report
+    // honestly rather than claiming success or failure.
+    return {
+      success: false,
+      pending: true,
+      message: 'Awaiting confirmation from Whop'
+    };
+  }
+
+  const payment = await getPayment(paymentId);
+  if (!payment) {
+    return {
+      success: false,
+      pending: true,
+      message: 'Awaiting confirmation from Whop'
+    };
+  }
+
+  // Whop says `paid` on the API and `succeeded` on the webhook.
+  const paid = isPaidStatus(payment.status);
+
+  return {
+    success: paid,
+    pending: !paid && isPendingStatus(payment.status),
+    status: payment.status,
+    message: paid ? 'Payment confirmed' : `Payment is ${payment.status}`
+  };
+}
 
 async function initializePaystackPayment({ email, amount, reference, metadata }) {
   try {

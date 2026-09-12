@@ -1,9 +1,10 @@
 import express from 'express';
 import crypto from 'crypto';
 import Stripe from 'stripe';
-import prisma from '../config/db.js';
+import { prisma } from '../config/db.js';
 import { handleSubscriptionPaymentSuccess } from '../services/subscriptionPaymentService.js';
 import { handleCommunityPaymentSuccess } from '../services/communityPaymentService.js';
+import { verifyWebhookSignature } from '../services/whopService.js';
 
 const router = express.Router();
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
@@ -124,6 +125,139 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     } catch (error) {
         console.error('Stripe Webhook Error:', error);
         res.status(500).send('Webhook Error');
+    }
+});
+
+/**
+ * Whop Webhook Handler — the primary payment gateway.
+ *
+ * Whop signs `{webhook-id}.{webhook-timestamp}.{raw body}` with HMAC-SHA256,
+ * so this route takes the body as a Buffer: a parsed-and-reserialised object
+ * would not reproduce the signed bytes. `/api/webhooks` is mounted before
+ * express.json() in server.js, which is what makes that possible.
+ *
+ * Idempotency is not optional here. Whop retries a failed delivery for about
+ * three days, roughly ten attempts, and every retry carries the same
+ * `webhook-id` — so without the WebhookEvent table a retry following a slow
+ * but successful run would grant a subscription twice.
+ *
+ * Whop expects a 2xx within five seconds, so nothing slow happens before the
+ * response: an event we cannot act on is still acknowledged, because asking
+ * for a retry would not change the outcome.
+ */
+router.post('/whop', express.raw({ type: 'application/json' }), async (req, res) => {
+    const webhookId = req.headers['webhook-id'];
+    const timestamp = req.headers['webhook-timestamp'];
+    const signature = req.headers['webhook-signature'];
+
+    try {
+        const check = verifyWebhookSignature({
+            rawBody: req.body,
+            webhookId,
+            timestamp,
+            signatureHeader: signature,
+        });
+
+        if (!check.valid) {
+            // 401 rather than 400: this is an authentication failure, and Whop
+            // should not keep retrying a request it cannot sign correctly.
+            console.warn(`Whop webhook rejected: ${check.reason}`);
+            return res.status(401).send(check.reason || 'Invalid signature');
+        }
+
+        const event = JSON.parse(req.body.toString());
+        const eventType = event?.type;
+
+        // Claim this delivery. The unique (provider, eventId) index makes the
+        // insert the lock: if it fails, another attempt already handled it.
+        try {
+            await prisma.webhookEvent.create({
+                data: {
+                    provider: 'whop',
+                    eventId: String(webhookId),
+                    eventType: eventType ?? null,
+                    payload: event ?? null,
+                },
+            });
+        } catch (error) {
+            if (error?.code === 'P2002') {
+                console.log(`Whop webhook ${webhookId} already processed`);
+                return res.sendStatus(200);
+            }
+            throw error;
+        }
+
+        // `metadata` set when the checkout was created comes back untouched,
+        // which is how a Whop payment is tied to our own transaction row.
+        const data = event?.data ?? {};
+        const transactionId = data?.metadata?.transactionId;
+
+        if (eventType === 'payment.succeeded') {
+            // Record the Whop payment id before activating: the checkout
+            // response carries a plan id, not a payment id, so this webhook is
+            // the only place it becomes known. Without it the app's verify()
+            // call after the browser closes could never confirm anything.
+            if (transactionId && data?.id) {
+                await prisma.transaction
+                    .update({
+                        where: { id: transactionId },
+                        data: {
+                            providerResponse: data,
+                            metadata: {
+                                ...(data?.metadata ?? {}),
+                                whopPaymentId: data.id
+                            }
+                        }
+                    })
+                    .catch((error) => {
+                        // Never block activation on bookkeeping.
+                        console.warn('Could not record Whop payment id:', error.message);
+                    });
+            }
+
+            if (transactionId) {
+                await processTransaction(transactionId);
+            } else {
+                // Fall back to the reference, as the Paystack handler does.
+                const reference =
+                    data?.metadata?.reference || data?.id || null;
+                const transaction = reference
+                    ? await prisma.transaction.findFirst({
+                          where: { paymentReference: String(reference) },
+                      })
+                    : null;
+                if (transaction) {
+                    await processTransaction(transaction.id);
+                } else {
+                    console.warn(
+                        `Whop payment.succeeded with no resolvable transaction (webhook ${webhookId})`
+                    );
+                }
+            }
+        } else if (eventType === 'payment.failed') {
+            if (transactionId) {
+                await prisma.transaction.update({
+                    where: { id: transactionId },
+                    data: {
+                        status: 'failed',
+                        failureReason:
+                            data?.substatus || data?.status || 'Payment failed',
+                        providerResponse: data,
+                    },
+                });
+            }
+        } else {
+            // Subscribed to more than we act on; acknowledge the rest so Whop
+            // does not retry an event we have deliberately ignored.
+            console.log(`Whop webhook ${eventType} received, no action taken`);
+        }
+
+        return res.sendStatus(200);
+    } catch (error) {
+        console.error('Whop Webhook Error:', error);
+        // A 5xx asks Whop to retry, which is right for a transient failure —
+        // the dedup row is only written once the signature has been verified.
+        return res.status(500).send('Webhook Error');
     }
 });
 

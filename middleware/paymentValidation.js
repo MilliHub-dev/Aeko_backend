@@ -1,7 +1,10 @@
 import { body, query, param } from 'express-validator';
 
 // Payment method enum values
-const PAYMENT_METHODS = ['paystack', 'stripe'];
+// Whop is the primary gateway and listed first; the others remain
+// supported. `aeko_wallet` is settled internally and never reaches a
+// gateway, so it is deliberately absent here.
+const PAYMENT_METHODS = ['whop', 'paystack', 'stripe'];
 
 // Withdrawal method enum values
 const WITHDRAWAL_METHODS = ['bank'];
