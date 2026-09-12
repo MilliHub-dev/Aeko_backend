@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 // specifier is aliased to the shared `styled` global by AdminJS's bundler, so a
 // bare import creates a second styled-components instance whose ThemeContext is
 // empty. See the note in Login.jsx.
-import styled from "@adminjs/design-system/styled-components";
+import { styled } from "@adminjs/design-system/styled-components";
 
 /**
  * Aeko admin overview.

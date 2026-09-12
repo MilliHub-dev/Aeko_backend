@@ -12,7 +12,7 @@ import {
 import { ApiClient } from "adminjs";
 // The design system's re-export, not bare "styled-components" — see the note
 // in Login.jsx for why a bare import breaks theming.
-import styled from "@adminjs/design-system/styled-components";
+import { styled } from "@adminjs/design-system/styled-components";
 
 /**
  * Send a push notification to the app's users.

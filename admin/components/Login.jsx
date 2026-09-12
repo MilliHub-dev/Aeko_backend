@@ -8,7 +8,7 @@ import { useSelector } from "react-redux";
 // ThemeContext, so components built here received an empty theme and the design
 // system's own styles then threw "Cannot read properties of undefined (reading
 // 'default')" on theme.space.default — the panel died on load.
-import styled from "@adminjs/design-system/styled-components";
+import { styled } from "@adminjs/design-system/styled-components";
 
 /**
  * Aeko sign-in screen, replacing the stock AdminJS login.

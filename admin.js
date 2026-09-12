@@ -1222,9 +1222,15 @@ const admin = new AdminJS({
   // ===== BRANDING & UI CUSTOMIZATION =====
   branding: {
     companyName: "Aeko Admin",
-    logo: "/uploads/admin-logo.png",
+    // `false` hides the logo and renders `companyName` as text instead.
+    // These pointed at /uploads/admin-logo.png and /uploads/favicon.ico, which
+    // exist nowhere in the repo — and /uploads is only mounted when
+    // NODE_ENV !== "production" (server.js), so in production the path could
+    // never resolve at all. The panel showed broken alt text and logged a 404
+    // on every page load. Point `logo` at a real, production-served URL if a
+    // mark is wanted here.
+    logo: false,
     softwareBrothers: false,
-    favicon: "/uploads/favicon.ico",
     // The previous palette was a generic purple/pink gradient unrelated to the
     // product. These are the app's own tokens (aeko-mobile/constants/Colors.ts),
     // so the panel and the app now read as the same product.
