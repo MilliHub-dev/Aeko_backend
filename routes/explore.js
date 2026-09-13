@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../config/db.js";
+import { attachRepostData } from "../services/repostService.js";
 import { protect } from "../middleware/authMiddleware.js";
 import privacyMiddleware from "../middleware/privacyMiddleware.js";
 
@@ -288,6 +289,13 @@ router.get("/", protect, async (req, res) => {
         }));
     }
 
+    // Reposts carry their original author, as in the feed.
+    const [trendingWithReposts, viralWithReposts, interestWithReposts] = await Promise.all([
+      attachRepostData(trendingPosts, req.user?.id),
+      attachRepostData(viralPosts, req.user?.id),
+      attachRepostData(interestBasedPosts, req.user?.id),
+    ]);
+
     // Calculate total for pagination
     const totalPosts = await prisma.post.count({
       where: {
@@ -302,7 +310,7 @@ router.get("/", protect, async (req, res) => {
     res.json({
       success: true,
       data: {
-        trending: trendingPosts,
+        trending: trendingWithReposts,
         suggestedUsers: suggestedUsers.map(user => ({
           ...user,
           followersCount: Array.isArray(user.followers) ? user.followers.length : 0,
@@ -310,14 +318,14 @@ router.get("/", protect, async (req, res) => {
         })),
         communities: activeCommunities,
         liveStreams: liveStreams, // Already mapped
-        viral: viralPosts,
-        forYou: interestBasedPosts
+        viral: viralWithReposts,
+        forYou: interestWithReposts
       },
       pagination: {
         currentPage: page,
         totalPages: Math.ceil(totalPosts / limit),
         totalPosts,
-        hasMore: skip + trendingPosts.length < totalPosts
+        hasMore: skip + trendingWithReposts.length < totalPosts
       }
     });
   } catch (error) {

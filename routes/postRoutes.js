@@ -4,6 +4,13 @@ import { Prisma } from "@prisma/client";
 import upload from "../middleware/upload.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import BlockingService from "../services/blockingService.js";
+import {
+  attachRepostData,
+  cleanUpRepostsForDeletedPost,
+  repostPost,
+  RepostError,
+  undoRepost,
+} from "../services/repostService.js";
 import { connection, explorer, sendChainError } from "../chain/client.js";
 import { getCustodialAddress, isCustodyConfigured } from "../chain/custodialKeypair.js";
 import { toBase58Hash } from "../chain/utils.js";
@@ -516,7 +523,7 @@ router.get("/user/bookmarks", authMiddleware, async (req, res) => {
         }).filter(p => p);
 
         res.status(200).json({
-            posts,
+            posts: await attachRepostData(posts, req.user?.id || req.userId),
             pagination: {
                 total,
                 page,
@@ -566,7 +573,7 @@ router.get("/user/liked", authMiddleware, async (req, res) => {
         }));
 
         res.status(200).json({
-            posts: mappedPosts,
+            posts: await attachRepostData(mappedPosts, req.user?.id || req.userId),
             pagination: {
                 total,
                 page,
@@ -850,7 +857,7 @@ router.get("/search", authMiddleware, async (req, res) => {
             users_posts_userIdTouser: undefined
         }));
 
-        res.json(mappedPosts);
+        res.json(await attachRepostData(mappedPosts, req.user?.id || req.userId));
     } catch (error) {
         console.error('Search error:', error);
         res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
@@ -1077,7 +1084,7 @@ router.get("/feed", authMiddleware, async (req, res) => {
             };
         });
         
-        res.json(mappedPosts);
+        res.json(await attachRepostData(mappedPosts, requestingUserId));
     } catch (error) {
         console.error('Feed error:', error);
         res.status(500).json({ error: "Internal server error" });
@@ -1153,7 +1160,7 @@ router.get("/:postId([0-9a-fA-F]{24}|[0-9a-fA-F-]{36})", authMiddleware, async (
             }
         }
 
-        res.json({
+        const payload = {
             ...post,
             user: post.users_posts_userIdTouser,
             users_posts_userIdTouser: undefined,
@@ -1161,7 +1168,9 @@ router.get("/:postId([0-9a-fA-F]{24}|[0-9a-fA-F-]{36})", authMiddleware, async (
             mediaUrl,
             mediaUrls,
             type: ((post.type === 'image' || post.type === 'video') && !mediaUrl) ? 'text' : post.type
-        });
+        };
+        const [withRepost] = await attachRepostData([payload], userId);
+        res.json(withRepost);
     } catch (error) {
         res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
@@ -1445,7 +1454,7 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
          }));
 
          return res.json({
-            posts: mappedPosts,
+            posts: await attachRepostData(mappedPosts, req.user?.id || req.userId),
             pagination: {
                 total,
                 page,
@@ -1475,7 +1484,7 @@ router.get("/user/:userId", authMiddleware, async (req, res) => {
     }));
 
     res.json({
-        posts: mappedPosts,
+        posts: await attachRepostData(mappedPosts, req.user?.id || req.userId),
         pagination: {
             total,
             page,
@@ -1512,7 +1521,7 @@ router.get("/mixed", authMiddleware, async (req, res) => {
         take: limit
     });
     
-    res.json(posts.map(withAuthor));
+    res.json(await attachRepostData(posts.map(withAuthor), req.user?.id || req.userId));
   } catch (error) {
     res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
@@ -1555,7 +1564,7 @@ router.get("/videos", authMiddleware, async (req, res) => {
     });
 
     if (!transformation) {
-      return res.json(posts.map(withAuthor));
+      return res.json(await attachRepostData(posts.map(withAuthor), req.user?.id || req.userId));
     }
 
     const transformed = posts.map((p) => {
@@ -1564,41 +1573,36 @@ router.get("/videos", authMiddleware, async (req, res) => {
       return obj;
     });
 
-    res.json(transformed);
+    res.json(await attachRepostData(transformed, req.user?.id || req.userId));
   } catch (error) {
     res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 
-// Repost
+// Reposts (see services/repostService.js)
+const sendRepostError = (res, error, fallback) => {
+  if (error instanceof RepostError) {
+    return res.status(error.status).json({ success: false, code: error.code, message: error.message, ...error.extra });
+  }
+  console.error(`${fallback}:`, error);
+  return res.status(500).json({ success: false, message: fallback, error: process.env.NODE_ENV === "production" ? undefined : error.message });
+};
+
 router.post("/repost/:postId", authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id || req.user._id;
-    const { postId } = req.params;
-    
-    const originalPost = await prisma.post.findUnique({ where: { id: postId } });
-    if (!originalPost) return res.status(404).json({ error: "Post not found" });
-
-    const newRepost = await prisma.post.create({
-        data: {
-            userId,
-            originalPostId: originalPost.id,
-            type: originalPost.type,
-            text: originalPost.text || "",
-            media: originalPost.media || ""
-        },
-        include: {
-            users_posts_userIdTouser: { select: { name: true, username: true, profilePicture: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } }
-        }
-    });
-
-    res.status(201).json({
-      ...withAuthor(newRepost),
-      likesCount: 0,
-      commentsCount: 0
-    });
+    const data = await repostPost({ userId: req.user.id || req.user._id, postId: req.params.postId });
+    res.status(201).json({ success: true, ...data });
   } catch (error) {
-    res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
+    sendRepostError(res, error, "Failed to repost");
+  }
+});
+
+router.delete("/repost/:postId", authMiddleware, async (req, res) => {
+  try {
+    const data = await undoRepost({ userId: req.user.id || req.user._id, postId: req.params.postId });
+    res.json({ success: true, ...data });
+  } catch (error) {
+    sendRepostError(res, error, "Failed to remove repost");
   }
 });
 
@@ -1616,6 +1620,8 @@ router.delete("/:id", authMiddleware, async (req, res) => {
       return res.status(403).json({ error: "Not authorized to delete this post" });
     }
 
+    // Reposts are copies of this post's content; they go with it.
+    await cleanUpRepostsForDeletedPost(post);
     await prisma.post.delete({ where: { id } });
 
     res.json({ success: true, message: "Post deleted successfully" });
