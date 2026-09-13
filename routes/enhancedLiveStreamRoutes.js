@@ -8,6 +8,7 @@ import authMiddleware from "../middleware/authMiddleware.js";
 import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
 import { uploadImage } from '../middleware/upload.js';
 import { GIFT_CATALOG, getGiftById, HOST_COIN_SHARE } from "../config/giftCatalog.js";
+import { broadcastStreamGift, GiftError, sendStreamGift } from "../services/liveGiftService.js";
 import { sendError } from '../utils/apiErrors.js';
 
 const router = express.Router();
@@ -1802,82 +1803,34 @@ router.delete('/:streamId/moderators/:userId', authMiddleware, async (req, res) 
  */
 router.post('/:streamId/gift', authMiddleware, async (req, res) => {
   try {
-    const { streamId } = req.params;
     const { giftId, quantity = 1, message } = req.body;
-
-    if (!giftId) return res.status(400).json({ success: false, message: 'giftId is required' });
-
-    const gift = getGiftById(giftId);
-    if (!gift) return res.status(400).json({ success: false, message: 'Invalid gift' });
-
-    const qty = Math.max(1, Math.min(parseInt(quantity) || 1, 100));
-    const totalCoins = gift.coinCost * qty;
-
-    const [sender, liveStream] = await Promise.all([
-      prisma.user.findUnique({ where: { id: req.user.id } }),
-      prisma.liveStream.findUnique({ where: { id: streamId } })
-    ]);
-
-    if (!liveStream) return res.status(404).json({ success: false, message: 'Stream not found' });
-    if (!sender || sender.coinBalance < totalCoins) {
-      return res.status(400).json({ success: false, message: 'Insufficient coin balance' });
-    }
-
-    const hostEarnings = Math.floor(totalCoins * HOST_COIN_SHARE);
-    const newBalance = sender.coinBalance - totalCoins;
-
-    const giftRecord = await prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: req.user.id }, data: { coinBalance: newBalance } });
-      await tx.user.update({ where: { id: liveStream.hostId }, data: { coinBalance: { increment: hostEarnings } } });
-
-      const created = await tx.liveStreamGift.create({
-        data: {
-          id: uuidV4(), streamId, senderId: req.user.id, hostId: liveStream.hostId,
-          giftId: gift.id, giftName: gift.name, coinCost: gift.coinCost,
-          quantity: qty, totalCoins, message: message || null
-        }
-      });
-
-      await tx.coinTransaction.create({
-        data: {
-          id: uuidV4(), userId: req.user.id, type: 'gift_sent',
-          amount: -totalCoins, balanceAfter: newBalance,
-          description: `Sent ${qty}x ${gift.name} on stream`,
-          metadata: { streamId, giftId, quantity: qty }
-        }
-      });
-
-      const host = await tx.user.findUnique({ where: { id: liveStream.hostId }, select: { coinBalance: true } });
-      await tx.coinTransaction.create({
-        data: {
-          id: uuidV4(), userId: liveStream.hostId, type: 'gift_received',
-          amount: hostEarnings, balanceAfter: host.coinBalance,
-          description: `Received ${qty}x ${gift.name} gift`,
-          metadata: { streamId, giftId, senderId: req.user.id, quantity: qty }
-        }
-      });
-
-      const mon = liveStream.monetization || { totalCoinsReceived: 0, totalGifts: 0 };
-      await tx.liveStream.update({
-        where: { id: streamId },
-        data: {
-          monetization: {
-            ...mon,
-            totalCoinsReceived: (mon.totalCoinsReceived || 0) + totalCoins,
-            totalGifts: (mon.totalGifts || 0) + qty
-          }
-        }
-      });
-
-      return created;
+    const result = await sendStreamGift({
+      senderId: req.user.id,
+      streamId: req.params.streamId,
+      giftId,
+      quantity,
+      message,
     });
+
+    // Fire-and-forget: the sender's response must not wait on the leaderboard.
+    broadcastStreamGift(req.params.streamId, result).catch((error) =>
+      console.error('Gift broadcast error:', error)
+    );
 
     res.json({
       success: true,
       message: 'Gift sent successfully',
-      data: { gift: giftRecord, newBalance, coinsSpent: totalCoins }
+      data: { gift: result.record, newBalance: result.newBalance, coinsSpent: result.totalCoins }
     });
   } catch (error) {
+    if (error instanceof GiftError) {
+      return res.status(error.status).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+        ...error.extra
+      });
+    }
     console.error('Send gift error:', error);
     res.status(500).json({ success: false, message: 'Failed to send gift', error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }

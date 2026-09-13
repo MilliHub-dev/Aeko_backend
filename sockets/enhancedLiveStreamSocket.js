@@ -3,7 +3,7 @@ import { v4 as uuidV4 } from "uuid";
 import { prisma } from "../config/db.js";
 import { hasCurrentAuthTokenVersion } from "../utils/authTokenUtils.js";
 import { getJwtSecret } from "../utils/authConfig.js";
-import { getGiftById, HOST_COIN_SHARE } from "../config/giftCatalog.js";
+import { broadcastStreamGift, GiftError, sendStreamGift } from "../services/liveGiftService.js";
 
 class EnhancedLiveStreamSocket {
   constructor(io) {
@@ -1140,130 +1140,34 @@ class EnhancedLiveStreamSocket {
 
   async handleStreamGift(socket, data) {
     try {
-      const { streamId, giftId, quantity = 1, message } = data;
-
+      const { streamId, giftId, quantity = 1, message } = data || {};
       if (!streamId || !giftId) {
         return socket.emit('stream_error', { error: 'streamId and giftId are required' });
       }
 
-      const gift = getGiftById(giftId);
-      if (!gift) return socket.emit('stream_error', { error: 'Invalid gift' });
-
-      const qty = Math.max(1, Math.min(parseInt(quantity) || 1, 100));
-      const totalCoins = gift.coinCost * qty;
-
-      // Fetch sender balance + stream atomically via transaction
-      const [sender, liveStream] = await Promise.all([
-        prisma.user.findUnique({ where: { id: socket.userId } }),
-        prisma.liveStream.findUnique({ where: { id: streamId } })
-      ]);
-
-      if (!liveStream || liveStream.status !== 'live') {
-        return socket.emit('stream_error', { error: 'Stream is not live' });
-      }
-      if (!sender || sender.coinBalance < totalCoins) {
-        return socket.emit('stream_error', { error: 'Insufficient coin balance' });
-      }
-
-      const hostEarnings = Math.floor(totalCoins * HOST_COIN_SHARE);
-      const newSenderBalance = sender.coinBalance - totalCoins;
-
-      // Persist gift, deduct sender coins, credit host coins in one transaction
-      await prisma.$transaction(async (tx) => {
-        // Deduct from sender
-        await tx.user.update({
-          where: { id: socket.userId },
-          data: { coinBalance: newSenderBalance }
-        });
-
-        // Credit host
-        await tx.user.update({
-          where: { id: liveStream.hostId },
-          data: { coinBalance: { increment: hostEarnings } }
-        });
-
-        // Record gift
-        await tx.liveStreamGift.create({
-          data: {
-            id: uuidV4(),
-            streamId,
-            senderId: socket.userId,
-            hostId: liveStream.hostId,
-            giftId: gift.id,
-            giftName: gift.name,
-            coinCost: gift.coinCost,
-            quantity: qty,
-            totalCoins,
-            message: message || null
-          }
-        });
-
-        // Log sender coin transaction
-        await tx.coinTransaction.create({
-          data: {
-            id: uuidV4(),
-            userId: socket.userId,
-            type: 'gift_sent',
-            amount: -totalCoins,
-            balanceAfter: newSenderBalance,
-            description: `Sent ${qty}x ${gift.name} on stream`,
-            metadata: { streamId, giftId, quantity: qty }
-          }
-        });
-
-        // Log host earning transaction
-        const host = await tx.user.findUnique({ where: { id: liveStream.hostId }, select: { coinBalance: true } });
-        await tx.coinTransaction.create({
-          data: {
-            id: uuidV4(),
-            userId: liveStream.hostId,
-            type: 'gift_received',
-            amount: hostEarnings,
-            balanceAfter: host.coinBalance,
-            description: `Received ${qty}x ${gift.name} gift`,
-            metadata: { streamId, giftId, senderId: socket.userId, quantity: qty }
-          }
-        });
-
-        // Update stream monetization totals
-        const mon = liveStream.monetization || { totalCoinsReceived: 0, totalGifts: 0 };
-        await tx.liveStream.update({
-          where: { id: streamId },
-          data: {
-            monetization: {
-              ...mon,
-              totalCoinsReceived: (mon.totalCoinsReceived || 0) + totalCoins,
-              totalGifts: (mon.totalGifts || 0) + qty
-            }
-          }
-        });
+      const result = await sendStreamGift({
+        senderId: socket.userId,
+        streamId,
+        giftId,
+        quantity,
+        message,
       });
 
-      const giftPayload = {
+      await broadcastStreamGift(streamId, result);
+
+      socket.emit('gift_sent', {
         streamId,
-        gift: { ...gift, quantity: qty, totalCoins },
-        sender: { userId: socket.userId, username: socket.user.username, profilePicture: socket.user.profilePicture },
-        message: message || null,
-        timestamp: new Date()
-      };
-
-      // Broadcast gift animation to all viewers
-      this.io.to(streamId).emit('stream_gift_received', giftPayload);
-
-      // Alert host separately (in case they want a special overlay)
-      const hostSocket = this.userSockets.get(liveStream.hostId);
-      if (hostSocket) hostSocket.emit('gift_alert', { ...giftPayload, coinsEarned: hostEarnings });
-
-      // Confirm to sender with updated balance
-      socket.emit('gift_sent', { streamId, giftId, quantity: qty, totalCoins, newBalance: newSenderBalance });
-
-      // Broadcast updated leaderboard top-5 to stream room
-      await this._broadcastLeaderboard(streamId);
-
-      console.log(`🎁 Gift: ${socket.user.username} sent ${qty}x ${gift.name} (${totalCoins} coins) to ${liveStream.title}`);
+        giftId: result.gift.id,
+        quantity: result.quantity,
+        totalCoins: result.totalCoins,
+        newBalance: result.newBalance
+      });
     } catch (error) {
+      if (error instanceof GiftError) {
+        return socket.emit('stream_error', { error: error.message, code: error.code, ...error.extra });
+      }
       console.error('Stream gift error:', error);
-      socket.emit('stream_error', { error: error.message });
+      socket.emit('stream_error', { error: 'Failed to send gift' });
     }
   }
 

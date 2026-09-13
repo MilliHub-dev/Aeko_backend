@@ -1,4 +1,5 @@
 import "./config/authStartupValidation.js";
+import { setIO } from "./utils/socketRegistry.js";
 import express from "express";
 import os from "os";
 import cors from "cors";
@@ -115,6 +116,7 @@ const io = new Server(server, {
 
 // Expose the socket server to route handlers (req.app.get("io")).
 app.set("io", io);
+setIO(io);
 
 // Initialize Enhanced Chat Socket System
 const enhancedChatSocket = new EnhancedChatSocket(io);

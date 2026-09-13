@@ -1,5 +1,6 @@
 import { prisma } from "../config/db.js";
 import { sendExpoPushMessages } from "./pushProviderService.js";
+import { getIO } from "../utils/socketRegistry.js";
 
 /**
  * Create a new notification
@@ -42,6 +43,25 @@ export const createNotification = async ({
         read: false
       }
     });
+
+    // Tell an open app straight away. The badge only ever came from a fetch at
+    // sign-in, so new notifications never raised it while the app was running.
+    // Every socket joins a room named after its user id.
+    try {
+      const io = getIO();
+      if (io) {
+        const unreadCount = await prisma.notification.count({
+          where: { recipientId, read: false }
+        });
+        io.to(recipientId).emit("notification:new", {
+          notificationId: notification.id,
+          type: notification.type,
+          unreadCount
+        });
+      }
+    } catch (socketError) {
+      console.error('Error emitting notification event:', socketError);
+    }
 
     // Send Push Notification
     await sendPushNotification(recipientId, notification);
