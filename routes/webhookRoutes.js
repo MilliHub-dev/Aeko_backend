@@ -4,20 +4,27 @@ import Stripe from 'stripe';
 import { prisma } from '../config/db.js';
 import { handleSubscriptionPaymentSuccess } from '../services/subscriptionPaymentService.js';
 import { handleCommunityPaymentSuccess } from '../services/communityPaymentService.js';
+import {
+    handleCoinPurchaseSuccess,
+    isCoinPurchaseTransaction
+} from '../services/coinPurchaseService.js';
 import { verifyWebhookSignature } from '../services/whopService.js';
 
 const router = express.Router();
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 /**
- * Helper to dispatch payment success to correct service
+ * Helper to dispatch payment success to correct service.
+ *
+ * Every handler here is idempotent per transaction (each claims the row
+ * before fulfilling), so a replay or a verify racing the webhook is safe.
  */
 const processTransaction = async (transactionId) => {
-    const transaction = await prisma.transaction.findUnique({ 
+    const transaction = await prisma.transaction.findUnique({
         where: { id: transactionId },
-        select: { id: true, planId: true, communityId: true }
+        select: { id: true, planId: true, communityId: true, paymentReference: true, metadata: true }
     });
-    
+
     if (!transaction) {
         console.warn(`Transaction not found for ID: ${transactionId}`);
         return;
@@ -27,8 +34,10 @@ const processTransaction = async (transactionId) => {
         await handleSubscriptionPaymentSuccess(transaction.id);
     } else if (transaction.communityId) {
         await handleCommunityPaymentSuccess(transaction.id);
+    } else if (isCoinPurchaseTransaction(transaction)) {
+        await handleCoinPurchaseSuccess(transaction.id);
     } else {
-        console.warn(`Unknown transaction type for ID: ${transactionId} (No planId or communityId)`);
+        console.warn(`Unknown transaction type for ID: ${transactionId} (No planId, communityId or coin purchase)`);
     }
 };
 
@@ -149,6 +158,8 @@ router.post('/whop', express.raw({ type: 'application/json' }), async (req, res)
     const webhookId = req.headers['webhook-id'];
     const timestamp = req.headers['webhook-timestamp'];
     const signature = req.headers['webhook-signature'];
+    // Set once this delivery's dedup row exists, so a failure can release it.
+    let claimedEventId = null;
 
     try {
         const check = verifyWebhookSignature({
@@ -179,6 +190,7 @@ router.post('/whop', express.raw({ type: 'application/json' }), async (req, res)
                     payload: event ?? null,
                 },
             });
+            claimedEventId = String(webhookId);
         } catch (error) {
             if (error?.code === 'P2002') {
                 console.log(`Whop webhook ${webhookId} already processed`);
@@ -198,17 +210,25 @@ router.post('/whop', express.raw({ type: 'application/json' }), async (req, res)
             // the only place it becomes known. Without it the app's verify()
             // call after the browser closes could never confirm anything.
             if (transactionId && data?.id) {
+                // Merged over the stored metadata rather than replacing it:
+                // fulfilment reads fields that were never sent to Whop (the
+                // community's subscriptionType at checkout time, the numeric
+                // coin count), and replacing would drop them.
                 await prisma.transaction
-                    .update({
-                        where: { id: transactionId },
-                        data: {
-                            providerResponse: data,
-                            metadata: {
-                                ...(data?.metadata ?? {}),
-                                whopPaymentId: data.id
+                    .findUnique({ where: { id: transactionId }, select: { metadata: true } })
+                    .then((existing) =>
+                        prisma.transaction.update({
+                            where: { id: transactionId },
+                            data: {
+                                providerResponse: data,
+                                metadata: {
+                                    ...(existing?.metadata ?? {}),
+                                    ...(data?.metadata ?? {}),
+                                    whopPaymentId: data.id
+                                }
                             }
-                        }
-                    })
+                        })
+                    )
                     .catch((error) => {
                         // Never block activation on bookkeeping.
                         console.warn('Could not record Whop payment id:', error.message);
@@ -236,8 +256,11 @@ router.post('/whop', express.raw({ type: 'application/json' }), async (req, res)
             }
         } else if (eventType === 'payment.failed') {
             if (transactionId) {
-                await prisma.transaction.update({
-                    where: { id: transactionId },
+                // updateMany with a status guard: a late failure event (a
+                // retried charge that declined) must not mark a payment that
+                // already succeeded and was fulfilled as failed.
+                await prisma.transaction.updateMany({
+                    where: { id: transactionId, status: { not: 'completed' } },
                     data: {
                         status: 'failed',
                         failureReason:
@@ -256,7 +279,20 @@ router.post('/whop', express.raw({ type: 'application/json' }), async (req, res)
     } catch (error) {
         console.error('Whop Webhook Error:', error);
         // A 5xx asks Whop to retry, which is right for a transient failure —
-        // the dedup row is only written once the signature has been verified.
+        // but the retry carries the same webhook-id, so the dedup row written
+        // above would make it return 200 without doing anything, and a paid
+        // membership or coin purchase would never be fulfilled. Release the
+        // row first. Fulfilment is idempotent per transaction, so reprocessing
+        // anything that did commit is harmless.
+        if (claimedEventId) {
+            await prisma.webhookEvent
+                .delete({
+                    where: { provider_eventId: { provider: 'whop', eventId: claimedEventId } },
+                })
+                .catch((releaseError) => {
+                    console.warn('Could not release Whop webhook dedup row:', releaseError.message);
+                });
+        }
         return res.status(500).send('Webhook Error');
     }
 });

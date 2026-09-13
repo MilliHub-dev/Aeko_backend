@@ -463,7 +463,9 @@ export const joinCommunity = async (req, res) => {
           price: settings.payment.price,
           currency: settings.payment.currency,
           subscriptionType: settings.payment.subscriptionType,
-          availableMethods: settings.payment.paymentMethods
+          // Whop is the only gateway; stored values may still say paystack/stripe,
+          // which older app builds would otherwise offer.
+          availableMethods: ['whop']
         }
       });
     }

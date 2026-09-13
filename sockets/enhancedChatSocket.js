@@ -237,7 +237,8 @@ class EnhancedChatSocket {
             ? {
                 select: {
                   content: true,
-                  sender: true
+                  // Public fields only; `sender: true` sent the whole user row.
+                  sender: { select: { id: true, name: true, username: true, profilePicture: true } }
                 }
               }
             : false

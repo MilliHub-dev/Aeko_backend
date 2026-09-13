@@ -42,7 +42,6 @@ router.post("/:postId", authMiddleware, BlockingMiddleware.checkPostInteraction(
         user: {
           select: {
             name: true,
-            email: true,
             username: true,
             profilePicture: true
           }
@@ -149,7 +148,6 @@ router.post("/reply/:commentId", authMiddleware, BlockingMiddleware.checkPostInt
                 user: {
                     select: {
                         name: true,
-                        email: true,
                         username: true,
                         profilePicture: true
                     }
@@ -208,7 +206,9 @@ router.post("/like/:commentId", authMiddleware, BlockingMiddleware.checkPostInte
 
         const comment = await prisma.comment.findUnique({
             where: { id: commentId },
-            include: { user: true }
+            // Only public fields: this comment is spread into the response, and a bare
+            // `user: true` returned the author's whole row — password hash included.
+            include: { user: { select: { id: true, name: true, username: true, profilePicture: true } } }
         });
 
         if (!comment) return res.status(404).json({ error: "Comment not found" });
@@ -285,7 +285,6 @@ router.get("/replies/:commentId", authMiddleware, async (req, res) => {
                     select: {
                         id: true,
                         name: true,
-                        email: true,
                         username: true,
                         profilePicture: true
                     }
@@ -342,7 +341,6 @@ router.get("/:postId", authMiddleware, async (req, res) => {
                     select: {
                         id: true,
                         name: true,
-                        email: true,
                         username: true,
                         profilePicture: true
                     }
@@ -353,7 +351,6 @@ router.get("/:postId", authMiddleware, async (req, res) => {
                             select: {
                                 id: true,
                                 name: true,
-                                email: true,
                                 username: true,
                                 profilePicture: true
                             }
@@ -448,7 +445,6 @@ router.put("/:postId/:commentId", authMiddleware, async (req, res) => {
         user: {
           select: {
             name: true,
-            email: true,
             username: true,
             profilePicture: true,
           },

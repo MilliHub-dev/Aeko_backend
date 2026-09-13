@@ -30,15 +30,15 @@ const router = express.Router();
  *             type: object
  *             required:
  *               - communityId
- *               - paymentMethod
  *             properties:
  *               communityId:
  *                 type: string
  *                 description: ID of the community to join
  *               paymentMethod:
  *                 type: string
- *                 enum: [paystack, stripe]
- *                 description: Payment method to use
+ *                 enum: [whop]
+ *                 deprecated: true
+ *                 description: Optional. Whop is the only gateway; legacy values (paystack, stripe) are accepted and treated as whop.
  *     responses:
  *       200:
  *         description: Payment initialized successfully
@@ -71,13 +71,13 @@ router.post('/initialize', authenticate, validatePaymentInitialization, async (r
       });
     }
 
-    const { communityId, paymentMethod } = req.body;
+    const { communityId } = req.body;
     const userId = req.user.id;
 
+    // Whop only; any paymentMethod sent by an older app build is ignored.
     const result = await paymentService.initializePayment({
       userId,
-      communityId,
-      paymentMethod
+      communityId
     });
 
     res.json(result);
@@ -95,7 +95,7 @@ router.post('/initialize', authenticate, validatePaymentInitialization, async (r
  * /api/community/payment/verify:
  *   get:
  *     summary: Verify community payment
- *     description: Verify payment status and grant community membership if successful. No authentication required as this is called from payment provider callback.
+ *     description: Confirms the payment with Whop and grants membership once. No authentication required as this is called from the checkout return. `pending` true means Whop has not confirmed the payment yet (the webhook may still be on its way) and is not a failure.
  *     tags: [Community Payments]
  *     parameters:
  *       - in: query
@@ -106,14 +106,14 @@ router.post('/initialize', authenticate, validatePaymentInitialization, async (r
  *         description: Payment reference from initialization
  *       - in: query
  *         name: paymentMethod
- *         required: true
+ *         required: false
  *         schema:
  *           type: string
- *           enum: [paystack, stripe]
- *         description: Payment method used
+ *           enum: [whop]
+ *         description: Optional and ignored; every community payment is confirmed through Whop.
  *     responses:
  *       200:
- *         description: Payment verified successfully and membership granted
+ *         description: Verification result; membership is granted when `success` is true
  *         content:
  *           application/json:
  *             schema:
@@ -121,10 +121,10 @@ router.post('/initialize', authenticate, validatePaymentInitialization, async (r
  *               properties:
  *                 success:
  *                   type: boolean
+ *                 pending:
+ *                   type: boolean
  *                 message:
  *                   type: string
- *                 data:
- *                   type: object
  *       400:
  *         description: Payment verification failed or invalid reference
  *       404:
@@ -141,12 +141,9 @@ router.get('/verify', validatePaymentVerification, async (req, res) => {
       });
     }
 
-    const { reference, paymentMethod } = req.query;
-    
-    const result = await paymentService.verifyPayment({
-      reference,
-      paymentMethod
-    });
+    const { reference } = req.query;
+
+    const result = await paymentService.verifyPayment({ reference });
 
     res.json(result);
   } catch (error) {

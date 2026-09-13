@@ -26,8 +26,6 @@ import commentRoutes from "./routes/commentRoutes.js";
 import chatRoutes from "./routes/chat.js";
 import adRoutes from "./routes/adRoutes.js";
 import botRoutes from "./routes/bot.js";
-import videoEditRoutes from "./routes/videoEdit.js";
-import photoEditRoutes from "./routes/photoEdit.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import adminAuthRoutes from "./routes/adminAuth.js";
@@ -102,8 +100,13 @@ const server = http.createServer(app);
 
 // Initialize Socket.IO
 const io = new Server(server, {
+  // Browsers only: native app sockets send no Origin header and are unaffected.
+  // "*" let any website open an authenticated socket with a user's token.
   cors: {
-    origin: "*",
+    origin:
+      process.env.NODE_ENV === "production"
+        ? [process.env.FRONTEND_URL, /\.aeko\.online$/, "https://aeko.online"].filter(Boolean)
+        : "*",
     methods: ["GET", "POST"],
   },
   maxHttpBufferSize: 1e8, // 100MB
@@ -259,8 +262,10 @@ app.use("/api/ads", apiRateLimit, adRoutes);
 app.use("/api/bot", apiRateLimit, botRoutes);
 app.use("/api/interests", apiRateLimit, interestRoutes);
 app.use("/api/user/interests", apiRateLimit, userInterestRoutes);
-app.use("/api/video", apiRateLimit, videoEditRoutes);
-app.use("/api/photo", apiRateLimit, photoEditRoutes);
+// /api/video/edit and /api/photo/edit are no longer mounted. Neither required
+// authentication or capped upload size (the video route wrote to local disk),
+// and no client calls them. Re-add behind authMiddleware with multer limits
+// if an editor ships.
 app.use("/api/payments", apiRateLimit, paymentRoutes);
 app.use("/api/profile", apiRateLimit, profileRoutes);
 app.use("/api/subscription", apiRateLimit, subscriptionRoutes);

@@ -1,22 +1,30 @@
 import express from "express";
 import { sendChainError } from "../chain/client.js";
-import axios from "axios";
-import Stripe from "stripe";
-import { v4 as uuidV4 } from "uuid";
 import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
-import { COIN_PACKAGES, getCoinPackageById } from "../config/giftCatalog.js";
+import { COIN_PACKAGES } from "../config/giftCatalog.js";
+import {
+  initializeCoinPurchase,
+  verifyCoinPurchase,
+} from "../services/coinPurchaseService.js";
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-const paystack = axios.create({
-  baseURL: "https://api.paystack.co",
-  headers: {
-    Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-    "Content-Type": "application/json",
-  },
-});
+/**
+ * Sends a service error with its intended status. Errors without one are
+ * unexpected, so their message is hidden in production.
+ */
+const sendPurchaseError = (res, error, fallback) => {
+  const status = error.statusCode || 500;
+  res.status(status).json({
+    success: false,
+    message: error.statusCode ? error.message : fallback,
+    error:
+      process.env.NODE_ENV === "production" || error.statusCode
+        ? undefined
+        : error.message,
+  });
+};
 
 // ── GET /api/coins/packages ──────────────────────────────────────────────────
 router.get("/packages", (req, res) => {
@@ -63,183 +71,90 @@ router.get("/history", authMiddleware, async (req, res) => {
   }
 });
 
-// ── POST /api/coins/purchase ─────────────────────────────────────────────────
-// Initialize a coin purchase via Paystack or Stripe
+/**
+ * @swagger
+ * /api/coins/purchase:
+ *   post:
+ *     summary: Start a coin purchase
+ *     description: Creates a Whop checkout for a coin package. Whop is the only gateway; a legacy `paymentMethod` in the body is ignored. Coins are credited by the Whop webhook or by the verify call once the payment clears.
+ *     tags: [Coins]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [packageId]
+ *             properties:
+ *               packageId:
+ *                 type: string
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [whop]
+ *                 deprecated: true
+ *     responses:
+ *       200:
+ *         description: "`data` holds `reference`, `authorizationUrl` (open in a browser) and `package`"
+ *       400:
+ *         description: Invalid package
+ *       502:
+ *         description: Whop checkout could not be created
+ */
 router.post("/purchase", authMiddleware, async (req, res) => {
   try {
-    const { packageId, paymentMethod = "paystack" } = req.body;
-
-    const pkg = getCoinPackageById(packageId);
-    if (!pkg) return res.status(400).json({ success: false, message: "Invalid package" });
-
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-    const reference = `COINS_${uuidV4()}`;
-
-    if (paymentMethod === "paystack") {
-      const response = await paystack.post("/transaction/initialize", {
-        email: user.email,
-        amount: pkg.pricePaise * 100, // Paystack uses kobo (100 kobo = 1 NGN) — adjust per currency
-        currency: "NGN",
-        reference,
-        metadata: {
-          userId: req.user.id,
-          packageId: pkg.id,
-          coins: pkg.coins,
-          type: "coin_purchase",
-        },
-      });
-
-      return res.json({
-        success: true,
-        data: {
-          reference,
-          authorizationUrl: response.data.data.authorization_url,
-          accessCode: response.data.data.access_code,
-          package: pkg,
-        },
-      });
-    }
-
-    if (paymentMethod === "stripe") {
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: { name: pkg.label, description: `${pkg.coins} Aeko Coins` },
-              unit_amount: Math.round(pkg.priceUSD * 100),
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        success_url: `${process.env.FRONTEND_URL}/coins/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.FRONTEND_URL}/coins/cancel`,
-        metadata: { userId: req.user.id, packageId: pkg.id, coins: String(pkg.coins), reference },
-      });
-
-      return res.json({
-        success: true,
-        data: { reference, sessionId: session.id, url: session.url, package: pkg },
-      });
-    }
-
-    res.status(400).json({ success: false, message: "Unsupported payment method. Use paystack or stripe" });
+    const data = await initializeCoinPurchase({
+      userId: req.user.id,
+      packageId: req.body?.packageId,
+    });
+    res.json({ success: true, data });
   } catch (error) {
-    console.error("Coin purchase init error:", error);
-    res.status(500).json({ success: false, message: "Failed to initialize purchase", error: process.env.NODE_ENV === "production" ? undefined : error.message });
+    console.error("Coin purchase init error:", error.message);
+    sendPurchaseError(res, error, "Failed to initialize purchase");
   }
 });
 
-// ── GET /api/coins/purchase/verify ──────────────────────────────────────────
-// Verify Paystack payment and credit coins
-router.get("/purchase/verify", async (req, res) => {
+/**
+ * @swagger
+ * /api/coins/purchase/verify:
+ *   get:
+ *     summary: Confirm a coin purchase
+ *     description: Confirms the caller's purchase with Whop and credits coins once. `data.pending` true means the payment has not been confirmed yet (the webhook may still be on its way) and is not a failure.
+ *     tags: [Coins]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: reference
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: "`success` true once credited; `data` holds `pending`, `coins`, `coinBalance`, `message`"
+ *       404:
+ *         description: No such purchase for this user
+ */
+// Authenticated now: the previous Paystack version was open, so a reference
+// alone returned the buyer's coin balance.
+router.get("/purchase/verify", authMiddleware, async (req, res) => {
   try {
     const { reference } = req.query;
-    if (!reference) return res.status(400).json({ success: false, message: "Reference is required" });
-
-    const response = await paystack.get(`/transaction/verify/${reference}`);
-    const txData = response.data.data;
-
-    if (txData.status !== "success") {
-      return res.status(400).json({ success: false, message: "Payment not successful" });
+    if (!reference) {
+      return res.status(400).json({ success: false, message: "Reference is required" });
     }
 
-    const { userId, packageId, coins } = txData.metadata;
-    const pkg = getCoinPackageById(packageId);
-    if (!pkg) return res.status(400).json({ success: false, message: "Invalid package in metadata" });
-
-    // Idempotency: check if we already processed this reference
-    const already = await prisma.coinTransaction.findFirst({
-      where: { metadata: { path: ["reference"], equals: reference } },
+    const result = await verifyCoinPurchase({
+      reference: String(reference),
+      userId: req.user.id,
     });
-    if (already) {
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { coinBalance: true } });
-      return res.json({ success: true, message: "Already processed", data: { coinBalance: user.coinBalance } });
-    }
 
-    const totalCoins = pkg.coins; // includes any bonus already in package definition
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    const newBalance = (user.coinBalance || 0) + totalCoins;
-
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { coinBalance: newBalance } }),
-      prisma.coinTransaction.create({
-        data: {
-          id: uuidV4(),
-          userId,
-          type: "purchase",
-          amount: totalCoins,
-          balanceAfter: newBalance,
-          description: `Purchased ${pkg.label}`,
-          metadata: { packageId, reference, paymentMethod: "paystack" },
-        },
-      }),
-    ]);
-
-    res.json({
-      success: true,
-      message: "Coins credited successfully",
-      data: { coins: totalCoins, coinBalance: newBalance },
-    });
+    // 200 even while pending: "not confirmed yet" is a normal answer.
+    res.json({ success: Boolean(result.success), data: result });
   } catch (error) {
-    console.error("Coin verify error:", error);
-    res.status(500).json({ success: false, message: "Failed to verify payment", error: process.env.NODE_ENV === "production" ? undefined : error.message });
-  }
-});
-
-// ── POST /api/coins/purchase/verify-stripe ───────────────────────────────────
-// Verify Stripe checkout session and credit coins
-router.post("/purchase/verify-stripe", authMiddleware, async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    if (!sessionId) return res.status(400).json({ success: false, message: "sessionId is required" });
-
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status !== "paid") {
-      return res.status(400).json({ success: false, message: "Payment not completed" });
-    }
-
-    const { userId, packageId, reference } = session.metadata;
-    const pkg = getCoinPackageById(packageId);
-    if (!pkg) return res.status(400).json({ success: false, message: "Invalid package" });
-
-    const already = await prisma.coinTransaction.findFirst({
-      where: { metadata: { path: ["reference"], equals: reference } },
-    });
-    if (already) {
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { coinBalance: true } });
-      return res.json({ success: true, message: "Already processed", data: { coinBalance: user.coinBalance } });
-    }
-
-    const totalCoins = pkg.coins;
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    const newBalance = (user.coinBalance || 0) + totalCoins;
-
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { coinBalance: newBalance } }),
-      prisma.coinTransaction.create({
-        data: {
-          id: uuidV4(),
-          userId,
-          type: "purchase",
-          amount: totalCoins,
-          balanceAfter: newBalance,
-          description: `Purchased ${pkg.label}`,
-          metadata: { packageId, reference, sessionId, paymentMethod: "stripe" },
-        },
-      }),
-    ]);
-
-    res.json({
-      success: true,
-      message: "Coins credited successfully",
-      data: { coins: totalCoins, coinBalance: newBalance },
-    });
-  } catch (error) {
-    console.error("Stripe verify error:", error);
-    res.status(500).json({ success: false, message: "Failed to verify Stripe payment", error: process.env.NODE_ENV === "production" ? undefined : error.message });
+    console.error("Coin verify error:", error.message);
+    sendPurchaseError(res, error, "Failed to verify payment");
   }
 });
 

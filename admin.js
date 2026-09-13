@@ -36,9 +36,26 @@ const buildAdminSessionStore = () => {
   }
 
   const isLocalDb = /(localhost|127\.0\.0\.1)/i.test(databaseUrl);
+
+  // TLS is configured here rather than through the URL. `pg` reads
+  // `sslmode=require` from the connection string as verify-full and logs a
+  // security warning on every boot, and `rejectUnauthorized: false` accepted
+  // any certificate at all. Neon serves a publicly trusted certificate, so
+  // verification stays on.
+  let connectionString = databaseUrl;
+  if (!isLocalDb) {
+    try {
+      const url = new URL(databaseUrl);
+      url.searchParams.delete("sslmode");
+      connectionString = url.toString();
+    } catch {
+      // Unparseable URL: hand it to pg unchanged and let it report the problem.
+    }
+  }
+
   const pool = new Pool({
-    connectionString: databaseUrl,
-    ssl: isLocalDb ? false : { rejectUnauthorized: false },
+    connectionString,
+    ssl: isLocalDb ? false : { rejectUnauthorized: true },
   });
 
   const PgSession = connectPgSimple(session);

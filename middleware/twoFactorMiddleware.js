@@ -41,8 +41,19 @@ const twoFactorMiddleware = {
           });
         }
 
-        // Verify the 2FA token
-        const isValid = await TwoFactorService.verifyTOTP(userId, twoFactorToken);
+        // A 6-digit value is a TOTP from the authenticator app; anything else is
+        // treated as one of the account's single-use backup codes (8 hex chars).
+        // Only TOTPs used to be checked, so someone who had lost their phone
+        // could not pass any protected route — account deletion included, which
+        // app store rules require to work from inside the app.
+        const submitted = String(twoFactorToken).trim();
+        const isValid = /^\d{6}$/.test(submitted)
+          ? await TwoFactorService.verifyTOTP(userId, submitted, req)
+          : await TwoFactorService.verifyBackupCode(
+              userId,
+              submitted.replace(/[\s-]/g, '').toUpperCase(),
+              req
+            );
         
         if (!isValid) {
           return res.status(403).json({
@@ -60,6 +71,17 @@ const twoFactorMiddleware = {
       } catch (error) {
         console.error('2FA middleware error:', error);
         
+        if (error?.code === '2FA_LOCKED') {
+          res.set('Retry-After', String(error.retryAfterSeconds ?? 900));
+          return res.status(429).json({
+            success: false,
+            message: error.message,
+            requiresTwoFactor: true,
+            code: '2FA_LOCKED',
+            retryAfterSeconds: error.retryAfterSeconds
+          });
+        }
+
         if (error instanceof TwoFactorError) {
           return res.status(400).json({
             success: false,
@@ -174,6 +196,17 @@ const twoFactorMiddleware = {
       } catch (error) {
         console.error('Login 2FA check error:', error);
         
+        if (error?.code === '2FA_LOCKED') {
+          res.set('Retry-After', String(error.retryAfterSeconds ?? 900));
+          return res.status(429).json({
+            success: false,
+            message: error.message,
+            requiresTwoFactor: true,
+            code: '2FA_LOCKED',
+            retryAfterSeconds: error.retryAfterSeconds
+          });
+        }
+
         if (error instanceof TwoFactorError) {
           return res.status(400).json({
             success: false,

@@ -75,6 +75,8 @@ export class SecurityErrorHandler {
       statusCode = this.getPrivacyErrorStatus(error.code);
     } else if (error instanceof TwoFactorError) {
       statusCode = this.getTwoFactorErrorStatus(error.code);
+      // Lockout from too many wrong codes is rate limiting, not a bad request.
+      if (error.code === '2FA_LOCKED') statusCode = 429;
     } else if (error instanceof SecurityError) {
       statusCode = 400;
     }

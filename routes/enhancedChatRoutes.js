@@ -365,7 +365,7 @@ router.post('/send-message', authenticate, BlockingMiddleware.checkMessagingAcce
           select: { id: true, name: true, username: true, profilePicture: true, avatar: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true }
         },
         replyTo: {
-          select: { content: true, sender: true }
+          select: { content: true, sender: { select: { id: true, name: true, username: true, profilePicture: true } } }
         }
       }
     });

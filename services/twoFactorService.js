@@ -1,14 +1,83 @@
 import speakeasy from 'speakeasy';
+import { TwoFactorError } from '../utils/securityErrors.js';
 import QRCode from 'qrcode';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { prisma } from "../config/db.js";
 import SecurityLogger from './securityLogger.js';
 
+/** Codes checked per account before a lockout; see reserveTwoFactorAttempt. */
+const MAX_2FA_ATTEMPTS = 5;
+const TWO_FA_LOCK_MINUTES = 15;
+
 class TwoFactorService {
   constructor() {
     this.algorithm = 'aes-256-gcm';
-    this.secretKey = process.env.TWO_FACTOR_SECRET_KEY || crypto.randomBytes(32);
+    this.secretKey = TwoFactorService.deriveKey();
+  }
+
+  /**
+   * Reserves one 2FA attempt for the account, before the code is checked.
+   *
+   * Codes were only limited per IP (5 per 15 min on /api/security/2fa/* and
+   * nothing but the general API limiter on login and on protected actions), so
+   * rotating IPs allowed unlimited guesses at a 6-digit code. The count lives on
+   * the account instead, and is taken in one statement under a row lock, so
+   * parallel requests cannot all slip past the check before any failure is
+   * recorded. At most MAX_2FA_ATTEMPTS codes are checked per lock period; a
+   * correct code resets the count.
+   *
+   * @throws {TwoFactorError} code 2FA_LOCKED, with retryAfterSeconds
+   */
+  async reserveTwoFactorAttempt(userId) {
+    const rows = await prisma.$queryRaw`
+      WITH cur AS (
+        SELECT id,
+          CASE WHEN jsonb_typeof("twoFactorAuth"::jsonb) = 'object'
+               THEN "twoFactorAuth"::jsonb ELSE '{}'::jsonb END AS tfa
+        FROM "users" WHERE id = ${userId} FOR UPDATE
+      ), parsed AS (
+        SELECT id, tfa,
+          NULLIF(tfa->>'lockedUntil', '')::timestamptz AS locked_until,
+          COALESCE(NULLIF(tfa->>'failedAttempts', '')::int, 0) AS attempts
+        FROM cur
+      ), nxt AS (
+        SELECT id, tfa, locked_until,
+          (locked_until IS NOT NULL AND locked_until > now()) AS was_locked,
+          CASE WHEN locked_until IS NOT NULL AND locked_until > now() THEN attempts
+               WHEN locked_until IS NOT NULL THEN 1
+               ELSE attempts + 1 END AS new_attempts
+        FROM parsed
+      ), fin AS (
+        SELECT id, tfa, was_locked, new_attempts,
+          CASE WHEN was_locked THEN locked_until
+               WHEN new_attempts >= ${MAX_2FA_ATTEMPTS}::int
+                 THEN now() + make_interval(mins => ${TWO_FA_LOCK_MINUTES}::int)
+               ELSE NULL END AS lock_until
+        FROM nxt
+      )
+      UPDATE "users" u
+      SET "twoFactorAuth" = jsonb_set(
+            jsonb_set(fin.tfa, '{failedAttempts}', to_jsonb(fin.new_attempts)),
+            '{lockedUntil}', COALESCE(to_jsonb(fin.lock_until), 'null'::jsonb))
+      FROM fin
+      WHERE u.id = fin.id
+      RETURNING fin.was_locked AS "wasLocked", fin.lock_until AS "lockUntil"`;
+
+    const row = rows?.[0];
+    if (row?.wasLocked) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((new Date(row.lockUntil).getTime() - Date.now()) / 1000)
+      );
+      const minutes = Math.ceil(retryAfterSeconds / 60);
+      const error = new TwoFactorError(
+        `Too many incorrect codes. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+        '2FA_LOCKED'
+      );
+      error.retryAfterSeconds = retryAfterSeconds;
+      throw error;
+    }
   }
 
   /**
@@ -16,6 +85,33 @@ class TwoFactorService {
    * @param {string} userId - The user ID
    * @returns {Object} - Object containing secret and otpauth_url
    */
+  /**
+   * The AES-256 key for stored TOTP secrets.
+   *
+   * Derived with SHA-256 so any configured string yields the 32 bytes the cipher
+   * needs. The old fallback was a fresh random key per process: every restart
+   * would have made each stored secret undecryptable and locked those users out.
+   * Production therefore refuses to encrypt without a configured key.
+   */
+  static deriveKey() {
+    const configured = process.env.TWO_FACTOR_SECRET_KEY;
+    if (configured) {
+      return crypto.createHash('sha256').update(String(configured)).digest();
+    }
+    if (process.env.NODE_ENV === 'production') {
+      return null;
+    }
+    console.warn('[2FA] TWO_FACTOR_SECRET_KEY is not set; using a throwaway development key.');
+    return crypto.randomBytes(32);
+  }
+
+  requireKey() {
+    if (!this.secretKey) {
+      throw new Error('Two-factor authentication is not configured on the server (TWO_FACTOR_SECRET_KEY)');
+    }
+    return this.secretKey;
+  }
+
   async generateSecret(userId) {
     try {
       const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -86,6 +182,8 @@ class TwoFactorService {
         throw error;
       }
 
+      await this.reserveTwoFactorAttempt(userId);
+
       // Decrypt the stored secret
       const decryptedSecret = this.decryptSecret(twoFactorAuth.secret);
 
@@ -98,8 +196,10 @@ class TwoFactorService {
       });
 
       if (verified) {
-        // Update last used timestamp
+        // Update last used timestamp; a correct code clears the attempt count.
         twoFactorAuth.lastUsed = new Date();
+        twoFactorAuth.failedAttempts = 0;
+        twoFactorAuth.lockedUntil = null;
         await prisma.user.update({
           where: { id: userId },
           data: { twoFactorAuth }
@@ -118,6 +218,8 @@ class TwoFactorService {
       if (!error.message.includes('2FA not enabled')) {
         await SecurityLogger.log2FAUsedEvent(userId, req, false, error.message, { method: 'totp' });
       }
+      // Kept intact so callers can answer 429 rather than a generic failure.
+      if (error.code === '2FA_LOCKED') throw error;
       throw new Error(`Failed to verify TOTP: ${error.message}`);
     }
   }
@@ -199,6 +301,8 @@ class TwoFactorService {
         throw error;
       }
 
+      await this.reserveTwoFactorAttempt(userId);
+
       // Find matching unused backup code
       let backupCodeIndex = -1;
       const backupCodes = twoFactorAuth.backupCodes || [];
@@ -222,6 +326,8 @@ class TwoFactorService {
       backupCodes[backupCodeIndex].usedAt = new Date();
       twoFactorAuth.lastUsed = new Date();
       twoFactorAuth.backupCodes = backupCodes;
+      twoFactorAuth.failedAttempts = 0;
+      twoFactorAuth.lockedUntil = null;
 
       await prisma.user.update({
         where: { id: userId },
@@ -243,6 +349,7 @@ class TwoFactorService {
       if (!error.message.includes('2FA not enabled')) {
         await SecurityLogger.logBackupCodeUsedEvent(userId, req, false, error.message);
       }
+      if (error.code === '2FA_LOCKED') throw error;
       throw new Error(`Failed to verify backup code: ${error.message}`);
     }
   }
@@ -254,8 +361,10 @@ class TwoFactorService {
    */
   encryptSecret(secret) {
     try {
-      const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipherGCM(this.algorithm, this.secretKey, iv);
+      // `crypto.createCipherGCM` does not exist in Node, so this always threw and
+      // no account could ever finish enabling 2FA.
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv(this.algorithm, this.requireKey(), iv);
       
       let encrypted = cipher.update(secret, 'utf8', 'hex');
       encrypted += cipher.final('hex');
@@ -285,7 +394,7 @@ class TwoFactorService {
       const authTag = Buffer.from(parts[1], 'hex');
       const encrypted = parts[2];
 
-      const decipher = crypto.createDecipherGCM(this.algorithm, this.secretKey, iv);
+      const decipher = crypto.createDecipheriv(this.algorithm, this.requireKey(), iv);
       decipher.setAuthTag(authTag);
 
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');
@@ -487,6 +596,8 @@ class TwoFactorService {
         throw new Error('2FA not enabled for this user');
       }
 
+      await this.reserveTwoFactorAttempt(userId);
+
       const backupCodes = twoFactorAuth.backupCodes || [];
 
       // Find matching unused backup code
@@ -510,7 +621,9 @@ class TwoFactorService {
       const updatedAuth = {
         ...twoFactorAuth,
         backupCodes: backupCodes,
-        lastUsed: new Date()
+        lastUsed: new Date(),
+        failedAttempts: 0,
+        lockedUntil: null
       };
 
       await prisma.user.update({
@@ -520,6 +633,7 @@ class TwoFactorService {
 
       return true;
     } catch (error) {
+      if (error.code === '2FA_LOCKED') throw error;
       throw new Error(`Failed to verify backup code: ${error.message}`);
     }
   }
@@ -541,6 +655,7 @@ class TwoFactorService {
 
       return await this.verifyTOTP(userId, totpToken);
     } catch (error) {
+      if (error.code === '2FA_LOCKED') throw error;
       throw new Error(`Failed to validate 2FA login: ${error.message}`);
     }
   }

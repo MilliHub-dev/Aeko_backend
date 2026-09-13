@@ -1529,6 +1529,7 @@ router.post(
         }
 
         let twoFactorValid = false;
+        let twoFactorLock = null;
 
         if (backupCode) {
           // Verify backup code
@@ -1538,6 +1539,7 @@ router.post(
               backupCode,
             );
           } catch (error) {
+            if (error.code === "2FA_LOCKED") twoFactorLock = error;
             console.log(
               `2FA backup code verification failed for user ${email}:`,
               error.message,
@@ -1551,11 +1553,23 @@ router.post(
               twoFactorToken,
             );
           } catch (error) {
+            if (error.code === "2FA_LOCKED") twoFactorLock = error;
             console.log(
               `2FA TOTP verification failed for user ${email}:`,
               error.message,
             );
           }
+        }
+
+        if (twoFactorLock) {
+          res.set("Retry-After", String(twoFactorLock.retryAfterSeconds ?? 900));
+          return res.status(429).json({
+            success: false,
+            message: twoFactorLock.message,
+            requires2FA: true,
+            code: "2FA_LOCKED",
+            retryAfterSeconds: twoFactorLock.retryAfterSeconds,
+          });
         }
 
         if (!twoFactorValid) {
