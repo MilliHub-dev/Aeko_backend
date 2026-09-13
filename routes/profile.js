@@ -486,7 +486,7 @@ router.get('/followers', authMiddleware, async (req, res) => {
 
     const followers = await prisma.user.findMany({
         where: { id: { in: followerIds } },
-        select: { id: true, username: true, email: true, profilePicture: true }
+        select: { id: true, name: true, username: true, profilePicture: true }
     });
     
     // Filter followers based on privacy settings and blocking
@@ -532,7 +532,7 @@ router.get('/following', authMiddleware, async (req, res) => {
 
     const followingUsers = await prisma.user.findMany({
         where: { id: { in: followingIds } },
-        select: { id: true, username: true, email: true, profilePicture: true }
+        select: { id: true, name: true, username: true, profilePicture: true }
     });
     
     // Filter following list based on privacy settings
@@ -581,7 +581,7 @@ router.get('/followers/search', authMiddleware, async (req, res) => {
             id: { in: followerIds },
             username: { contains: query, mode: 'insensitive' }
         },
-        select: { id: true, username: true, email: true, profilePicture: true }
+        select: { id: true, name: true, username: true, profilePicture: true }
     });
 
     res.json({ success: true, followers: matchedFollowers });

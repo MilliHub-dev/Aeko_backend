@@ -45,7 +45,8 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // STATUS covers stories. Without it the mobile story report was rejected with
     // a 400, which is why story reporting had to be wired to something else.
-    if (!['USER', 'POST', 'COMMENT', 'STATUS'].includes(entityType)) {
+    // COMMUNITY: the community page's "Report community" had no endpoint to call.
+    if (!['USER', 'POST', 'COMMENT', 'STATUS', 'COMMUNITY'].includes(entityType)) {
       return res.status(400).json({ error: 'Invalid entity type' });
     }
 

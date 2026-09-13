@@ -763,7 +763,7 @@ model Report {
   reporterId String
   reportedId String?
   entityId   String?
-  entityType String // USER, POST, COMMENT
+  entityType String // USER, POST, COMMENT, STATUS, COMMUNITY
   reason     String
   status     String   @default("pending")
   adminNotes String?

@@ -213,6 +213,15 @@ export const getMyCommunities = async (req, res) => {
               blueTick: true,
               goldenTick: true
             }
+          },
+          // Only the viewer's own rows, to say how they belong to each community.
+          community_members: {
+            where: { userId },
+            select: { role: true, status: true }
+          },
+          community_followers: {
+            where: { userId },
+            select: { id: true }
           }
         },
         orderBy: [{ updatedAt: 'desc' }],
@@ -224,12 +233,30 @@ export const getMyCommunities = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: communities.map(c => ({
-        ...c,
-        _id: c.id,
-        owner: c.users,
-        users: undefined
-      })),
+      // `viewerStanding` lets the app label each card Owner / Admin / Joined /
+      // Following. Without it the app guessed from a session-local follow set,
+      // which is empty after a restart, so every card here offered "Follow".
+      data: communities.map(({ community_members, community_followers, ...c }) => {
+        const membership = community_members?.[0];
+        const active = membership?.status === 'active';
+        const viewerStanding =
+          c.ownerId === userId || membership?.role === 'owner'
+            ? 'owner'
+            : active && membership?.role === 'moderator'
+              ? 'moderator'
+              : active
+                ? 'member'
+                : community_followers?.length
+                  ? 'follower'
+                  : null;
+        return {
+          ...c,
+          _id: c.id,
+          owner: c.users,
+          users: undefined,
+          viewerStanding
+        };
+      }),
       pagination: {
         total,
         page: parseInt(page),
