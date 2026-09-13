@@ -2,6 +2,13 @@ import express from "express";
 import { sendChainError } from "../chain/client.js";
 import { prisma } from "../config/db.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import twoFactorMiddleware from "../middleware/twoFactorMiddleware.js";
+import {
+  getWithdrawalInfo,
+  listWithdrawals,
+  requestWithdrawal,
+  WithdrawalError,
+} from "../services/coinWithdrawalService.js";
 import { COIN_PACKAGES } from "../config/giftCatalog.js";
 import {
   initializeCoinPurchase,
@@ -157,5 +164,64 @@ router.get("/purchase/verify", authMiddleware, async (req, res) => {
     sendPurchaseError(res, error, "Failed to verify payment");
   }
 });
+
+
+// ===== WITHDRAWALS =====
+// Earned coins -> crypto, paid out manually by an admin (see coinWithdrawalService).
+
+const sendWithdrawalError = (res, error, fallback) => {
+  if (error instanceof WithdrawalError) {
+    return res.status(error.status).json({
+      success: false,
+      code: error.code,
+      message: error.message,
+      ...error.extra,
+    });
+  }
+  console.error(`${fallback}:`, error);
+  return res.status(500).json({
+    success: false,
+    message: fallback,
+    error: process.env.NODE_ENV === "production" ? undefined : error.message,
+  });
+};
+
+router.get("/withdrawals/info", authMiddleware, async (req, res) => {
+  try {
+    res.json({ success: true, data: await getWithdrawalInfo(req.user.id) });
+  } catch (error) {
+    sendWithdrawalError(res, error, "Failed to load withdrawal details");
+  }
+});
+
+router.get("/withdrawals", authMiddleware, async (req, res) => {
+  try {
+    const { page, limit } = req.query;
+    res.json({ success: true, data: await listWithdrawals(req.user.id, { page, limit }) });
+  } catch (error) {
+    sendWithdrawalError(res, error, "Failed to load withdrawals");
+  }
+});
+
+// Moving money off the platform: 2FA-protected for accounts that have it on.
+router.post(
+  "/withdrawals",
+  authMiddleware,
+  twoFactorMiddleware.requireTwoFactor(),
+  async (req, res) => {
+    try {
+      const { coins, network, walletAddress } = req.body || {};
+      const data = await requestWithdrawal({
+        userId: req.user.id,
+        coins,
+        network,
+        walletAddress,
+      });
+      res.status(201).json({ success: true, data });
+    } catch (error) {
+      sendWithdrawalError(res, error, "Failed to request withdrawal");
+    }
+  }
+);
 
 export default router;

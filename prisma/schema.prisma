@@ -751,6 +751,8 @@ model User {
   warningCount                                          Int                 @default(0)
   notInterested                                         Json?
   coinBalance                                           Float               @default(0)
+  /// Coins received as gifts that have not been withdrawn; only these can be withdrawn.
+  earnedCoinBalance                                     Float               @default(0)
   coinTransactions                                      CoinTransaction[]
   sentGifts                                             LiveStreamGift[]    @relation("sentGifts")
 
@@ -891,4 +893,28 @@ model ContentGift {
   @@index([recipientId])
   @@index([senderId])
   @@map("content_gifts")
+}
+
+/// A request to convert earned coins into crypto. Paid out manually by an admin.
+/// Amounts are integer US cents.
+model CoinWithdrawal {
+  id             String    @id @default(uuid())
+  userId         String
+  coins          Int
+  network        String // AEKO | USDT_TRC20 | SOL
+  walletAddress  String
+  grossUsdCents  Int
+  feeUsdCents    Int
+  payoutUsdCents Int
+  status         String    @default("pending") // pending | paid | rejected
+  txHash         String?
+  adminNote      String?
+  processedBy    String?
+  processedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status, createdAt])
+  @@map("coin_withdrawals")
 }

@@ -19,6 +19,11 @@ import {
 } from "./admin/metrics.js";
 import { sendExpoPushMessages } from "./services/pushProviderService.js";
 import { upgradeStickersForUser } from "./services/stickerUpgrade.js";
+import {
+  markWithdrawalPaid,
+  rejectWithdrawal,
+  WithdrawalError,
+} from "./services/coinWithdrawalService.js";
 import { hasCurrentAuthTokenVersion } from "./utils/authTokenUtils.js";
 
 dotenv.config();
@@ -1181,6 +1186,109 @@ const admin = new AdminJS({
       },
     },
 
+    // ===== COIN WITHDRAWALS =====
+    // Payouts are sent by hand. To pay: send the crypto, edit the request to add
+    // the transaction hash, then use "Mark as paid". "Reject" returns the coins
+    // (add a note in Edit first so the user sees why). Both notify the user.
+    {
+      resource: { model: modelMap.CoinWithdrawal, client: prisma },
+      options: {
+        parent: {
+          name: "Monetisation",
+          icon: "CreditCard",
+        },
+        listProperties: [
+          "createdAt",
+          "status",
+          "network",
+          "payoutUsdCents",
+          "coins",
+          "walletAddress",
+          "userId",
+        ],
+        filterProperties: ["status", "network", "userId", "createdAt"],
+        sort: { sortBy: "createdAt", direction: "desc" },
+        properties: {
+          id: { isVisible: { list: false, show: true, edit: false } },
+          userId: { isVisible: { list: true, show: true, edit: false } },
+          coins: { isVisible: { list: true, show: true, edit: false } },
+          network: { isVisible: { list: true, show: true, edit: false } },
+          walletAddress: { isVisible: { list: true, show: true, edit: false } },
+          grossUsdCents: { isVisible: { list: false, show: true, edit: false } },
+          feeUsdCents: { isVisible: { list: false, show: true, edit: false } },
+          payoutUsdCents: { isVisible: { list: true, show: true, edit: false } },
+          status: { isVisible: { list: true, show: true, edit: false } },
+          txHash: { isVisible: { list: false, show: true, edit: true } },
+          adminNote: { isVisible: { list: false, show: true, edit: true }, type: "textarea" },
+          processedBy: { isVisible: { list: false, show: true, edit: false } },
+          processedAt: { isVisible: { list: false, show: true, edit: false } },
+          createdAt: { isVisible: { list: true, show: true, edit: false } },
+          updatedAt: { isVisible: { list: false, show: true, edit: false } },
+        },
+        actions: {
+          // Created only by users in the app; never deleted, it is the payout record.
+          new: { isVisible: false },
+          delete: { isVisible: false },
+          bulkDelete: { isVisible: false },
+          edit: {
+            // Only the hash and note are editable, and only while pending.
+            isAccessible: ({ record }) => record?.params?.status === "pending",
+          },
+          markPaid: {
+            actionType: "record",
+            icon: "Check",
+            label: "Mark as paid",
+            component: false,
+            guard: "Confirm the payout was sent and the transaction hash is saved on this request.",
+            isAccessible: ({ record }) => record?.params?.status === "pending",
+            handler: async (request, response, context) => {
+              const { record, currentAdmin } = context;
+              try {
+                await markWithdrawalPaid({
+                  withdrawalId: record.params.id,
+                  txHash: record.params.txHash,
+                  processedBy: currentAdmin?.email || currentAdmin?.id || null,
+                });
+                return {
+                  record: record.toJSON(currentAdmin),
+                  notice: { message: "Withdrawal marked as paid. The user has been notified.", type: "success" },
+                };
+              } catch (error) {
+                const message = error instanceof WithdrawalError ? error.message : "Could not mark as paid.";
+                if (!(error instanceof WithdrawalError)) console.error("markPaid error:", error);
+                return { record: record.toJSON(currentAdmin), notice: { message, type: "error" } };
+              }
+            },
+          },
+          reject: {
+            actionType: "record",
+            icon: "X",
+            label: "Reject and refund",
+            component: false,
+            guard: "Reject this withdrawal and return the coins to the user?",
+            isAccessible: ({ record }) => record?.params?.status === "pending",
+            handler: async (request, response, context) => {
+              const { record, currentAdmin } = context;
+              try {
+                await rejectWithdrawal({
+                  withdrawalId: record.params.id,
+                  adminNote: record.params.adminNote,
+                  processedBy: currentAdmin?.email || currentAdmin?.id || null,
+                });
+                return {
+                  record: record.toJSON(currentAdmin),
+                  notice: { message: "Withdrawal rejected and coins returned.", type: "success" },
+                };
+              } catch (error) {
+                const message = error instanceof WithdrawalError ? error.message : "Could not reject.";
+                if (!(error instanceof WithdrawalError)) console.error("reject withdrawal error:", error);
+                return { record: record.toJSON(currentAdmin), notice: { message, type: "error" } };
+              }
+            },
+          },
+        },
+      },
+    },
     // ===== SUBSCRIPTION MANAGEMENT =====
     {
       resource: { model: modelMap.SubscriptionPlan, client: prisma },

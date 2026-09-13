@@ -60,7 +60,12 @@ export const transferGiftCoins = async (
 
   const recipient = await tx.user.update({
     where: { id: recipientId },
-    data: { coinBalance: { increment: recipientEarnings } },
+    // Earned coins are the only withdrawable ones, so every gift received is
+    // counted separately from coins the recipient bought.
+    data: {
+      coinBalance: { increment: recipientEarnings },
+      earnedCoinBalance: { increment: recipientEarnings },
+    },
     select: { coinBalance: true },
   });
 
