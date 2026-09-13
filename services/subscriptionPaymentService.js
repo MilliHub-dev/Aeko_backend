@@ -123,6 +123,7 @@ export const initializeSubscriptionPayment = async ({ userId, planId, paymentMet
           title: plan.name,
           reference,
           isRecurring: plan.duration !== 'one_time',
+          duration: plan.duration,
           metadata: {
             userId,
             planId,
@@ -275,7 +276,8 @@ async function initializeWhopPayment({
   title,
   reference,
   metadata,
-  isRecurring
+  isRecurring,
+  duration
 }) {
   if (!isWhopConfigured()) {
     throw new Error('Whop is not configured on this server');
@@ -288,6 +290,7 @@ async function initializeWhopPayment({
       title: `Aeko — ${title}`,
       metadata,
       isRecurring,
+      duration,
       returnUrl: process.env.FRONTEND_URL
         ? `${process.env.FRONTEND_URL}/subscription/callback`
         : undefined
@@ -324,6 +327,9 @@ async function initializeWhopPayment({
         where: { id: metadata.transactionId },
         data: { status: 'failed', failureReason: error.message }
       });
+    }
+    if (error.code === 'WHOP_PRODUCT_REQUIRED') {
+      throw new Error('Subscriptions are not configured yet. Please try again later.');
     }
     throw new Error('Failed to initialize Whop payment');
   }

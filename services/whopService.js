@@ -121,18 +121,47 @@ const request = async (path, { method = "POST", body, idempotencyKey } = {}) => 
  * `metadata` is echoed back on the `payment.succeeded` webhook under
  * `data.metadata`, which is how a payment is tied to our own transaction row.
  */
+/** Billing interval in days, as Whop expects for a renewal plan. */
+const BILLING_PERIOD_DAYS = {
+  weekly: 7,
+  monthly: 30,
+  quarterly: 90,
+  yearly: 365,
+  annual: 365,
+};
+
 export const createCheckout = async ({
   amount,
   currency = "usd",
   title,
   metadata = {},
   isRecurring = false,
+  /** SubscriptionPlan.duration — decides how often a renewal bills. */
+  duration = "monthly",
   returnUrl,
 }) => {
   const accountId = realValue(process.env.WHOP_ACCOUNT_ID);
   if (!accountId) {
     throw new Error("WHOP_ACCOUNT_ID is required to create a checkout");
   }
+
+  // Whop rejects a renewal plan without a product ("In order to create a
+  // renewal plan, you must pass in product details"), and the inline plan has
+  // no product object — only `product_id`. A product is a one-time container;
+  // the price still travels on the inline plan, so pricing stays dynamic.
+  // Checked here so the failure names the real cause instead of surfacing as
+  // a generic "failed to initialize" after a transaction row is written.
+  const productId = realValue(process.env.WHOP_PRODUCT_ID);
+  if (isRecurring && !productId) {
+    const error = new Error(
+      "WHOP_PRODUCT_ID is required for subscriptions: Whop needs a product to attach a recurring plan to",
+    );
+    error.code = "WHOP_PRODUCT_REQUIRED";
+    throw error;
+  }
+
+  const billingPeriod =
+    BILLING_PERIOD_DAYS[String(duration).toLowerCase()] ?? 30;
 
   // `account_id` is required at the top level; the price lives on the inline
   // `plan`, which is what makes the amount dynamic. Top-level `metadata` is
@@ -146,13 +175,14 @@ export const createCheckout = async ({
       plan_type: isRecurring ? "renewal" : "one_time",
       initial_price: Number(amount),
       currency: String(currency).toLowerCase(),
-      ...(isRecurring ? { renewal_price: Number(amount), billing_period: 30 } : {}),
+      // Was a hard-coded 30: a yearly plan would have billed every month.
+      ...(isRecurring
+        ? { renewal_price: Number(amount), billing_period: billingPeriod }
+        : {}),
       ...(title ? { title } : {}),
       // Optional: an inline plan carries its own pricing, so a product is
       // only an organisational link. Omitted unless genuinely configured.
-      ...(realValue(process.env.WHOP_PRODUCT_ID)
-        ? { product_id: realValue(process.env.WHOP_PRODUCT_ID) }
-        : {}),
+      ...(productId ? { product_id: productId } : {}),
     },
     ...(returnUrl ? { redirect_url: returnUrl } : {}),
   };
