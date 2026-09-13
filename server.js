@@ -53,6 +53,7 @@ import securityRoutes from "./routes/security.js";
 import exploreRoutes from "./routes/explore.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
+import giftRoutes from "./routes/giftRoutes.js";
 import supportRoutes from "./routes/supportRoutes.js";
 import waitlistRoutes from "./routes/waitlistRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
@@ -307,6 +308,7 @@ app.use(
 );
 app.use("/api/notifications", apiRateLimit, notificationRoutes);
 app.use("/api/reports", apiRateLimit, reportRoutes);
+app.use("/api/gifts", apiRateLimit, giftRoutes);
 app.use("/api/support", apiRateLimit, supportRoutes);
 app.use("/api/waitlist", apiRateLimit, waitlistRoutes);
 app.use("/api/wallet", apiRateLimit, walletRoutes);

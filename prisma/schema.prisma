@@ -870,3 +870,25 @@ model NftSettings {
 
   @@map("nft_settings")
 }
+
+/// Coin gifts to a post (feed, reel or community post) or to a user's profile.
+/// Live-stream gifts are recorded in LiveStreamGift.
+model ContentGift {
+  id          String   @id @default(uuid())
+  senderId    String
+  recipientId String
+  targetType  String // POST | USER
+  targetId    String
+  giftId      String
+  giftName    String
+  coinCost    Int
+  quantity    Int      @default(1)
+  totalCoins  Int
+  message     String?
+  createdAt   DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([recipientId])
+  @@index([senderId])
+  @@map("content_gifts")
+}

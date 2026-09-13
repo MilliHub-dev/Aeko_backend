@@ -2,6 +2,9 @@ import { v4 as uuidV4 } from "uuid";
 import { prisma } from "../config/db.js";
 import { getGiftById, HOST_COIN_SHARE } from "../config/giftCatalog.js";
 import { getIO } from "../utils/socketRegistry.js";
+import { GiftError, transferGiftCoins } from "./giftLedger.js";
+
+export { GiftError };
 
 /**
  * Coin gifts on live streams.
@@ -21,15 +24,6 @@ const MAX_QUANTITY = 100;
 const MAX_MESSAGE_LENGTH = 200;
 const LEADERBOARD_SIZE = 5;
 
-export class GiftError extends Error {
-  constructor(status, code, message, extra = {}) {
-    super(message);
-    this.name = "GiftError";
-    this.status = status;
-    this.code = code;
-    this.extra = extra;
-  }
-}
 
 /**
  * Debits the sender, credits the host and records the gift in one transaction.
@@ -72,30 +66,15 @@ export const sendStreamGift = async (
       throw new GiftError(400, "CANNOT_GIFT_OWN_STREAM", "You can't send gifts to your own stream");
     }
 
-    const debited = await tx.user.updateMany({
-      where: { id: senderId, coinBalance: { gte: totalCoins } },
-      data: { coinBalance: { decrement: totalCoins } },
-    });
-    if (debited.count === 0) {
-      const current = await tx.user.findUnique({
-        where: { id: senderId },
-        select: { coinBalance: true },
-      });
-      throw new GiftError(400, "INSUFFICIENT_COINS", "Not enough coins", {
-        balance: current?.coinBalance ?? 0,
-        required: totalCoins,
-      });
-    }
-
-    const sender = await tx.user.findUnique({
-      where: { id: senderId },
-      select: { id: true, username: true, profilePicture: true, coinBalance: true },
-    });
-
-    const host = await tx.user.update({
-      where: { id: stream.hostId },
-      data: { coinBalance: { increment: hostEarnings } },
-      select: { coinBalance: true },
+    const { sender } = await transferGiftCoins(tx, {
+      senderId,
+      recipientId: stream.hostId,
+      totalCoins,
+      recipientEarnings: hostEarnings,
+      sentDescription: `Sent ${qty}x ${gift.name} on stream`,
+      receivedDescription: `Received ${qty}x ${gift.name} gift`,
+      sentMetadata: { streamId, giftId: gift.id, quantity: qty },
+      receivedMetadata: { streamId, giftId: gift.id, senderId, quantity: qty },
     });
 
     const record = await tx.liveStreamGift.create({
@@ -110,30 +89,6 @@ export const sendStreamGift = async (
         quantity: qty,
         totalCoins,
         message: cleanMessage,
-      },
-    });
-
-    await tx.coinTransaction.create({
-      data: {
-        id: uuidV4(),
-        userId: senderId,
-        type: "gift_sent",
-        amount: -totalCoins,
-        balanceAfter: sender.coinBalance,
-        description: `Sent ${qty}x ${gift.name} on stream`,
-        metadata: { streamId, giftId: gift.id, quantity: qty },
-      },
-    });
-
-    await tx.coinTransaction.create({
-      data: {
-        id: uuidV4(),
-        userId: stream.hostId,
-        type: "gift_received",
-        amount: hostEarnings,
-        balanceAfter: host.coinBalance,
-        description: `Received ${qty}x ${gift.name} gift`,
-        metadata: { streamId, giftId: gift.id, senderId, quantity: qty },
       },
     });
 
@@ -164,7 +119,10 @@ export const sendStreamGift = async (
       message: cleanMessage,
       newBalance: sender.coinBalance,
     };
-  });
+  },
+  // Prisma's default 5s interactive-transaction limit is tight for ~7 round
+  // trips to a pooled Neon database; a timeout rolls the gift back cleanly.
+  { maxWait: 10000, timeout: 20000 });
 };
 
 /** Top gifters for a stream, shaped like the existing leaderboard responses. */
