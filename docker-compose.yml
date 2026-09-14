@@ -1,0 +1,85 @@
+name: aeko-application-backend
+
+# Portable application-backend runtime. PostgreSQL is external/managed.
+# Set DATABASE_URL and JWT_SECRET at minimum. Provider-specific variables can
+# stay empty until those product features are enabled.
+services:
+  backend:
+    image: ${AEKO_IMAGE_REPOSITORY:-surdma}/aeko-backend:${AEKO_BACKEND_IMAGE_TAG:-latest}
+    container_name: aeko-backend
+    restart: unless-stopped
+    ports:
+      - "${AEKO_BACKEND_HOST_PORT:-4101}:4101"
+    environment:
+      NODE_ENV: production
+      PORT: 4101
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      PASSWORD_RESET_JWT_SECRET: ${PASSWORD_RESET_JWT_SECRET:-}
+      ADMINJS_COOKIE_SECRET: ${ADMINJS_COOKIE_SECRET:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:4000}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:4101/api/auth/google/callback}
+      GOOGLE_ID_TOKEN_AUDIENCES: ${GOOGLE_ID_TOKEN_AUDIENCES:-}
+      OAUTH_SUCCESS_REDIRECT: ${OAUTH_SUCCESS_REDIRECT:-http://localhost:4000/auth/success}
+      OAUTH_FAILURE_REDIRECT: ${OAUTH_FAILURE_REDIRECT:-http://localhost:4000/auth/failed}
+
+      PINATA_API_KEY: ${PINATA_API_KEY:-}
+      PINATA_SECRET: ${PINATA_SECRET:-}
+      PINATA_JWT: ${PINATA_JWT:-}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+
+      GMAIL_USER: ${GMAIL_USER:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      ZEPTOMAIL_API_URL: ${ZEPTOMAIL_API_URL:-https://api.zeptomail.com/v1.1/email}
+      ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+
+      FLW_PUBLIC_KEY: ${FLW_PUBLIC_KEY:-}
+      FLW_SECRET_KEY: ${FLW_SECRET_KEY:-}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS:-}
+      PRIVATE_KEY: ${PRIVATE_KEY:-}
+      POLYGON_ZKEVM_RPC: ${POLYGON_ZKEVM_RPC:-}
+      SOLANA_NETWORK: ${SOLANA_NETWORK:-devnet}
+      SOLANA_PRIVATE_KEY: ${SOLANA_PRIVATE_KEY:-}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+
+      AEKO_RPC_URL: ${AEKO_RPC_URL:-https://rpc.aeko.online}
+      AEKO_EXPLORER_URL: ${AEKO_EXPLORER_URL:-https://api.aeko.online}
+      AEKO_SERVICE_KEYPAIR: ${AEKO_SERVICE_KEYPAIR:-}
+      AEKO_TREASURY_ADDRESS: ${AEKO_TREASURY_ADDRESS:-}
+      AEKO_PLATFORM_FEE_BPS: ${AEKO_PLATFORM_FEE_BPS:-200}
+      AEKO_CUSTODY_MASTER_SEED: ${AEKO_CUSTODY_MASTER_SEED:-}
+      AEKO_WALLET_ADMIN_FEE_PERCENTAGE: ${AEKO_WALLET_ADMIN_FEE_PERCENTAGE:-5}
+      SOCIAL_POSTS_STATE_ACCOUNT: ${SOCIAL_POSTS_STATE_ACCOUNT:-}
+      SOCIAL_REWARDS_STATE_ACCOUNT: ${SOCIAL_REWARDS_STATE_ACCOUNT:-}
+      SOCIAL_STAKING_STATE_ACCOUNT: ${SOCIAL_STAKING_STATE_ACCOUNT:-}
+      REWARD_VAULT_ACCOUNT: ${REWARD_VAULT_ACCOUNT:-}
+      STAKING_COOLDOWN_EPOCHS: ${STAKING_COOLDOWN_EPOCHS:-7}
+
+      DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-USD}
+      PAYMENT_METHODS: ${PAYMENT_METHODS:-paystack,stripe,aeko_wallet}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:4101/api-docs').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
