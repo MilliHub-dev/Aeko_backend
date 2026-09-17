@@ -672,24 +672,23 @@ router.post("/create", authMiddleware,
         }
     });
     
-    // Process mentions in post text
-    try {
-        const { processMentions } = await import('../services/notificationService.js');
-        await processMentions({
-            text,
-            senderId: userId,
-            entityId: newPost.id,
-            entityType: 'POST'
-        });
-    } catch (notifError) {
-        console.error('Failed to process mentions:', notifError);
-    }
-
     res.status(201).json({
       ...newPost,
       likesCount: 0,
       commentsCount: 0
     });
+
+    // Mention notifications are fired after the response. Awaiting them held the
+    // client on "Posting..." while every mentioned user was looked up and pushed,
+    // even though the post already existed and the result did not depend on it.
+    import('../services/notificationService.js')
+      .then(({ processMentions }) => processMentions({
+          text,
+          senderId: userId,
+          entityId: newPost.id,
+          entityType: 'POST'
+      }))
+      .catch((notifError) => console.error('Failed to process mentions:', notifError));
   } catch (error) {
     res.status(500).json({ error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
