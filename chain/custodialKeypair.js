@@ -88,6 +88,11 @@ export function getCustodialKeypair(userId) {
   return {
     publicKey: encodeBase58(publicKeyBytes),
 
+    /** Signs raw message bytes; used to fill a specific signer slot. */
+    signMessage(messageBytes) {
+      return sign(null, messageBytes, privateKey);
+    },
+
     /**
      * Signs a prepared transaction in the first signer slot.
      * Mirrors serviceKeypair.signPreparedTransaction: the transaction is

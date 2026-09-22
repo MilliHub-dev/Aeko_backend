@@ -4,13 +4,22 @@ import { connection, sendChainError } from "../chain/client.js";
 import { presentListings } from "../services/nftPresenter.js";
 import { aekoToLamports, lamportsToAeko, deriveWithSeed, getMinBalanceForRentExemption, sendAndConfirmSigned } from "../chain/utils.js";
 import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeypair.js";
-import { buildPreparedMultiInstructionTransaction, buildSystemTransferInstruction } from "../chain/txBuilder.js";
+import {
+  buildPreparedMultiInstructionTransaction,
+  buildPreparedTransactionWithSigners,
+  buildSystemTransferInstruction,
+  buildToken721TransferInstruction,
+  buildBuyNftInstruction,
+  signPreparedTransaction,
+} from "../chain/txBuilder.js";
+import { prisma } from "../config/db.js";
 import {
   PROGRAM_IDS,
   encodeBase58,
   decodeBase58,
   buildPreparedListNftTransaction,
   buildPreparedCancelListingTransaction,
+  sendAndConfirmTransaction,
 } from "@aeko-chain/web3.js";
 
 const router = express.Router();
@@ -18,20 +27,6 @@ const router = express.Router();
 const PLATFORM_FEE_BPS     = Number(process.env.AEKO_PLATFORM_FEE_BPS) || 200;
 const TREASURY_ADDRESS     = process.env.AEKO_TREASURY_ADDRESS;
 const LISTING_ACCOUNT_SIZE = 256;
-
-// ── BuyNft instruction ──────────────────────────────────────────────────────────
-// Marketplace program variant 1 = BuyNft. Accounts: listingAccount (writable), buyer (signer).
-const NFT_MARKETPLACE_PROGRAM_BYTES = new Uint8Array(new Array(32).fill(11));
-function buildBuyNftInstruction(listingAccount, buyer) {
-  return {
-    programId: NFT_MARKETPLACE_PROGRAM_BYTES,
-    accounts: [
-      { pubkey: decodeBase58(listingAccount), isSigner: false, isWritable: true },
-      { pubkey: decodeBase58(buyer),          isSigner: true,  isWritable: false },
-    ],
-    data: Uint8Array.from([1]),
-  };
-}
 
 // ── Listing account deserializer ───────────────────────────────────────────────
 function readU64LE(buf, off) { return Number(buf.readBigUInt64LE(off)); }
@@ -51,6 +46,24 @@ function deserializeListing(data) {
   const stateIdx = buf[off++];
   const state    = ["Active", "Sold", "Cancelled"][stateIdx] ?? "Unknown";
   return { seller, collection, tokenAccount, creator, priceLamports, priceAeko: lamportsToAeko(priceLamports), royaltyBps, state };
+}
+
+/**
+ * Whether the validator runs the token-721 and marketplace programs. Native
+ * programs show up as executable accounts owned by the native loader; the
+ * result is cached because it only changes with a validator upgrade.
+ */
+let nftProgramsCheckedAt = 0;
+let nftProgramsPresent = false;
+async function nftProgramsAvailable() {
+  if (nftProgramsPresent) return true;
+  if (Date.now() - nftProgramsCheckedAt < 60_000) return nftProgramsPresent;
+  nftProgramsCheckedAt = Date.now();
+  const infos = await Promise.all(
+    [PROGRAM_IDS.TOKEN_721, PROGRAM_IDS.NFT_MARKETPLACE].map((id) => connection.getAccountInfo(id)),
+  );
+  nftProgramsPresent = infos.every((info) => info?.executable === true);
+  return nftProgramsPresent;
 }
 
 async function fetchListing(listingId) {
@@ -371,9 +384,20 @@ router.post("/buy", authMiddleware, async (req, res) => {
     if (!listingId) return res.status(400).json({ success: false, message: "listingId is required" });
     if (!TREASURY_ADDRESS) return res.status(500).json({ success: false, message: "Platform treasury not configured" });
 
+    // The token-721 and marketplace programs are native to the validator. If
+    // this chain does not run them, no purchase can ever settle, so say so
+    // instead of submitting a transaction that can only fail.
+    if (!(await nftProgramsAvailable())) {
+      return res.status(503).json({
+        success: false,
+        message: "NFT trading isn't available on the Aeko chain yet.",
+        code: "NFT_MARKETPLACE_UNAVAILABLE",
+      });
+    }
+
     const userId = req.user?.id || req.userId;
-    const signer = getCustodialKeypair(userId);
-    const buyer = signer.publicKey;
+    const buyerSigner = getCustodialKeypair(userId);
+    const buyer = buyerSigner.publicKey;
 
     const listing = await fetchListing(listingId);
     if (!listing || listing.state !== "Active") {
@@ -383,7 +407,33 @@ router.post("/buy", authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, message: "You already own this listing" });
     }
 
-    const { priceLamports, royaltyBps, seller, creator } = listing;
+    const { priceLamports, royaltyBps, seller, creator, tokenAccount } = listing;
+
+    // The NFT transfer must be signed by its owner. Every wallet here is
+    // custodial, so the seller's key can be derived as long as the address
+    // belongs to an Aeko account; a listing from an external wallet has no one
+    // to sign for it.
+    const sellerUser = await prisma.user.findFirst({
+      where: { walletAddress: seller },
+      select: { id: true },
+    });
+    if (!sellerUser) {
+      return res.status(400).json({
+        success: false,
+        message: "This listing can't be bought in the app because its seller isn't an Aeko wallet.",
+        code: "SELLER_NOT_CUSTODIAL",
+      });
+    }
+    const sellerSigner = getCustodialKeypair(sellerUser.id);
+    if (sellerSigner.publicKey !== seller) {
+      // The saved address does not derive from that account (linked, not custodial).
+      return res.status(400).json({
+        success: false,
+        message: "This listing can't be bought in the app because its seller isn't an Aeko wallet.",
+        code: "SELLER_NOT_CUSTODIAL",
+      });
+    }
+
     const royaltyLamports = Math.floor((priceLamports * royaltyBps) / 10_000);
     const platformFeeLamports = Math.floor((priceLamports * PLATFORM_FEE_BPS) / 10_000);
     const sellerLamports = priceLamports - royaltyLamports - platformFeeLamports;
@@ -398,6 +448,10 @@ router.post("/buy", authMiddleware, async (req, res) => {
       });
     }
 
+    // One atomic transaction: payment, royalty, platform fee, the NFT itself,
+    // and the listing marked Sold. If any part fails nothing moves. The
+    // previous version sent only the payments, so the buyer paid and the
+    // seller kept the token with the listing still Active.
     const blockhash = await connection.getLatestBlockhash();
     const instructions = [
       buildSystemTransferInstruction(buyer, seller, sellerLamports),
@@ -406,19 +460,43 @@ router.post("/buy", authMiddleware, async (req, res) => {
     if (royaltyLamports > 0 && creator && creator !== seller) {
       instructions.push(buildSystemTransferInstruction(buyer, creator, royaltyLamports));
     }
+    instructions.push(
+      buildToken721TransferInstruction(tokenAccount, seller, buyer),
+      buildBuyNftInstruction(listingId, buyer),
+    );
 
-    const txBase64 = buildPreparedMultiInstructionTransaction({
+    const { txBase64 } = buildPreparedTransactionWithSigners({
       payer: buyer,
       recentBlockhash: blockhash,
       instructions,
     });
+    const signedTx = signPreparedTransaction(txBase64, [buyerSigner, sellerSigner]);
 
-    const signature = await sendAndConfirmSigned(connection, txBase64, signer);
+    // Dry run first: a rejected purchase should come back as a clear error,
+    // not as a failed transaction the user has to go and look up.
+    const simulation = await connection.rpc("simulateTransaction", [
+      signedTx,
+      { encoding: "base64", sigVerify: true, commitment: "processed" },
+    ]);
+    if (simulation?.value?.err) {
+      console.error("marketplace buy simulation failed:", JSON.stringify(simulation.value.err), simulation.value.logs);
+      return res.status(400).json({
+        success: false,
+        message: "The chain rejected this purchase. Nothing was charged.",
+        code: "PURCHASE_REJECTED",
+      });
+    }
+
+    const result = await sendAndConfirmTransaction(connection, signedTx);
+    if (result.err) {
+      throw new Error(`Transaction failed: ${JSON.stringify(result.err)}`);
+    }
 
     res.json({
       success: true,
-      signature,
+      signature: result.signature,
       listingId,
+      tokenAccount,
       breakdown: {
         price: listing.priceAeko,
         royalty: lamportsToAeko(royaltyLamports),

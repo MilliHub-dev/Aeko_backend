@@ -18,6 +18,11 @@ const privateKey   = createPrivateKey({
 export const serviceKeypair = {
   publicKey: encodeBase58(pubBytes),
 
+  /** Signs raw message bytes; used to fill a specific signer slot. */
+  signMessage(messageBytes) {
+    return sign(null, messageBytes, privateKey);
+  },
+
   signPreparedTransaction(preparedTxBase64) {
     const txBytes = Buffer.from(preparedTxBase64, "base64");
 

@@ -1,9 +1,12 @@
 // Local transaction builder for multi-instruction txs.
 // The SDK only exports single-action builders; complex atomic txs (e.g. marketplace buy)
 // require composing multiple instructions — replicated here from builders.js internals.
-import { decodeBase58 } from "@aeko-chain/web3.js";
+import { decodeBase58, encodeBase58 } from "@aeko-chain/web3.js";
 
 const SYSTEM_PROGRAM = new Uint8Array(32); // [0u8; 32]
+// Native program ids, as declared in aeko-chain programs/{token-721,nft-marketplace}.
+const TOKEN_721_PROGRAM   = new Uint8Array(32).fill(10); // [10u8; 32]
+const NFT_MARKETPLACE_PROGRAM = new Uint8Array(32).fill(11); // [11u8; 32]
 
 function encodeU32(v) {
   const b = new Uint8Array(4);
@@ -103,17 +106,70 @@ function buildLegacyMessage(payer, recentBlockhash, instructions) {
     ...compiledIxs,
   );
 
-  return { messageBytes, numSigners };
+  // Signer slots are filled in this order; a multi-signer transaction needs
+  // to know which slot belongs to whom.
+  const signers = ordered.filter(m => m.isSigner).map(m => encodeBase58(m.pubkey));
+
+  return { messageBytes, numSigners, signers };
 }
 
 // Build a base64 "prepared transaction" from multiple instructions
 export function buildPreparedMultiInstructionTransaction({ payer, recentBlockhash, instructions }) {
-  const { messageBytes, numSigners } = buildLegacyMessage(payer, recentBlockhash, instructions);
+  return buildPreparedTransactionWithSigners({ payer, recentBlockhash, instructions }).txBase64;
+}
+
+/**
+ * Same as above, but also reports the signer order of the message so every
+ * required signature can be filled (see signPreparedTransaction).
+ */
+export function buildPreparedTransactionWithSigners({ payer, recentBlockhash, instructions }) {
+  const { messageBytes, numSigners, signers } = buildLegacyMessage(payer, recentBlockhash, instructions);
   const sigSection = concatBytes(
     encodeShortVec(numSigners),
     ...Array.from({ length: numSigners }, () => new Uint8Array(64)),
   );
-  return encodeBase64(concatBytes(sigSection, messageBytes));
+  return { txBase64: encodeBase64(concatBytes(sigSection, messageBytes)), signers };
+}
+
+/**
+ * Fills every signature slot of a prepared transaction.
+ *
+ * The custodial signers only ever signed the first slot, which is fine for a
+ * transfer but not for a marketplace purchase, where the seller must sign the
+ * NFT transfer and the buyer the payment in the same transaction.
+ *
+ * @param {string} preparedTxBase64
+ * @param {Array<{ publicKey: string, signMessage: (message: Uint8Array) => Uint8Array }>} signers
+ */
+export function signPreparedTransaction(preparedTxBase64, signers) {
+  const txBytes = Buffer.from(preparedTxBase64, "base64");
+
+  let pos = 0, numSigners = 0, shift = 0, b;
+  do {
+    b = txBytes[pos++];
+    numSigners |= (b & 0x7f) << shift;
+    shift += 7;
+  } while (b & 0x80);
+
+  const messageBytes = txBytes.subarray(pos + numSigners * 64);
+  // Message layout: 3-byte header, then the shortvec account list; the first
+  // numSigners accounts are the signer slots in order.
+  let mpos = 3, numAccounts = 0; shift = 0;
+  do {
+    b = messageBytes[mpos++];
+    numAccounts |= (b & 0x7f) << shift;
+    shift += 7;
+  } while (b & 0x80);
+
+  const byKey = new Map(signers.map(s => [s.publicKey, s]));
+  const signed = Buffer.from(txBytes);
+  for (let i = 0; i < numSigners; i++) {
+    const pubkey = encodeBase58(messageBytes.subarray(mpos + i * 32, mpos + (i + 1) * 32));
+    const signer = byKey.get(pubkey);
+    if (!signer) throw new Error(`Missing signer for ${pubkey}`);
+    Buffer.from(signer.signMessage(messageBytes)).copy(signed, pos + i * 64);
+  }
+  return signed.toString("base64");
 }
 
 // System Program transfer instruction (variant 2)
@@ -125,5 +181,32 @@ export function buildSystemTransferInstruction(from, to, lamports) {
       { pubkey: decodeBase58(to),   isSigner: false, isWritable: true  },
     ],
     data: concatBytes(encodeU32(2), encodeU64(lamports)),
+  };
+}
+
+// Token-721 Transfer (variant 4): moves the token to `newOwner`. The current
+// owner must sign.
+export function buildToken721TransferInstruction(tokenAccount, owner, newOwner) {
+  return {
+    programId: TOKEN_721_PROGRAM,
+    accounts: [
+      { pubkey: decodeBase58(tokenAccount), isSigner: false, isWritable: true  },
+      { pubkey: decodeBase58(owner),        isSigner: true,  isWritable: false },
+    ],
+    data: concatBytes(Uint8Array.from([4]), decodeBase58(newOwner)),
+  };
+}
+
+// NFT marketplace BuyNft (variant 1): marks the listing Sold and records the
+// buyer. It moves no funds and no token; those are separate instructions in
+// the same transaction.
+export function buildBuyNftInstruction(listingAccount, buyer) {
+  return {
+    programId: NFT_MARKETPLACE_PROGRAM,
+    accounts: [
+      { pubkey: decodeBase58(listingAccount), isSigner: false, isWritable: true  },
+      { pubkey: decodeBase58(buyer),          isSigner: true,  isWritable: false },
+    ],
+    data: Uint8Array.from([1]),
   };
 }

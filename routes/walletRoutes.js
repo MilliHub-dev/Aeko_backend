@@ -550,4 +550,90 @@ router.post("/withdraw", authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/wallet/airdrop:
+ *   post:
+ *     tags: [Wallet]
+ *     summary: Request test AEKO for the caller's custodial wallet (testnet)
+ *     description: |
+ *       Forwards to the chain admin faucet (chain.aeko.online), which owns the
+ *       policy: amount per request, cooldown per wallet and a daily budget.
+ *       The backend authenticates with AEKO_FAUCET_API_KEY so its shared IP is
+ *       not throttled; the per-wallet cooldown still applies.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Grant submitted
+ *       429:
+ *         description: Cooldown or daily budget reached (retryAfterSeconds when known)
+ *       503:
+ *         description: Faucet paused or not configured
+ */
+const FAUCET_API_URL = (process.env.AEKO_FAUCET_API_URL || "").replace(/\/+$/, "");
+const FAUCET_API_KEY = process.env.AEKO_FAUCET_API_KEY || "";
+
+router.post("/airdrop", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.userId;
+    if (!isCustodyConfigured()) return custodyUnavailable(res);
+    if (!FAUCET_API_URL) {
+      return res.status(503).json({
+        success: false,
+        message: "Test tokens aren't available right now.",
+        code: "FAUCET_NOT_CONFIGURED",
+      });
+    }
+
+    const { publicKey } = await resolveCustodialWallet(userId);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
+    let upstream;
+    try {
+      upstream = await fetch(`${FAUCET_API_URL}/api/faucet/request`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(FAUCET_API_KEY ? { "x-faucet-key": FAUCET_API_KEY } : {}),
+        },
+        body: JSON.stringify({ address: publicKey }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const payload = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      const error = payload?.error ?? {};
+      // The faucet's own codes and messages are written for end users; pass them
+      // through so the app can show why, and when to try again.
+      return res.status(upstream.status === 429 || upstream.status === 503 ? upstream.status : 400).json({
+        success: false,
+        message: error.message || "The faucet declined the request.",
+        code: error.code || "FAUCET_DECLINED",
+        ...(typeof error.retryAfterSeconds === "number" ? { retryAfterSeconds: error.retryAfterSeconds } : {}),
+      });
+    }
+
+    const grant = payload?.data ?? {};
+    res.json({
+      success: true,
+      address: publicKey,
+      amount: grant.amountAeko,
+      signature: grant.signature,
+      confirmed: Boolean(grant.confirmed),
+      explorerUrl: grant.explorerUrl,
+    });
+  } catch (error) {
+    console.error("wallet airdrop error:", error);
+    if (error?.name === "AbortError") {
+      return res.status(503).json({ success: false, message: "The faucet took too long to respond. Try again.", code: "FAUCET_TIMEOUT" });
+    }
+    sendChainError(res, error, "Could not request test tokens");
+  }
+});
+
 export default router;
