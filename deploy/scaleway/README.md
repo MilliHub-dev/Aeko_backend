@@ -73,6 +73,8 @@ Mobile clients ship the URL at build time; publish an EAS Update (`npm run updat
 
 ## 7. Operating
 
+Recent output is also readable without SSH at `https://<BACKEND_DOMAIN>/logs` (admin token required — sign in to `/admin` first, or send `Authorization: Bearer <admin JWT>`). `?lines=500`, `?level=error`, `?q=prisma`, `?format=json`. It is an in-memory buffer of the last 2000 lines (`LOG_BUFFER_LINES`), so it resets on restart; Docker keeps the full history:
+
 ```bash
 docker compose ps                      # health column comes from the image HEALTHCHECK
 docker compose logs --tail 200 backend

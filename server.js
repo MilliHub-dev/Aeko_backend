@@ -1,3 +1,5 @@
+// First, so every later module's console output lands in the /logs buffer.
+import "./utils/logBuffer.js";
 import "./config/authStartupValidation.js";
 import { setIO } from "./utils/socketRegistry.js";
 import express from "express";
@@ -30,6 +32,7 @@ import botRoutes from "./routes/bot.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import adminAuthRoutes from "./routes/adminAuth.js";
+import logsRoutes from "./routes/logsRoutes.js";
 import swaggerDocs from "./swagger.js";
 import passport from "./config/passport.js";
 import AdminJS from "adminjs";
@@ -330,6 +333,9 @@ app.use("/api/posts", apiRateLimit, postTransferRoutes);
 app.use("/api/admin", apiRateLimit, adminRoutes);
 // If you need separate admin auth endpoints, mount adminAuthRoutes as well
 // app.use('/api/admin', adminAuthRoutes);
+// Recent console output for operators: GET /logs?lines=200&level=error&q=prisma
+// Same admin token as the AdminJS session (Bearer or adminToken cookie).
+app.use("/logs", apiRateLimit, adminAuth, logsRoutes);
 
 // Community routes
 app.use(
