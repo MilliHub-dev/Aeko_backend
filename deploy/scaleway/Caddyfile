@@ -1,0 +1,17 @@
+{$BACKEND_DOMAIN} {
+	encode zstd gzip
+
+	# Media uploads go through this proxy; keep the limit above the API's own
+	# 100 MB multer cap so the proxy is never the one that rejects a video.
+	request_body {
+		max_size 120MB
+	}
+
+	reverse_proxy backend:9876 {
+		# Socket.IO long-polling and uploads can be slow; don't cut them off.
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+}

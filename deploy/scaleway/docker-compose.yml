@@ -1,0 +1,61 @@
+# Aeko backend on a single Scaleway Instance.
+#
+# Caddy terminates TLS (automatic Let's Encrypt for BACKEND_DOMAIN) and proxies
+# HTTP + WebSocket to the API. One backend replica only: Socket.IO keeps its
+# rooms in memory and the cron jobs run in-process, so a second replica would
+# split chat rooms and double the jobs.
+#
+#   cp ../../.env.example .env   # then fill it in (see README.md)
+#   docker compose up -d --build
+#
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: aeko-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "9876"
+      # Set to 1 for a deploy that carries new migrations, then back to 0.
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-0}
+    expose:
+      - "9876"
+    volumes:
+      # Chat voice notes and edited media; the container filesystem is not
+      # kept across rebuilds.
+      - uploads:/app/uploads
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks: [aeko]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      BACKEND_DOMAIN: ${BACKEND_DOMAIN:?Set BACKEND_DOMAIN, e.g. backend.aeko.online}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+    networks: [aeko]
+
+volumes:
+  uploads:
+  caddy-data:
+  caddy-config:
+
+networks:
+  aeko:
+    driver: bridge
