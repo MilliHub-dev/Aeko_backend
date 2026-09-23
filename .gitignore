@@ -1,6 +1,6 @@
 node_modules/
 dist/
-package-lock.json
+# package-lock.json is committed on purpose: Docker builds use `npm ci`.
 yarn-error.log
 yarn.lock
 

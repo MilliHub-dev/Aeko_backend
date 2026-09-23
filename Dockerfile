@@ -10,10 +10,11 @@ FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 # postinstall runs `prisma generate` (prisma is a devDependency) and the
 # @aeko-chain import patch, so dev dependencies are needed at install time.
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json* ./
 COPY scripts/fix-aeko-chain.cjs scripts/
 COPY prisma ./prisma
-RUN npm ci --no-audit --no-fund
+# A checkout without the lockfile still builds; with it, installs are reproducible.
+RUN if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \
