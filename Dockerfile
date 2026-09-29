@@ -7,6 +7,13 @@
 # glibc prebuilds, and fluent-ffmpeg needs a real ffmpeg on PATH.
 
 FROM node:22-bookworm-slim AS deps
+# `prisma generate` picks its query engine by probing the OpenSSL on this
+# machine. The slim image ships none, so it fell back to the 1.1.x engine while
+# the runtime stage (which does install OpenSSL 3) needed 3.0.x, and every query
+# failed with "could not locate the Query Engine".
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # postinstall runs `prisma generate` (prisma is a devDependency) and the
 # @aeko-chain import patch, so dev dependencies are needed at install time.
