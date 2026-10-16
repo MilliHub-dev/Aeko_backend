@@ -772,6 +772,7 @@ model User {
   coinTransactions                                      CoinTransaction[]
   sentGifts                                             LiveStreamGift[]    @relation("sentGifts")
   sounds Sound[] @relation("userSounds")
+  userWallets UserWallet[]
 
   @@unique([oauthProvider, oauthId])
   @@map("users")
@@ -972,4 +973,28 @@ model Sound {
   @@index([uploaderId])
   @@index([category])
   @@map("sounds")
+}
+
+/// One of a user's custodial wallets.
+///
+/// Every wallet is derived from the master seed and the user id plus an
+/// index, so nothing secret is stored: index 0 is the address the account
+/// always had (User.walletAddress, used for NFTs and gifts), higher indexes
+/// are extra wallets the user created in the app. `isDefault` is only which
+/// one the wallet screen opens on.
+model UserWallet {
+  id        String   @id @default(uuid())
+  userId    String
+  index     Int
+  label     String
+  address   String   @unique
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, index])
+  @@index([userId])
+  @@map("user_wallets")
 }

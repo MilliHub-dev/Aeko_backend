@@ -55,12 +55,19 @@ function getMasterSeed() {
   return masterSeed;
 }
 
-/** Derives the raw 32-byte ed25519 seed for a user. */
-function deriveSeed(userId) {
+/**
+ * Derives the raw 32-byte ed25519 seed for a user's wallet.
+ *
+ * Index 0 keeps the original info string, so every address issued before
+ * users could create extra wallets is unchanged. Higher indexes append the
+ * index, giving each extra wallet its own key from the same master seed.
+ */
+function deriveSeed(userId, index = 0) {
   if (!userId) throw new Error("A user id is required to derive a custodial key");
-  return Buffer.from(
-    hkdfSync("sha512", getMasterSeed(), HKDF_SALT, `${HKDF_INFO}:${userId}`, 32),
-  );
+  const n = Number(index);
+  if (!Number.isInteger(n) || n < 0) throw new Error("Wallet index must be a non-negative integer");
+  const info = n === 0 ? `${HKDF_INFO}:${userId}` : `${HKDF_INFO}:${userId}:${n}`;
+  return Buffer.from(hkdfSync("sha512", getMasterSeed(), HKDF_SALT, info, 32));
 }
 
 /**
@@ -70,10 +77,11 @@ function deriveSeed(userId) {
  * `sendAndConfirmSigned(connection, preparedTxBase64, signer)`.
  *
  * @param {string} userId
+ * @param {number} [index=0] which of the user's wallets
  * @returns {{ publicKey: string, signPreparedTransaction: (tx: string) => string }}
  */
-export function getCustodialKeypair(userId) {
-  const seed = deriveSeed(userId);
+export function getCustodialKeypair(userId, index = 0) {
+  const seed = deriveSeed(userId, index);
 
   const privateKey = createPrivateKey({
     key: Buffer.concat([PKCS8_PREFIX, seed]),
@@ -122,8 +130,8 @@ export function getCustodialKeypair(userId) {
 }
 
 /** The user's custodial address, without constructing a signer for callers that only need it. */
-export function getCustodialAddress(userId) {
-  return getCustodialKeypair(userId).publicKey;
+export function getCustodialAddress(userId, index = 0) {
+  return getCustodialKeypair(userId, index).publicKey;
 }
 
 /** Whether custody is configured in this environment. */

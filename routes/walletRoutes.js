@@ -8,6 +8,7 @@ import { decodeBase58 } from "@aeko-chain/web3.js";
 import { buildPreparedMultiInstructionTransaction, buildSystemTransferInstruction } from "../chain/txBuilder.js";
 import { prisma } from "../config/db.js";
 import { getWalletActivity, presentWalletActivity } from "../services/walletActivity.js";
+import { WalletError, createUserWallet, listUserWallets, renameUserWallet, resolveUserWallet, setDefaultUserWallet } from "../services/userWallets.js";
 
 const router = express.Router();
 
@@ -61,6 +62,87 @@ const router = express.Router();
  */
 router.get("/networks", authMiddleware, (_req, res) => {
   res.json({ success: true, networks: listNetworks() });
+});
+
+const sendWalletError = (res, error, fallback) => {
+  if (error instanceof WalletError) {
+    return res.status(error.status).json({ success: false, message: error.message, code: error.code });
+  }
+  return sendChainError(res, error, fallback);
+};
+
+const presentWallet = (w, balance = null) => ({
+  id: w.address,
+  name: w.label,
+  address: w.address,
+  index: w.index,
+  isDefault: w.isDefault,
+  balance: balance ?? 0,
+  usdValue: 0,
+  change24h: 0,
+  isConnected: true,
+  type: "aeko",
+});
+
+/**
+ * @swagger
+ * /api/wallet/list:
+ *   get:
+ *     tags: [Wallet]
+ *     summary: The caller's custodial wallets
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/list", authMiddleware, async (req, res) => {
+  try {
+    if (!isCustodyConfigured()) return custodyUnavailable(res);
+    const wallets = await listUserWallets(req.user?.id || req.userId);
+    res.json({ success: true, wallets: wallets.map((w) => presentWallet(w)) });
+  } catch (error) {
+    sendWalletError(res, error, "Failed to load wallets");
+  }
+});
+
+/**
+ * @swagger
+ * /api/wallet/create:
+ *   post:
+ *     tags: [Wallet]
+ *     summary: Create another custodial wallet (new address) for the caller
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post("/create", authMiddleware, async (req, res) => {
+  try {
+    if (!isCustodyConfigured()) return custodyUnavailable(res);
+    const wallet = await createUserWallet(req.user?.id || req.userId, req.body?.label);
+    res.status(201).json({ success: true, wallet: presentWallet(wallet) });
+  } catch (error) {
+    sendWalletError(res, error, "Failed to create the wallet");
+  }
+});
+
+/**
+ * @swagger
+ * /api/wallet/{address}:
+ *   patch:
+ *     tags: [Wallet]
+ *     summary: Rename a wallet or make it the default
+ *     security:
+ *       - bearerAuth: []
+ */
+router.patch("/:address", authMiddleware, async (req, res) => {
+  try {
+    if (!isCustodyConfigured()) return custodyUnavailable(res);
+    const userId = req.user?.id || req.userId;
+    let wallet = null;
+    if (typeof req.body?.label === "string") wallet = await renameUserWallet(userId, req.params.address, req.body.label);
+    if (req.body?.isDefault === true) wallet = await setDefaultUserWallet(userId, req.params.address);
+    if (!wallet) return res.status(400).json({ success: false, message: "Send a label or isDefault: true" });
+    res.json({ success: true, wallet: presentWallet(wallet) });
+  } catch (error) {
+    sendWalletError(res, error, "Failed to update the wallet");
+  }
 });
 
 router.post("/link", authMiddleware, async (req, res) => {
@@ -338,15 +420,17 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const network = resolveNetwork(req);
     const connection = getConnection(network);
     const explorer = getExplorer(network);
-    const { publicKey } = await resolveCustodialWallet(userId);
+    // Keeps User.walletAddress in step with wallet 0 for NFT/gift lookups.
+    await resolveCustodialWallet(userId);
+    const { wallet: current, wallets } = await resolveUserWallet(userId, req.query.wallet);
+    const publicKey = current.address;
 
-    let balance = 0;
-    try {
-      balance = lamportsToAeko(await connection.getBalance(publicKey));
-    } catch (error) {
-      // A brand new address is unknown to the RPC until it is funded.
-      console.error("wallet summary balance error:", error);
-    }
+    // Balances for every wallet so the switcher can show them; an unfunded
+    // address is unknown to the RPC until something lands on it.
+    const balances = await Promise.all(
+      wallets.map((w) => connection.getBalance(w.address).then(lamportsToAeko).catch(() => 0)),
+    );
+    const balance = balances[wallets.findIndex((w) => w.address === publicKey)] ?? 0;
 
     let stakingInfo = { balance: 0, rewards: 0, isStaking: false };
     try {
@@ -366,19 +450,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
     }
 
     res.json({
-      wallets: [
-        {
-          id: publicKey,
-          name: "Aeko Wallet",
-          address: publicKey,
-          balance,
-          // No price oracle is wired up yet; report 0 rather than invent a rate.
-          usdValue: 0,
-          change24h: 0,
-          isConnected: true,
-          type: "aeko",
-        },
-      ],
+      // No price oracle is wired up yet; usdValue stays 0 rather than an invented rate.
+      wallets: wallets.map((w, i) => presentWallet(w, balances[i])),
       currentWalletId: publicKey,
       connectedWallets: [],
       stakingInfo,
@@ -387,7 +460,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error("wallet summary error:", error);
-    sendChainError(res, error, "Failed to load wallet");
+    sendWalletError(res, error, "Failed to load wallet");
   }
 });
 
@@ -408,7 +481,8 @@ router.get("/transactions", authMiddleware, async (req, res) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10));
 
-    const { publicKey } = await resolveCustodialWallet(userId);
+    const { wallet: txWallet } = await resolveUserWallet(userId, req.query.wallet);
+    const publicKey = txWallet.address;
 
     // The validator has no page cursor the app can hold, so read enough
     // signatures to cover the requested page and slice. Parsed transactions
@@ -426,7 +500,7 @@ router.get("/transactions", authMiddleware, async (req, res) => {
     res.json({ transactions, page, hasMore: activity.length > start + limit });
   } catch (error) {
     console.error("wallet transactions error:", error);
-    sendChainError(res, error, "Failed to load transactions");
+    sendWalletError(res, error, "Failed to load transactions");
   }
 });
 
@@ -435,7 +509,7 @@ router.get("/transactions", authMiddleware, async (req, res) => {
  * the sender in addition to `amountAeko` and is retained by the platform's
  * service account.
  */
-async function performCustodialTransfer({ userId, toAddress, amountAeko, feeAeko = 0, network = "testnet" }) {
+async function performCustodialTransfer({ userId, toAddress, amountAeko, feeAeko = 0, network = "testnet", fromWallet }) {
   const connection = getConnection(network);
   if (!isValidAddress(toAddress)) {
     return { status: 400, body: { success: false, message: "Invalid destination address" } };
@@ -446,7 +520,8 @@ async function performCustodialTransfer({ userId, toAddress, amountAeko, feeAeko
     return { status: 400, body: { success: false, message: "Amount must be greater than 0" } };
   }
 
-  const signer = await resolveCustodialWallet(userId);
+  await resolveCustodialWallet(userId);
+  const { signer } = await resolveUserWallet(userId, fromWallet);
 
   if (toAddress === signer.publicKey) {
     return { status: 400, body: { success: false, message: "Cannot send to your own wallet" } };
@@ -514,18 +589,19 @@ router.post("/transfer", authMiddleware, async (req, res) => {
   try {
     if (!isCustodyConfigured()) return custodyUnavailable(res);
     const userId = req.user?.id || req.userId;
-    const { toAddress, amountAeko } = req.body || {};
+    const { toAddress, amountAeko, fromWallet } = req.body || {};
 
     const { status, body } = await performCustodialTransfer({
       network: resolveNetwork(req),
       userId,
       toAddress,
       amountAeko,
+      fromWallet,
     });
     res.status(status).json(body);
   } catch (error) {
     console.error("wallet transfer error:", error);
-    sendChainError(res, error, "Transfer failed");
+    sendWalletError(res, error, "Transfer failed");
   }
 });
 
@@ -542,19 +618,20 @@ router.post("/withdraw", authMiddleware, async (req, res) => {
   try {
     if (!isCustodyConfigured()) return custodyUnavailable(res);
     const userId = req.user?.id || req.userId;
-    const { toAddress, amountAeko } = req.body || {};
+    const { toAddress, amountAeko, fromWallet } = req.body || {};
 
     const { status, body } = await performCustodialTransfer({
       network: resolveNetwork(req),
       userId,
       toAddress,
       amountAeko,
+      fromWallet,
       feeAeko: WITHDRAWAL_FEE_AEKO,
     });
     res.status(status).json(body);
   } catch (error) {
     console.error("wallet withdraw error:", error);
-    sendChainError(res, error, "Withdrawal failed");
+    sendWalletError(res, error, "Withdrawal failed");
   }
 });
 
@@ -662,7 +739,9 @@ router.post("/airdrop", authMiddleware, async (req, res) => {
         code: "NO_FAUCET",
       });
     }
-    const { publicKey } = await resolveCustodialWallet(userId);
+    await resolveCustodialWallet(userId);
+    const { wallet: dropWallet } = await resolveUserWallet(userId, req.body?.wallet ?? req.query.wallet);
+    const publicKey = dropWallet.address;
 
     if (!FAUCET_API_URL) {
       return await directAirdrop(res, publicKey, network);
@@ -712,7 +791,7 @@ router.post("/airdrop", authMiddleware, async (req, res) => {
     if (error?.name === "AbortError") {
       return res.status(503).json({ success: false, message: "The faucet took too long to respond. Try again.", code: "FAUCET_TIMEOUT" });
     }
-    sendChainError(res, error, "Could not request test tokens");
+    sendWalletError(res, error, "Could not request test tokens");
   }
 });
 
