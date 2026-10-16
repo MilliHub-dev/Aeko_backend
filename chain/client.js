@@ -79,6 +79,87 @@ export const connection = new AekoConnection(RPC_URL, {
 });
 connection.websocketEndpoint = WS_URL;
 
+/* ------------------------------------------------------------- networks */
+
+/**
+ * The wallet can point at testnet or mainnet. Each network is a separate
+ * chain with its own RPC/Explorer; the custodial keys are the same, so a
+ * user's address is identical on both. AEKO_RPC_URL/AEKO_EXPLORER_URL stay
+ * the default network (testnet today) for every non-wallet route.
+ */
+const trim = (v) => (v ? String(v).replace(/\/+$/, "") : null);
+
+export const NETWORKS = {
+  testnet: {
+    id: "testnet",
+    label: "Testnet",
+    rpc: trim(process.env.AEKO_TESTNET_RPC_URL) ?? RPC_URL,
+    ws: trim(process.env.AEKO_TESTNET_WS_URL) ?? WS_URL,
+    explorer: trim(process.env.AEKO_TESTNET_EXPLORER_URL) ?? EXPLORER_URL,
+    scan: trim(process.env.AEKO_TESTNET_SCAN_URL) ?? trim(process.env.AEKO_SCAN_URL) ?? "https://scan.aeko.online",
+    faucet: true,
+  },
+  mainnet: {
+    id: "mainnet",
+    label: "Mainnet",
+    rpc: trim(process.env.AEKO_MAINNET_RPC_URL),
+    ws: trim(process.env.AEKO_MAINNET_WS_URL),
+    explorer: trim(process.env.AEKO_MAINNET_EXPLORER_URL),
+    scan: trim(process.env.AEKO_MAINNET_SCAN_URL),
+    faucet: false,
+  },
+};
+
+export const DEFAULT_NETWORK = NETWORKS[process.env.AEKO_DEFAULT_NETWORK] ? process.env.AEKO_DEFAULT_NETWORK : "testnet";
+
+export const isNetworkAvailable = (id) => Boolean(NETWORKS[id]?.rpc);
+
+/** What the app shows in its network switcher. */
+export const listNetworks = () =>
+  Object.values(NETWORKS).map((n) => ({
+    id: n.id,
+    label: n.label,
+    available: Boolean(n.rpc),
+    isDefault: n.id === DEFAULT_NETWORK,
+    faucet: n.faucet && Boolean(n.rpc),
+    scanUrl: n.scan,
+  }));
+
+export class NetworkUnavailableError extends Error {
+  constructor(id) {
+    super(id === "mainnet" ? "Mainnet isn't live yet. Switch back to Testnet." : `The ${id} network isn't available.`);
+    this.name = "NetworkUnavailableError";
+    this.network = id;
+  }
+}
+
+/**
+ * The network a request asked for: `?network=` or the `x-aeko-network`
+ * header, else the default. Throws when it is not configured so handlers
+ * answer 503 with a clear message instead of querying localhost.
+ */
+export function resolveNetwork(req) {
+  const raw = String(req?.query?.network ?? req?.headers?.["x-aeko-network"] ?? DEFAULT_NETWORK).toLowerCase();
+  const id = NETWORKS[raw] ? raw : DEFAULT_NETWORK;
+  if (!isNetworkAvailable(id)) throw new NetworkUnavailableError(id);
+  return id;
+}
+
+const connections = new Map([[DEFAULT_NETWORK, connection]]);
+
+/** One AekoConnection per network, created lazily. */
+export function getConnection(id = DEFAULT_NETWORK) {
+  const net = NETWORKS[id];
+  if (!net?.rpc) throw new NetworkUnavailableError(id);
+  let conn = connections.get(id);
+  if (!conn) {
+    conn = new AekoConnection(net.rpc, { fetchImpl: fetchWithTimeout });
+    conn.websocketEndpoint = net.ws ?? net.rpc.replace(/^http/i, "ws");
+    connections.set(id, conn);
+  }
+  return conn;
+}
+
 /**
  * @param {string} path
  * @param {{ collection?: boolean }} [opts]
@@ -88,9 +169,9 @@ connection.websocketEndpoint = WS_URL;
  *   `/api/nfts` answer `200 { nfts: null }` during an outage: a success
  *   response, with null where a list belongs.
  */
-async function explorerGet(path, { collection = false } = {}) {
+async function explorerGet(path, { collection = false, baseUrl = EXPLORER_URL } = {}) {
   try {
-    const res = await axios.get(`${EXPLORER_URL}${path}`, {
+    const res = await axios.get(`${baseUrl}${path}`, {
       timeout: CHAIN_TIMEOUT_MS,
     });
     const payload = res.data?.data !== undefined ? res.data.data : res.data;
@@ -105,32 +186,48 @@ async function explorerGet(path, { collection = false } = {}) {
   }
 }
 
-export const explorer = {
+const makeExplorer = (baseUrl) => ({
   async listNfts({ owner, collection, creator, limit = 25 } = {}) {
     const p = new URLSearchParams({ limit: String(limit) });
     if (owner)      p.set("owner", owner);
     if (collection) p.set("collection", collection);
     if (creator)    p.set("creator", creator);
-    return explorerGet(`/nfts?${p}`, { collection: true });
+    return explorerGet(`/nfts?${p}`, { collection: true, baseUrl });
   },
   async getNft(tokenId) {
-    return explorerGet(`/nfts/${tokenId}`);
+    return explorerGet(`/nfts/${tokenId}`, { baseUrl });
   },
   async getCollection(collectionId) {
-    return explorerGet(`/collections/${collectionId}`);
+    return explorerGet(`/collections/${collectionId}`, { baseUrl });
   },
   async getPost(postId) {
-    return explorerGet(`/posts/${postId}`);
+    return explorerGet(`/posts/${postId}`, { baseUrl });
   },
   async listSocialStakes({ wallet, limit = 50 } = {}) {
     const p = new URLSearchParams({ limit: String(limit) });
     if (wallet) p.set("wallet", wallet);
-    return explorerGet(`/stakes?${p}`, { collection: true });
+    return explorerGet(`/stakes?${p}`, { collection: true, baseUrl });
   },
   async getCreatorProfile(address) {
-    return explorerGet(`/creators/${address}`);
+    return explorerGet(`/creators/${address}`, { baseUrl });
   },
-};
+});
+
+export const explorer = makeExplorer(EXPLORER_URL);
+
+const explorers = new Map([[DEFAULT_NETWORK, explorer]]);
+
+/** Explorer client for a network; falls back to RPC-only use when it has none. */
+export function getExplorer(id = DEFAULT_NETWORK) {
+  const net = NETWORKS[id];
+  if (!net?.rpc) throw new NetworkUnavailableError(id);
+  let ex = explorers.get(id);
+  if (!ex) {
+    ex = net.explorer ? makeExplorer(net.explorer) : makeExplorer(`${net.rpc}/__no_explorer__`);
+    explorers.set(id, ex);
+  }
+  return ex;
+}
 
 /**
  * Reports a failed chain call.
@@ -141,6 +238,9 @@ export const explorer = {
  * a broken endpoint and gives the app nothing useful to show.
  */
 export function sendChainError(res, error, fallbackMessage) {
+  if (error instanceof NetworkUnavailableError) {
+    return res.status(503).json({ success: false, message: error.message, code: "NETWORK_UNAVAILABLE", network: error.network });
+  }
   if (isChainUnavailable(error)) {
     return res.status(503).json({
       success: false,

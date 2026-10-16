@@ -1,12 +1,13 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
-import { connection, explorer, sendChainError } from "../chain/client.js";
+import { connection as defaultConnection, explorer as defaultExplorer, getConnection, getExplorer, listNetworks, NETWORKS, resolveNetwork, sendChainError } from "../chain/client.js";
 import { presentNfts } from "../services/nftPresenter.js";
 import { aekoToLamports, lamportsToAeko, getMinBalanceForRentExemption, sendAndConfirmSigned } from "../chain/utils.js";
 import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeypair.js";
 import { decodeBase58 } from "@aeko-chain/web3.js";
 import { buildPreparedMultiInstructionTransaction, buildSystemTransferInstruction } from "../chain/txBuilder.js";
 import { prisma } from "../config/db.js";
+import { getWalletActivity, presentWalletActivity } from "../services/walletActivity.js";
 
 const router = express.Router();
 
@@ -51,6 +52,17 @@ const router = express.Router();
  *       401:
  *         description: Unauthorized
  */
+/**
+ * @swagger
+ * /api/wallet/networks:
+ *   get:
+ *     tags: [Wallet]
+ *     summary: Networks the wallet can use (testnet / mainnet) and which are live
+ */
+router.get("/networks", authMiddleware, (_req, res) => {
+  res.json({ success: true, networks: listNetworks() });
+});
+
 router.post("/link", authMiddleware, async (req, res) => {
   try {
     const { walletAddress } = req.body;
@@ -121,6 +133,7 @@ router.delete("/link", authMiddleware, async (req, res) => {
 router.get("/:address/balance", async (req, res) => {
   try {
     const { address } = req.params;
+    const connection = getConnection(resolveNetwork(req));
     const lamports = await connection.getBalance(address);
     res.json({ success: true, address, lamports, aeko: lamportsToAeko(lamports) });
   } catch (error) {
@@ -150,14 +163,17 @@ router.get("/:address/balance", async (req, res) => {
 router.get("/:address/history", async (req, res) => {
   try {
     const { address } = req.params;
-    const limit = Number(req.query.limit) || 20;
-    const data = await explorer.getAccountDetail(address);
+    const limit = Math.min(200, Number(req.query.limit) || 20);
+    // Read from the validator; the Explorer helper this used did not exist.
+    const network = resolveNetwork(req);
+    const [activity, stakes] = await Promise.all([
+      getWalletActivity(address, { limit, connection: getConnection(network), network }),
+      getExplorer(network).listSocialStakes({ wallet: address }).catch(() => []),
+    ]);
     res.json({
       success: true,
-      transactions: (data.recentTransactions ?? []).slice(0, limit),
-      posts:    data.recentPosts    ?? [],
-      stakes:   data.socialStakes   ?? [],
-      rewards:  data.creatorRewards ?? [],
+      transactions: await presentWalletActivity(activity),
+      stakes: stakes ?? [],
     });
   } catch (error) {
     console.error("wallet history error:", error);
@@ -183,7 +199,7 @@ router.get("/:address/history", async (req, res) => {
 router.get("/:address/nfts", async (req, res) => {
   try {
     const { address } = req.params;
-    const nfts = await explorer.listNfts({ owner: address });
+    const nfts = await getExplorer(resolveNetwork(req)).listNfts({ owner: address });
     res.json({ success: true, nfts: await presentNfts(nfts) });
   } catch (error) {
     console.error("wallet nfts error:", error);
@@ -233,7 +249,7 @@ router.post("/prepare-transfer", authMiddleware, async (req, res) => {
     }
 
     const lamports     = aekoToLamports(amountAeko);
-    const blockhash    = await connection.getLatestBlockhash();
+    const blockhash    = await getConnection(resolveNetwork(req)).getLatestBlockhash();
     const instruction  = buildSystemTransferInstruction(from, to, lamports);
     const txBase64     = buildPreparedMultiInstructionTransaction({
       payer: from, recentBlockhash: blockhash, instructions: [instruction],
@@ -319,6 +335,9 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const userId = req.user?.id || req.userId;
     if (!isCustodyConfigured()) return custodyUnavailable(res);
 
+    const network = resolveNetwork(req);
+    const connection = getConnection(network);
+    const explorer = getExplorer(network);
     const { publicKey } = await resolveCustodialWallet(userId);
 
     let balance = 0;
@@ -363,6 +382,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
       currentWalletId: publicKey,
       connectedWallets: [],
       stakingInfo,
+      network,
+      networkLabel: NETWORKS[network].label,
     });
   } catch (error) {
     console.error("wallet summary error:", error);
@@ -389,36 +410,20 @@ router.get("/transactions", authMiddleware, async (req, res) => {
 
     const { publicKey } = await resolveCustodialWallet(userId);
 
-    let raw = [];
+    // The validator has no page cursor the app can hold, so read enough
+    // signatures to cover the requested page and slice. Parsed transactions
+    // are cached, so later pages don't re-read earlier ones.
+    const network = resolveNetwork(req);
+    const start = (page - 1) * limit;
+    let activity = [];
     try {
-      const detail = await explorer.getAccountDetail(publicKey);
-      raw = detail?.recentTransactions ?? [];
+      activity = await getWalletActivity(publicKey, { limit: start + limit + 1, connection: getConnection(network), network });
     } catch (error) {
       console.error("wallet transactions error:", error);
     }
+    const transactions = await presentWalletActivity(activity.slice(start, start + limit));
 
-    // Page over the explorer result. The explorer has no cursor API, so this
-    // slices what it returns rather than pretending to page server-side.
-    const start = (page - 1) * limit;
-    const slice = raw.slice(start, start + limit);
-
-    const transactions = slice.map((tx, index) => {
-      const incoming = tx.to === publicKey;
-      const amount = lamportsToAeko(Math.abs(Number(tx.lamports ?? tx.amount ?? 0)));
-      return {
-        id: tx.signature ?? `${publicKey}-${start + index}`,
-        type: incoming ? "received" : "sent",
-        title: incoming ? "Received" : "Sent",
-        subtitle: incoming ? tx.from : tx.to,
-        amount,
-        timestamp: tx.blockTime
-          ? new Date(Number(tx.blockTime) * 1000).toISOString()
-          : new Date().toISOString(),
-        isPositive: incoming,
-      };
-    });
-
-    res.json({ transactions, page, hasMore: raw.length > start + limit });
+    res.json({ transactions, page, hasMore: activity.length > start + limit });
   } catch (error) {
     console.error("wallet transactions error:", error);
     sendChainError(res, error, "Failed to load transactions");
@@ -430,7 +435,8 @@ router.get("/transactions", authMiddleware, async (req, res) => {
  * the sender in addition to `amountAeko` and is retained by the platform's
  * service account.
  */
-async function performCustodialTransfer({ userId, toAddress, amountAeko, feeAeko = 0 }) {
+async function performCustodialTransfer({ userId, toAddress, amountAeko, feeAeko = 0, network = "testnet" }) {
+  const connection = getConnection(network);
   if (!isValidAddress(toAddress)) {
     return { status: 400, body: { success: false, message: "Invalid destination address" } };
   }
@@ -511,6 +517,7 @@ router.post("/transfer", authMiddleware, async (req, res) => {
     const { toAddress, amountAeko } = req.body || {};
 
     const { status, body } = await performCustodialTransfer({
+      network: resolveNetwork(req),
       userId,
       toAddress,
       amountAeko,
@@ -538,6 +545,7 @@ router.post("/withdraw", authMiddleware, async (req, res) => {
     const { toAddress, amountAeko } = req.body || {};
 
     const { status, body } = await performCustodialTransfer({
+      network: resolveNetwork(req),
       userId,
       toAddress,
       amountAeko,
@@ -574,19 +582,91 @@ router.post("/withdraw", authMiddleware, async (req, res) => {
 const FAUCET_API_URL = (process.env.AEKO_FAUCET_API_URL || "").replace(/\/+$/, "");
 const FAUCET_API_KEY = process.env.AEKO_FAUCET_API_KEY || "";
 
+// Direct-RPC fallback, used while the chain admin faucet (chain.aeko.online)
+// is not configured: the validator forwards `requestAirdrop` to its testnet
+// faucet. Policy is enforced here instead — one grant per wallet per cooldown,
+// kept in memory, so it resets on restart (fine for a testnet; the admin
+// faucet keeps a durable ledger once it is in place).
+const DIRECT_AIRDROP_AEKO = Number(process.env.AEKO_TESTNET_AIRDROP_AEKO) || 5;
+const DIRECT_AIRDROP_COOLDOWN_MS = (Number(process.env.AEKO_TESTNET_AIRDROP_COOLDOWN_HOURS) || 24) * 3_600_000;
+const DIRECT_AIRDROP_ENABLED = process.env.AEKO_TESTNET_AIRDROP_DISABLED !== "1";
+const lastDirectAirdropAt = new Map();
+
+const formatWait = (ms) => {
+  const seconds = Math.ceil(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.ceil(seconds / 60)} min`;
+  return `${Math.ceil(seconds / 3600)} h`;
+};
+
+async function directAirdrop(res, publicKey, network) {
+  const connection = getConnection(network);
+  if (!DIRECT_AIRDROP_ENABLED || !NETWORKS[network]?.faucet) {
+    return res.status(503).json({
+      success: false,
+      message: "Test tokens aren't available right now.",
+      code: "FAUCET_NOT_CONFIGURED",
+    });
+  }
+  const last = lastDirectAirdropAt.get(publicKey) ?? 0;
+  const wait = last + DIRECT_AIRDROP_COOLDOWN_MS - Date.now();
+  if (wait > 0) {
+    return res.status(429).json({
+      success: false,
+      message: `This wallet already received test AEKO. Try again in ${formatWait(wait)}.`,
+      code: "COOLDOWN",
+      retryAfterSeconds: Math.ceil(wait / 1000),
+    });
+  }
+  lastDirectAirdropAt.set(publicKey, Date.now());
+  let signature;
+  try {
+    signature = await connection.rpc("requestAirdrop", [publicKey, aekoToLamports(DIRECT_AIRDROP_AEKO)]);
+  } catch (error) {
+    lastDirectAirdropAt.delete(publicKey);
+    throw error;
+  }
+  // Wait briefly so the balance is usually updated by the time the app refreshes.
+  let confirmed = false;
+  for (let attempt = 0; attempt < 12 && !confirmed; attempt += 1) {
+    await new Promise((r) => setTimeout(r, 500));
+    try {
+      const status = await connection.rpc("getSignatureStatuses", [[signature]]);
+      const s = status?.value?.[0];
+      if (s?.err) break;
+      confirmed = s?.confirmationStatus === "confirmed" || s?.confirmationStatus === "finalized";
+    } catch {
+      // keep polling
+    }
+  }
+  return res.json({
+    success: true,
+    address: publicKey,
+    amount: DIRECT_AIRDROP_AEKO,
+    signature,
+    confirmed,
+    explorerUrl: `${(process.env.AEKO_SCAN_URL || "https://scan.aeko.online").replace(/\/+$/, "")}/explorer/account/${publicKey}`,
+  });
+}
+
 router.post("/airdrop", authMiddleware, async (req, res) => {
   try {
     const userId = req.user?.id || req.userId;
     if (!isCustodyConfigured()) return custodyUnavailable(res);
-    if (!FAUCET_API_URL) {
-      return res.status(503).json({
+
+    const network = resolveNetwork(req);
+    if (!NETWORKS[network]?.faucet) {
+      return res.status(400).json({
         success: false,
-        message: "Test tokens aren't available right now.",
-        code: "FAUCET_NOT_CONFIGURED",
+        message: "There's no faucet on mainnet. Switch to Testnet for free test AEKO.",
+        code: "NO_FAUCET",
       });
     }
-
     const { publicKey } = await resolveCustodialWallet(userId);
+
+    if (!FAUCET_API_URL) {
+      return await directAirdrop(res, publicKey, network);
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20_000);
