@@ -1,6 +1,7 @@
 import { prisma } from "../config/db.js";
 import { deleteFromCloudinary } from "./cloudinaryService.js";
 import { createNotification } from "./notificationService.js";
+import { SOUND_SELECT, toPublicSound } from "./soundService.js";
 
 /**
  * Story/Status domain logic.
@@ -174,6 +175,8 @@ export function serializeStatus(status, viewerId) {
     mentions: status.mentions ?? null,
     stickers: status.stickers ?? null,
     linkClickCount: status.linkClickCount ?? 0,
+    sound: toPublicSound(status.sound ?? null),
+    soundStartMs: status.soundStartMs ?? null,
     viewCount: status.viewCount,
     reactionCount: status.reactionCount,
     replyCount: status.replyCount,
@@ -252,6 +255,7 @@ export async function getFeed(viewerId, { page = 1, limit = 20 } = {}) {
         posts: {
           include: { users_posts_userIdTouser: { select: AUTHOR_SELECT } },
         },
+        sound: { select: SOUND_SELECT },
         // Only the viewer's own view/reaction rows, so seen state is per-request
         // and we never leak other viewers' identities into the feed payload.
         views: { where: { viewerId }, select: { id: true } },
@@ -315,6 +319,7 @@ export async function getStatusForViewer(statusId, viewerId) {
     include: {
       users: { select: { ...AUTHOR_SELECT, closeFriends: true, blockedUsers: true } },
       posts: { include: { users_posts_userIdTouser: { select: AUTHOR_SELECT } } },
+      sound: { select: SOUND_SELECT },
       views: { where: { viewerId }, select: { id: true } },
       statusReactions: { where: { userId: viewerId }, select: { emoji: true, userId: true } },
     },
@@ -343,6 +348,7 @@ export async function getOwnStories(userId, { includeExpired = false } = {}) {
     include: {
       users: { select: AUTHOR_SELECT },
       posts: { include: { users_posts_userIdTouser: { select: AUTHOR_SELECT } } },
+      sound: { select: SOUND_SELECT },
     },
     orderBy: { createdAt: "asc" },
   });

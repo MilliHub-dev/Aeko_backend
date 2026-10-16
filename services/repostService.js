@@ -3,6 +3,7 @@ import BlockingService from "./blockingService.js";
 import { GiftError as RepostError } from "./giftLedger.js";
 import { createNotification } from "./notificationService.js";
 import PrivacyManager from "./privacyManager.js";
+import { attachSoundData } from "./soundService.js";
 
 /**
  * Reposts.
@@ -84,6 +85,8 @@ export const attachRepostData = async (posts, viewerId, db = prisma) => {
             text: true,
             type: true,
             media: true,
+            soundId: true,
+            soundStartMs: true,
             createdAt: true,
             engagement: true,
             likes: true,
@@ -111,7 +114,7 @@ export const attachRepostData = async (posts, viewerId, db = prisma) => {
   const repostedRoots = new Set(mine.map((m) => m.originalPostId));
   const bookmarkedIds = new Set(bookmarked.map((b) => b.postId));
 
-  return posts.map((p) => {
+  const result = posts.map((p) => {
     if (!p) return p;
     const root = p.originalPostId ? byId.get(p.originalPostId) : null;
     return {
@@ -132,11 +135,19 @@ export const attachRepostData = async (posts, viewerId, db = prisma) => {
             views: root.views ?? 0,
             isLiked: Array.isArray(root.likes) && !!viewerId && root.likes.includes(viewerId),
             isBookmarked: bookmarkedIds.has(root.id),
+            soundId: root.soundId ?? null,
+            soundStartMs: root.soundStartMs ?? null,
           }
         : null,
       repostedByMe: repostedRoots.has(p.originalPostId || idOf(p)),
     };
   });
+
+  // Every feed passes through here, so this is where music gets attached:
+  // to the posts themselves and to the originals behind reposts.
+  await attachSoundData(result);
+  await attachSoundData(result.map((p) => p?.repostOf).filter(Boolean));
+  return result;
 };
 
 const assertCanRepost = async (userId, root, db, deps) => {

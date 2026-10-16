@@ -1186,6 +1186,39 @@ const admin = new AdminJS({
       },
     },
 
+    // ===== SOUNDS =====
+    // Music library for photo posts and stories. Admins add CC0 tracks with
+    // scripts/import-sounds.js (or POST /api/sounds with source=LIBRARY); this
+    // view is for renaming, categorising and taking sounds down. A deactivated
+    // sound stays referenced by its posts but no longer plays or appears in
+    // search, so takedowns never break existing posts.
+    {
+      resource: { model: modelMap.Sound, client: prisma },
+      options: {
+        parent: { name: "Content", icon: "Music" },
+        listProperties: ["createdAt", "title", "artist", "source", "license", "category", "useCount", "isActive"],
+        filterProperties: ["source", "license", "category", "isActive", "uploaderId", "createdAt"],
+        editProperties: ["title", "artist", "category", "coverUrl", "license", "isActive"],
+        sort: { sortBy: "useCount", direction: "desc" },
+        properties: {
+          id: { isVisible: { list: false, show: true, edit: false } },
+          audioUrl: { isVisible: { list: false, show: true, edit: false } },
+          publicId: { isVisible: { list: false, show: true, edit: false } },
+          durationMs: { isVisible: { list: false, show: true, edit: false } },
+          tags: { isVisible: { list: false, show: true, edit: false } },
+          uploaderId: { isVisible: { list: false, show: true, edit: false } },
+          sourcePostId: { isVisible: { list: false, show: true, edit: false } },
+          useCount: { isVisible: { list: true, show: true, edit: false } },
+          updatedAt: { isVisible: { list: false, show: true, edit: false } },
+        },
+        actions: {
+          // Uploads need Cloudinary; they go through the API/script, not this form.
+          new: { isVisible: false },
+          bulkDelete: { isVisible: false },
+        },
+      },
+    },
+
     // ===== COIN WITHDRAWALS =====
     // Payouts are sent by hand. To pay: send the crypto, edit the request to add
     // the transaction hash, then use "Mark as paid". "Reject" returns the coins

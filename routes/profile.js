@@ -281,7 +281,7 @@ router.get('/activity', authMiddleware, async (req, res) => {
                 where: { userId },
                 orderBy: { createdAt: 'desc' },
                 take: limit,
-                select: { id: true, type: true, createdAt: true, text: true, media: true }
+                select: { id: true, type: true, createdAt: true, text: true, media: true, soundId: true, soundStartMs: true }
             }),
             prisma.comment.findMany({
                 where: { userId },

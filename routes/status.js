@@ -1,6 +1,7 @@
 import express from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { prisma } from "../config/db.js";
+import { SOUND_SELECT, SOUND_STATUS_TYPES, bumpSoundUse, resolveSoundAttachment } from "../services/soundService.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import { generalUpload } from "../middleware/upload.js";
 import { processMentions } from "../services/notificationService.js";
@@ -188,11 +189,21 @@ router.post(
         return Number.isFinite(n) && n > 0 ? n : null;
       };
 
+      // Optional music on image/text stories; video stories keep their own audio.
+      const soundAttach = await resolveSoundAttachment({
+        soundId: req.body.soundId,
+        soundStartMs: req.body.soundStartMs,
+        type,
+        allowedTypes: SOUND_STATUS_TYPES,
+      });
+      if (soundAttach.error) return res.status(400).json({ success: false, error: soundAttach.error });
+
       const created = await prisma.status.create({
         data: {
           userId,
           type,
           content,
+          ...soundAttach.data,
           caption: statusCaption,
           backgroundColor: backgroundColor || null,
           font: font || null,
@@ -209,8 +220,12 @@ router.post(
           expiresAt: new Date(Date.now() + STORY_TTL_MS),
           reactions: [],
         },
-        include: { users: { select: { id: true, username: true, name: true, profilePicture: true, avatar: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } } },
+        include: {
+          users: { select: { id: true, username: true, name: true, profilePicture: true, avatar: true, blueTick: true, goldenTick: true, prideTick: true, businessTick: true } },
+          sound: { select: SOUND_SELECT },
+        },
       });
+      bumpSoundUse(soundAttach.data.soundId);
 
       // @mentions in the text or caption notify and deep-link, reusing the same
       // helper posts and comments use.

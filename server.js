@@ -22,6 +22,7 @@ import { backfillWalletAddresses } from "./services/walletProvisioning.js";
 import stickerRoutes from "./routes/stickerRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
 import statusRoutes from "./routes/status.js";
+import soundRoutes from "./routes/soundRoutes.js";
 import debateRoutes from "./routes/debates.js";
 import challengeRoutes from "./routes/challenges.js";
 import spaceRoutes from "./routes/space.js";
@@ -240,6 +241,8 @@ app.use(
 // no-ops: checkPostInteraction reads req.params.id, which is empty at mount level,
 // and filterResponsePosts only inspects a `posts` key, which this router never returns.
 app.use("/api/status", apiRateLimit, statusRoutes);
+// Music for photo posts and stories (library, user uploads, original sounds).
+app.use("/api/sounds", apiRateLimit, soundRoutes);
 app.use(
   "/api/debates",
   apiRateLimit,

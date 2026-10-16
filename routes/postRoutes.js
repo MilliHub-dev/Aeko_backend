@@ -16,6 +16,7 @@ import { getCustodialAddress, isCustodyConfigured } from "../chain/custodialKeyp
 import { toBase58Hash } from "../chain/utils.js";
 import { deriveWithSeed, getMinBalanceForRentExemption } from "../chain/utils.js";
 import { buildPreparedAnchorPostTransaction } from "@aeko-chain/sdk";
+import { SOUND_POST_TYPES, attachSoundData, bumpSoundUse, resolveSoundAttachment } from "../services/soundService.js";
 import { PROGRAM_IDS, buildPreparedMintWithAccountSetupTransaction, estimateTokenAccountSpace } from "@aeko-chain/web3.js";
 import { uploadJSON } from "../services/ipfsService.js";
 
@@ -321,7 +322,7 @@ router.get("/nft-eligible", authMiddleware, async (req, res) => {
       orderBy: { createdAt: "desc" },
       take: 200,
       select: {
-        id: true, text: true, type: true, media: true, views: true,
+        id: true, text: true, type: true, media: true, soundId: true, soundStartMs: true, views: true,
         likes: true, createdAt: true, nftTokenId: true,
         _count: { select: { comments: true } },
       },
@@ -396,7 +397,7 @@ router.post(
     const post = await prisma.post.findUnique({
       where: { id: postId },
       select: {
-        id: true, userId: true, text: true, type: true, media: true,
+        id: true, userId: true, text: true, type: true, media: true, soundId: true, soundStartMs: true,
         views: true, likes: true, createdAt: true, nftTokenId: true,
         _count: { select: { comments: true } },
       },
@@ -645,11 +646,21 @@ router.post("/create", authMiddleware,
     // If multiple files, store as array. If single file, store as string (for backward compatibility)
     const mediaData = mediaPaths.length > 1 ? mediaPaths : (mediaPaths[0] || "");
 
+    // Optional music (photo posts only): the sound id plus where in the track to start.
+    const soundAttach = await resolveSoundAttachment({
+      soundId: req.body.soundId,
+      soundStartMs: req.body.soundStartMs,
+      type,
+      allowedTypes: SOUND_POST_TYPES,
+    });
+    if (soundAttach.error) return res.status(400).json({ error: soundAttach.error });
+
     const postData = {
       userId,
       type,
       text,
       media: mediaData,
+      ...soundAttach.data,
       privacy: {
         level: privacy,
         selectedUsers: privacy === 'select_users' ? selectedUsers : [],
@@ -672,8 +683,11 @@ router.post("/create", authMiddleware,
         }
     });
     
+    bumpSoundUse(soundAttach.data.soundId);
+    const [withSound] = await attachSoundData([{ ...newPost }]);
+
     res.status(201).json({
-      ...newPost,
+      ...withSound,
       likesCount: 0,
       commentsCount: 0
     });

@@ -400,6 +400,11 @@ model Post {
   isAnchored                         Boolean    @default(false)
   onChainSignature                   String?
   nftTokenId                         String?
+  // Music attached to a photo post (Instagram-style). Video posts carry their own audio.
+  soundId                            String?
+  soundStartMs                       Int?
+  sound                              Sound?     @relation("postSound", fields: [soundId], references: [id], onDelete: SetNull)
+  extractedSounds                    Sound[]    @relation("postExtractedSound")
   bookmarks                          Bookmark[]
   comments                           Comment[]
   communities                        Community? @relation(fields: [communityId], references: [id], onDelete: SetNull)
@@ -409,6 +414,7 @@ model Post {
   users_posts_userIdTouser           User       @relation("posts_userIdTousers", fields: [userId], references: [id], onDelete: Cascade)
   statuses                           Status[]
 
+  @@index([soundId])
   @@map("posts")
 }
 
@@ -511,6 +517,11 @@ model Status {
   stickers       Json?
   linkClickCount Int   @default(0)
 
+  // Music on an image/text story.
+  soundId      String?
+  soundStartMs Int?
+  sound        Sound? @relation("statusSound", fields: [soundId], references: [id], onDelete: SetNull)
+
   posts           Post?                 @relation(fields: [sharedPostId], references: [id], onDelete: SetNull)
   users           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   views           StatusView[]
@@ -521,6 +532,7 @@ model Status {
   @@index([userId, expiresAt])
   @@index([expiresAt])
   @@index([userId, createdAt])
+  @@index([soundId])
   @@map("status")
 }
 
@@ -759,6 +771,7 @@ model User {
   earnedCoinBalance                                     Float               @default(0)
   coinTransactions                                      CoinTransaction[]
   sentGifts                                             LiveStreamGift[]    @relation("sentGifts")
+  sounds Sound[] @relation("userSounds")
 
   @@unique([oauthProvider, oauthId])
   @@map("users")
@@ -921,4 +934,42 @@ model CoinWithdrawal {
   @@index([userId])
   @@index([status, createdAt])
   @@map("coin_withdrawals")
+}
+
+/// A reusable audio track for photo posts and stories.
+///
+/// Three origins: CC0 tracks uploaded by admins (LIBRARY), audio a user
+/// uploaded (USER_UPLOAD) and audio pulled out of a user's own video post
+/// (EXTRACTED, "original sound"). All are stored on Cloudinary and delivered
+/// as mp3; posts/stories reference the track plus a start offset and the
+/// client plays it, so nothing is re-encoded.
+model Sound {
+  id           String   @id @default(uuid())
+  title        String
+  artist       String?
+  durationMs   Int
+  audioUrl     String
+  publicId     String?
+  coverUrl     String?
+  source       String   // LIBRARY | USER_UPLOAD | EXTRACTED
+  license      String   @default("CC0") // CC0 | ORIGINAL
+  category     String?
+  tags         Json?
+  uploaderId   String?
+  sourcePostId String?  @unique
+  useCount     Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  uploader   User?    @relation("userSounds", fields: [uploaderId], references: [id], onDelete: SetNull)
+  sourcePost Post?    @relation("postExtractedSound", fields: [sourcePostId], references: [id], onDelete: SetNull)
+  posts      Post[]   @relation("postSound")
+  statuses   Status[] @relation("statusSound")
+
+  @@index([isActive, useCount])
+  @@index([isActive, createdAt])
+  @@index([uploaderId])
+  @@index([category])
+  @@map("sounds")
 }
