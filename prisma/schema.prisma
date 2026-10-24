@@ -998,3 +998,27 @@ model UserWallet {
   @@index([userId])
   @@map("user_wallets")
 }
+
+/// A balance change the backend has seen for a wallet, kept so "Recent
+/// activity" survives the validator pruning its ledger (it keeps ~4 days).
+/// One row per (network, signature, address); written when the backend sends
+/// a transaction and whenever on-chain history is read.
+model WalletActivity {
+  id          String   @id @default(uuid())
+  network     String
+  signature   String
+  address     String
+  counterpart String?
+  incoming    Boolean
+  lamports    BigInt
+  fee         BigInt   @default(0)
+  isFaucet    Boolean  @default(false)
+  success     Boolean  @default(true)
+  slot        BigInt?
+  blockTime   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([network, signature, address])
+  @@index([address, network, blockTime])
+  @@map("wallet_activity")
+}

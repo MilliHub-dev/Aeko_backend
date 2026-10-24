@@ -7,7 +7,7 @@ import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeyp
 import { decodeBase58 } from "@aeko-chain/web3.js";
 import { buildPreparedMultiInstructionTransaction, buildSystemTransferInstruction } from "../chain/txBuilder.js";
 import { prisma } from "../config/db.js";
-import { getWalletActivity, presentWalletActivity } from "../services/walletActivity.js";
+import { getWalletActivity, presentWalletActivity, captureTransaction } from "../services/walletActivity.js";
 import { WalletError, createUserWallet, listUserWallets, renameUserWallet, resolveUserWallet, setDefaultUserWallet } from "../services/userWallets.js";
 
 const router = express.Router();
@@ -562,6 +562,8 @@ async function performCustodialTransfer({ userId, toAddress, amountAeko, feeAeko
   });
 
   const signature = await sendAndConfirmSigned(connection, txBase64, signer);
+  // Both sides see it in "Recent activity" even after the ledger prunes it.
+  void captureTransaction(signature, [signer.publicKey, toAddress], { connection, network });
 
   return {
     status: 200,
@@ -716,6 +718,7 @@ async function directAirdrop(res, publicKey, network) {
       // keep polling
     }
   }
+  if (confirmed) void captureTransaction(signature, [publicKey], { connection, network });
   return res.json({
     success: true,
     address: publicKey,
@@ -778,6 +781,10 @@ router.post("/airdrop", authMiddleware, async (req, res) => {
     }
 
     const grant = payload?.data ?? {};
+    if (grant.signature) {
+      // The faucet confirms before answering; one read now keeps the airdrop in history.
+      void captureTransaction(grant.signature, [publicKey], { connection: getConnection(network), network });
+    }
     res.json({
       success: true,
       address: publicKey,

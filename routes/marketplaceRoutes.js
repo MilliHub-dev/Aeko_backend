@@ -1,6 +1,7 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
-import { connection, sendChainError } from "../chain/client.js";
+import { connection, sendChainError, DEFAULT_NETWORK } from "../chain/client.js";
+import { captureTransaction } from "../services/walletActivity.js";
 import { presentListings } from "../services/nftPresenter.js";
 import { aekoToLamports, lamportsToAeko, deriveWithSeed, getMinBalanceForRentExemption, sendAndConfirmSigned } from "../chain/utils.js";
 import { getCustodialKeypair, isCustodyConfigured } from "../chain/custodialKeypair.js";
@@ -491,6 +492,7 @@ router.post("/buy", authMiddleware, async (req, res) => {
     if (result.err) {
       throw new Error(`Transaction failed: ${JSON.stringify(result.err)}`);
     }
+    void captureTransaction(result.signature, [buyer, seller], { connection, network: DEFAULT_NETWORK });
 
     res.json({
       success: true,

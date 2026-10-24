@@ -1,4 +1,4 @@
-import { connection as defaultConnection } from "../chain/client.js";
+import { connection as defaultConnection, DEFAULT_NETWORK } from "../chain/client.js";
 import { prisma } from "../config/db.js";
 import { lamportsToAeko } from "../chain/utils.js";
 
@@ -7,10 +7,16 @@ import { lamportsToAeko } from "../chain/utils.js";
  *
  * The wallet screen used to ask the Explorer for `recentTransactions`, through
  * a helper that was never written, so "Recent activity" was always empty. The
- * validator keeps full transaction history (`--enable-rpc-transaction-history`),
+ * validator keeps transaction history (`--enable-rpc-transaction-history`),
  * so this reads it directly: signatures for the address, then each
  * transaction parsed, and the wallet's own balance delta decides direction
  * and amount. Parsed transactions are cached by signature; they never change.
+ *
+ * The validator's ledger is size-limited (`--limit-ledger-size`, roughly four
+ * days), after which `getSignaturesForAddress` forgets a transaction while the
+ * balance it produced remains. So every entry this module parses, and every
+ * transaction the backend itself sends, is also written to `wallet_activity`,
+ * and reads merge the database with whatever the chain still has.
  */
 
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
@@ -36,6 +42,60 @@ function remember(signature, entry) {
     parsedCache.delete(oldest);
   }
 }
+
+/** Writes an entry to the database; a repeat of a known (network, signature, address) is a no-op. */
+async function persist(entry, address, network) {
+  try {
+    await prisma.walletActivity.upsert({
+      where: { network_signature_address: { network, signature: entry.signature, address } },
+      update: {},
+      create: {
+        network,
+        signature: entry.signature,
+        address,
+        counterpart: entry.counterpart,
+        incoming: entry.incoming,
+        lamports: BigInt(entry.lamports),
+        fee: BigInt(entry.fee),
+        isFaucet: entry.isFaucet,
+        success: entry.success,
+        slot: entry.slot == null ? null : BigInt(entry.slot),
+        blockTime: entry.blockTime ? new Date(entry.blockTime * 1000) : null,
+      },
+    });
+  } catch (error) {
+    // History is a convenience; never let bookkeeping fail a wallet request.
+    console.error("wallet activity: could not persist", entry.signature, error?.message ?? error);
+  }
+}
+
+const rowToEntry = (row) => ({
+  signature: row.signature,
+  slot: row.slot == null ? null : Number(row.slot),
+  blockTime: row.blockTime ? Math.floor(row.blockTime.getTime() / 1000) : null,
+  success: row.success,
+  incoming: row.incoming,
+  lamports: Number(row.lamports),
+  fee: Number(row.fee),
+  counterpart: row.counterpart,
+  isFaucet: row.isFaucet,
+});
+
+async function storedActivity(address, network, limit) {
+  try {
+    const rows = await prisma.walletActivity.findMany({
+      where: { address, network },
+      orderBy: [{ blockTime: "desc" }, { createdAt: "desc" }],
+      take: limit,
+    });
+    return rows.map(rowToEntry);
+  } catch (error) {
+    console.error("wallet activity: could not read stored history:", error?.message ?? error);
+    return [];
+  }
+}
+
+const newestFirst = (a, b) => (b.blockTime ?? 0) - (a.blockTime ?? 0) || (b.slot ?? 0) - (a.slot ?? 0);
 
 /**
  * Reads one transaction and expresses it from `address`'s point of view.
@@ -116,22 +176,53 @@ async function mapLimit(items, limit, fn) {
  * @param {{ limit?: number, connection?: object, network?: string }} [opts]  how many signatures to read (newest first), and which chain
  * @returns {Promise<Array>} activity entries, newest first, balance-changing only
  */
-export async function getWalletActivity(address, { limit = 50, connection = defaultConnection, network = "default" } = {}) {
+export async function getWalletActivity(address, { limit = 50, connection = defaultConnection, network = DEFAULT_NETWORK } = {}) {
   const take = Math.min(MAX_SIGNATURES, Math.max(1, limit));
-  const signatures = await connection.rpc("getSignaturesForAddress", [address, { limit: take, commitment: "confirmed" }]);
-  if (!Array.isArray(signatures) || signatures.length === 0) return [];
+  let signatures = [];
+  try {
+    signatures = await connection.rpc("getSignaturesForAddress", [address, { limit: take, commitment: "confirmed" }]);
+  } catch (error) {
+    // The chain being unreachable still leaves the stored history to show.
+    console.error("wallet activity: could not list signatures:", error?.message ?? error);
+  }
+  if (!Array.isArray(signatures)) signatures = [];
 
-  const entries = await mapLimit(signatures, PARSE_CONCURRENCY, async (sig) => {
+  const parsed = await mapLimit(signatures, PARSE_CONCURRENCY, async (sig) => {
     try {
       // Signatures are unique per chain; the cache key carries the network so
       // testnet and mainnet history can never bleed into each other.
-      return await parseForWallet(sig.signature, address, sig, connection, `${network}:${sig.signature}`);
+      const key = `${network}:${sig.signature}`;
+      const known = parsedCache.has(key);
+      const entry = await parseForWallet(sig.signature, address, sig, connection, key);
+      if (entry && !known) await persist(entry, address, network);
+      return entry;
     } catch (error) {
       console.error(`wallet activity: could not parse ${sig.signature}:`, error?.message ?? error);
       return null;
     }
   });
-  return entries.filter(Boolean);
+  const onChain = parsed.filter(Boolean);
+
+  // Anything the ledger has already pruned is only in the database.
+  const seen = new Set(onChain.map((e) => e.signature));
+  const stored = (await storedActivity(address, network, take)).filter((e) => !seen.has(e.signature));
+  return [...onChain, ...stored].sort(newestFirst).slice(0, take);
+}
+
+/**
+ * Records a transaction the backend just sent, from each listed wallet's point
+ * of view, so it is in the history before the ledger forgets it. Safe to call
+ * without awaiting; failures are logged, never thrown.
+ */
+export async function captureTransaction(signature, addresses, { connection = defaultConnection, network = DEFAULT_NETWORK } = {}) {
+  for (const address of [...new Set(addresses.filter(Boolean))]) {
+    try {
+      const entry = await parseForWallet(signature, address, null, connection, `${network}:${signature}:${address}`);
+      if (entry) await persist(entry, address, network);
+    } catch (error) {
+      console.error(`wallet activity: could not capture ${signature} for ${address}:`, error?.message ?? error);
+    }
+  }
 }
 
 /**
@@ -163,4 +254,4 @@ export async function presentWalletActivity(entries) {
   });
 }
 
-export default { getWalletActivity, presentWalletActivity };
+export default { getWalletActivity, presentWalletActivity, captureTransaction };
