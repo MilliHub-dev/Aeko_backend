@@ -30,10 +30,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# --chown at copy time: a later `chown -R` would rewrite every file into a
+# fresh layer and double the image (node_modules alone is ~550 MB), which is
+# what filled the 8 GB Scaleway disk.
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node . .
 # Chat voice notes and the photo/video editors write here; mount a volume.
-RUN mkdir -p /app/uploads && chown -R node:node /app
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 USER node
 EXPOSE 9876
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
