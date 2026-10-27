@@ -36,7 +36,9 @@ WORKDIR /app
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node . .
 # Chat voice notes and the photo/video editors write here; mount a volume.
-RUN mkdir -p /app/uploads && chown node:node /app/uploads
+# /app itself must belong to node too: AdminJS creates `.adminjs` in the
+# working directory at startup, and WORKDIR made the directory as root.
+RUN mkdir -p /app/uploads && chown node:node /app /app/uploads
 USER node
 EXPOSE 9876
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
