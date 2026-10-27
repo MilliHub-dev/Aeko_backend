@@ -87,6 +87,7 @@ import setupVideoCallSocket from "./sockets/videoCallSocket.js";
 import "./jobs/expireSubscriptions.js";
 import "./jobs/settleEpoch.js";
 import "./jobs/expireStatuses.js";
+import emailService from "./services/emailService.js";
 
 dotenv.config();
 connectDB();
@@ -216,7 +217,7 @@ const apiRateLimit = rateLimit({
 // already awake by the time someone submits a form, and Render can point its
 // own health check here to keep the instance warm.
 app.get(["/api/health", "/health"], (req, res) => {
-  res.json({ ok: true, uptimeSeconds: Math.round(process.uptime()) });
+  res.json({ ok: true, uptimeSeconds: Math.round(process.uptime()), email: emailService.status() });
 });
 
 // API Routes with security middleware

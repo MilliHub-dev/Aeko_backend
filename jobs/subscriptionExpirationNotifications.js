@@ -150,5 +150,6 @@ async function sendExpirationNotification(user, community, subscription) {
     `
   };
   
-  return emailService.sendEmail(mailOptions);
+  // sendEmail takes (to, subject, html, name); passing the options object sent nothing.
+  return emailService.sendEmail(mailOptions.to, mailOptions.subject, mailOptions.html, user.name || user.username || "");
 }

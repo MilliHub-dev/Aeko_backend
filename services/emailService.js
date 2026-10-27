@@ -237,19 +237,53 @@ const hasZeptoMailCredentials = () =>
     process.env.ZEPTOMAIL_API_KEY?.trim(),
   );
 
+// ZeptoMail only accepts senders on a domain verified in its console; Gmail
+// only lets the authenticated account send as itself.
+const zeptoSenderAddress = () =>
+  process.env.ZEPTOMAIL_SENDER_ADDRESS?.trim() || "noreply@aeko.social";
+const senderName = () => process.env.EMAIL_SENDER_NAME || "Aeko";
+
+const getGmailTransporter = () => {
+  if (transporter) return transporter;
+  transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
+  });
+  return transporter;
+};
+
+/** A provider error as one log line, without the message body or credentials. */
+const describeError = (error) => {
+  if (!error) return "unknown error";
+  if (typeof error === "string") return error.slice(0, 500);
+  const parts = [error.code, error.message, error.response, error.error?.code, error.error?.message];
+  const details = error.error?.details ?? error.details;
+  if (details) parts.push(JSON.stringify(details).slice(0, 400));
+  const text = parts.filter(Boolean).join(" | ").replace(/\s+/g, " ");
+  return (text || JSON.stringify(error)).slice(0, 300);
+};
+
 class EmailService {
   constructor() {
     this.client = null;
+    this.lastError = null;
+    this.lastSentAt = null;
     if (hasZeptoMailCredentials()) {
       this.client = new SendMailClient({
         url: process.env.ZEPTOMAIL_API_URL,
         token: process.env.ZEPTOMAIL_API_KEY,
       });
-      console.log("✅ ZeptoMail Service Configured");
+      console.log(`✅ ZeptoMail Service Configured (sender ${zeptoSenderAddress()})`);
     }
 
     if (hasGmailCredentials()) {
-      console.log("✅ Gmail Service Configured");
+      console.log("✅ Gmail Service Configured (fallback)");
     }
 
     if (!this.client && !hasGmailCredentials()) {
@@ -262,40 +296,69 @@ class EmailService {
     return hasGmailCredentials() || this.client !== null;
   }
 
-  // Send email using Gmail first, then ZeptoMail as a fallback.
+  /** What /api/health reports: which providers are set up and the last failure. Never includes secrets. */
+  status() {
+    return {
+      configured: this.isAvailable(),
+      providers: {
+        zeptomail: this.client !== null,
+        gmail: hasGmailCredentials(),
+      },
+      sender: this.client ? zeptoSenderAddress() : hasGmailCredentials() ? process.env.GMAIL_USER : null,
+      lastSentAt: this.lastSentAt,
+      lastError: this.lastError,
+    };
+  }
+
+  recordFailure(provider, toEmail, error) {
+    const detail = describeError(error);
+    this.lastError = { provider, at: new Date().toISOString(), detail };
+    console.error(`❌ ${provider} delivery failed for ${toEmail}: ${detail}`);
+  }
+
+  // Send email through ZeptoMail, then Gmail if ZeptoMail is missing or fails.
   async sendEmail(toEmail, subject, htmlContent, username = "") {
     if (!this.isAvailable()) {
       throw new Error("Email service not configured");
     }
-
-    const mailOptions = {
-      from: {
-        address: "noreply@aeko.social",
-        name: process.env.EMAIL_SENDER_NAME || "Aeko",
-      },
-      to: [
-        {
-          email_address: {
-            address: toEmail,
-            name: username || toEmail.split("@")[0],
-          },
-        },
-      ],
-      subject: subject,
-      htmlbody: htmlContent,
-    };
+    const recipientName = username || toEmail.split("@")[0];
+    const failures = [];
 
     if (this.client) {
       try {
-        await this.client.sendMail(mailOptions);
-        console.log(`✅ Email sent to ${toEmail}`);
+        await this.client.sendMail({
+          from: { address: zeptoSenderAddress(), name: senderName() },
+          to: [{ email_address: { address: toEmail, name: recipientName } }],
+          subject,
+          htmlbody: htmlContent,
+        });
+        this.lastSentAt = new Date().toISOString();
+        console.log(`✅ Email sent to ${toEmail} via ZeptoMail`);
         return { success: true, message: "Email sent successfully" };
-      } catch {
-        console.error(`❌ ZeptoMail delivery failed for ${toEmail}.`);
+      } catch (error) {
+        this.recordFailure("ZeptoMail", toEmail, error);
+        failures.push(`ZeptoMail: ${describeError(error)}`);
       }
     }
 
-    throw new Error("Unable to send email");
+    if (hasGmailCredentials()) {
+      try {
+        await getGmailTransporter().sendMail({
+          from: { address: process.env.GMAIL_USER, name: senderName() },
+          to: { address: toEmail, name: recipientName },
+          subject,
+          html: htmlContent,
+        });
+        this.lastSentAt = new Date().toISOString();
+        console.log(`✅ Email sent to ${toEmail} via Gmail`);
+        return { success: true, message: "Email sent successfully" };
+      } catch (error) {
+        this.recordFailure("Gmail", toEmail, error);
+        failures.push(`Gmail: ${describeError(error)}`);
+      }
+    }
+
+    throw new Error(`Unable to send email (${failures.join("; ")})`);
   }
 
   // Send 4-digit verification code
@@ -349,7 +412,8 @@ class EmailService {
         success: false,
         message: "Failed to send verification email",
       };
-    } catch {
+    } catch (error) {
+      console.error(`Verification code email to ${email} failed: ${error?.message ?? error}`);
       return {
         success: false,
         message: "Failed to send verification email",
